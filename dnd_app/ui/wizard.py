@@ -1452,8 +1452,19 @@ class Step4Spells(QWidget):
 def _weapon_category_pool(category_text: str) -> list:
     """Resolve a starting-equipment placeholder like 'Any simple weapon'
     or 'Any martial melee weapon' to the real, concrete weapon list it
-    refers to."""
+    refers to. Confirmed a real, reported bug: this always fell through
+    to a weapon pool for ANY "Any X" text, even non-weapon categories
+    like "Any other musical instrument" — which incorrectly resolved to
+    simple weapons, since "martial" isn't in that text either. Now
+    checks for real non-weapon categories first."""
+    from dnd_app.data.items import INSTRUMENT_TOOLS, ARTISAN_TOOLS, GAMING_SETS
     t = category_text.lower()
+    if "instrument" in t:
+        return list(INSTRUMENT_TOOLS)
+    if "artisan" in t:
+        return list(ARTISAN_TOOLS)
+    if "gaming set" in t:
+        return list(GAMING_SETS)
     is_martial = "martial" in t
     is_melee = "melee" in t
     is_ranged = "ranged" in t

@@ -1854,6 +1854,20 @@ def get_effective_speed(char: dict) -> dict:
         any(inv.split(" (")[0].strip() == "Gift of the Depths" for inv in char.get("eldritch_invocations", []))
     race_climb_matches_walk = race_name_sp in ("Tabaxi (MPMM)", "Hadozee") or \
         "Spider Climb" in char.get("active_effects", [])
+    # Roving (Ranger's Deft Explorer, TCE optional, 6th level): climb
+    # and swim speed equal to walking speed, plus a flat +5 ft walking
+    # speed bonus. Confirmed zero mechanical wiring anywhere despite
+    # being correctly gated as a displayable optional feature.
+    ranger_lvl_rv = class_levels(char).get("Ranger", 0)
+    roving_on = ranger_lvl_rv >= 6 and (
+        char.get("_choices", {}).get("optional_features", {}).get("Deft Explorer", False)
+        or char.get("optional_rules", {}).get("deft_explorer", False))
+    if roving_on:
+        race_swim_matches_walk = True
+        race_climb_matches_walk = True
+        char["_speed_bonus_sources"] = [("Roving (Deft Explorer)", 5)]
+    else:
+        char["_speed_bonus_sources"] = []
 
     # Storm Soul (Barbarian, Storm Herald, 6th level, Sea environment):
     # 30 ft. swim speed. Confirmed only the resistance half of this
@@ -2726,6 +2740,80 @@ def update_all(char: dict) -> dict:
                 "reset": reset, "current_max": uses, "track": "uses",
                 "note": note, "source_class": "", "subclass": "",
             })
+
+    # Empty Body (Monk, 18th level): confirmed a genuine, significant
+    # gap — this core, non-optional feature existed only as display
+    # text and a tooltip, with zero mechanical presence anywhere.
+    monk_lvl_eb = class_levels(char).get("Monk", 0)
+    if monk_lvl_eb >= 18:
+        new_resources.append({
+            "name": "Empty Body", "key": "empty_body",
+            "reset": "LR", "current_max": 1, "track": "uses",
+            "note": "Action, 4 ki: become invisible for 1 min, resisting all damage except "
+                    "force during that time. (Separately: 8 ki to cast Astral Projection "
+                    "without material components.)",
+            "source_class": "", "subclass": "",
+        })
+
+    # Favored Foe and Nature's Veil (Ranger, TCE optional features):
+    # confirmed zero mechanical wiring despite being correctly gated
+    # as displayable optional features — both are real resources that
+    # were never actually granted anywhere. Both replace a base
+    # feature (Favored Enemy / Hide in Plain Sight respectively), so
+    # gated on the toggle being on, matching the same dual-mechanism
+    # check already used elsewhere for these optional features.
+    def _tce_opt_on(name):
+        enabled = char.get("_choices", {}).get("optional_features", {})
+        if enabled.get(name, False):
+            return True
+        rules_key = name.lower().replace(" ", "_").replace("'", "")
+        return char.get("optional_rules", {}).get(rules_key, False)
+
+    ranger_lvl_opt = class_levels(char).get("Ranger", 0)
+    pb_opt = get_prof_bonus(char)
+    if ranger_lvl_opt >= 1 and _tce_opt_on("Favored Foe"):
+        new_resources.append({
+            "name": "Favored Foe", "key": "favored_foe",
+            "reset": "LR", "current_max": max(1, pb_opt), "track": "uses",
+            "note": "When you hit a creature, mark it as your favored enemy for 1 min or until "
+                    "your concentration ends. First hit each turn against it deals +1d4 damage "
+                    "(1d6 at 6th level, 1d8 at 14th level).",
+            "source_class": "", "subclass": "",
+        })
+    if ranger_lvl_opt >= 10 and _tce_opt_on("Nature's Veil"):
+        new_resources.append({
+            "name": "Nature's Veil", "key": "natures_veil",
+            "reset": "LR", "current_max": max(1, pb_opt), "track": "uses",
+            "note": "Bonus action: become invisible, along with your equipment, until the "
+                    "start of your next turn.",
+            "source_class": "", "subclass": "",
+        })
+    # Tireless (Deft Explorer's real 10th-level addition, not a
+    # separate feature) — confirmed zero mechanical wiring despite the
+    # description text already existing elsewhere.
+    if ranger_lvl_opt >= 10 and _tce_opt_on("Deft Explorer"):
+        new_resources.append({
+            "name": "Tireless", "key": "tireless",
+            "reset": "LR", "current_max": max(1, pb_opt), "track": "uses",
+            "note": "Action: gain 1d8 + your WIS modifier in temporary hit points.",
+            "source_class": "", "subclass": "",
+        })
+
+    # Dedicated Weapon (Monk, TCE optional): confirmed this app has no
+    # deeper weapon-eligibility system to hook a real mechanical
+    # outcome into (same situation found for Ki-Empowered Strikes), so
+    # this is a real, visible tracker of the choice rather than a fake
+    # mechanical connection this app's architecture can't back up.
+    monk_lvl_dw = class_levels(char).get("Monk", 0)
+    if monk_lvl_dw >= 2 and _tce_opt_on("Dedicated Weapon"):
+        new_resources.append({
+            "name": "Dedicated Weapon", "key": "dedicated_weapon",
+            "reset": "SR", "current_max": 1, "track": "uses",
+            "note": "When you finish a short or long rest, choose one weapon — it counts as "
+                    "a monk weapon for you until your next rest, even if it wouldn't "
+                    "otherwise qualify.",
+            "source_class": "", "subclass": "",
+        })
 
     # Living Shadow's Shadow Strike: proficiency-bonus-scaled, doesn't
     # fit the flat-1-use dict above.

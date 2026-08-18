@@ -7365,3 +7365,435 @@ descriptive text — this needs the same kind of check that found gaps
 in Resistant Armor, Battle Master Maneuvers, and others earlier this
 session. Full regression: 10/10 tested classes build cleanly with the
 level fixes applied.
+
+## Key-term search (bonus action/reaction/resistance/speed) — 121 features found, 2 real core gaps
+
+User asked to search the class reference by 4 more key terms. Parsed
+the file into distinct feature blocks (rather than raw line grep) to
+avoid drowning in duplicate/irrelevant hits, finding 121 distinct
+named subclass/class features mentioning at least one term.
+
+Sampled ~120 of the 121 against the codebase (a very different result
+than the Eldritch Invocation audit) — the large majority (100+) were
+already correctly present, since these are mostly automatically-
+granted subclass features already in the static Actions tab data,
+not player-chosen options like invocations. Spot-verified several at
+random against the reference for both wiring and correct level —
+Curving Shot, Song of Defense, Dragon Wings, Relentless Avenger all
+confirmed accurate.
+
+**2 real, confirmed gaps found — both core, non-optional Monk base
+features, not subclass-specific**: Empty Body (18th level) and
+Ki-Empowered Strikes (6th level) existed only as display text and a
+tooltip, with zero mechanical presence anywhere, despite affecting
+every Monk character regardless of subclass. Built Empty Body as a
+real resource (checked and confirmed no deeper "counts as magical"
+combat-resolution system exists in this app to hook Ki-Empowered
+Strikes into, so built it as a real, visible Passive entry instead —
+the same honest-tiering approach already used for similar effects
+this session, rather than fake a mechanical hook this app's
+architecture can't actually back up).
+
+**Caught and fixed the exact same mistake as before while building
+Empty Body**: a str_replace matched too broadly and deleted the
+existing Shadow Strike resource entirely instead of inserting
+alongside it. Caught immediately by checking the file directly rather
+than assuming the edit was clean, restored it, and verified both
+work correctly together.
+
+**Also caught a real level-gating bug in my own new Ki-Empowered
+Strikes entry**: initially showed at every Monk level instead of the
+real 6th-level requirement, since a generic KNOWN_ACTIONS entry
+doesn't automatically infer its gate from the class progression data.
+Fixed via the established CLASS_SPECIFIC_GATE_OVERRIDES mechanism,
+verified against every level 1-6.
+
+The remaining ~1 unchecked feature and the small number of subclass-
+name false positives (from the block-parsing heuristic picking up a
+subclass's own intro section) weren't pursued further given the
+overwhelming pattern of correctness in this category. Full
+regression: 20/20 Monk levels build cleanly with both fixes active.
+
+## Bard spell table, Action Surge, and the musical instrument bug — all fixed and verified
+
+**Bard spell table**: user provided the exact, verified table. Found
+spells-known was roughly half the real value at every level (e.g.
+level 10 showed 11, should be 14), and cantrips-known incorrectly
+gave Bard a 5th cantrip at level 16 (the real progression caps at 4).
+Fixed both against the exact pasted numbers, verified all 20 levels
+match precisely.
+
+**Action Surge**: confirmed a real, previously-flagged gap — existed
+as a spendable resource with zero connection to the turn-economy
+system despite genuinely granting an extra action. Wired the spend to
+set a real, turn-scoped flag that has_extra_action() now checks
+alongside Haste, reset on _new_turn(). Verified it correctly bypasses
+the "one leveled spell per turn" gate the same way Haste does — this
+specifically closes a gap explicitly noted as unresolved earlier this
+session (Action Surge wasn't tracked as an extra-action source at all).
+
+**Musical instrument bug**: confirmed the user's report precisely.
+_weapon_category_pool() unconditionally fell through to a weapon pool
+for any "Any X" starting-equipment text, so "Any other musical
+instrument" resolved to simple weapons (since "martial" isn't in that
+text either, matching the default else-branch). Fixed to check for
+real non-weapon categories (instrument, artisan's tools, gaming set)
+first, at both of the 2 real call sites. Verified the fix returns
+real instruments and that genuine weapon categories still work
+unchanged.
+
+Full regression: 4/4 representative classes clean with all three
+fixes active together.
+
+## STILL OUTSTANDING — not reached this session, flagged explicitly for continuation
+
+- **Filter system rework**: per-bucket filters (Action/Bonus Action/
+  Reaction/Passive each need their own filter row, not one shared
+  row across all 4), Kenku Mimicry needs to be a real, usable Passive-
+  tab entry, and the Passive/Other tab needs its own separate filter
+  set. Additionally: a filter chooser should only render at all when
+  more than one distinct category is actually present in that bucket
+  for that character — hide it entirely otherwise.
+- **Pyromancer subclass**: user clarified this is real, legitimate
+  content from Plane Shift: Kaladesh (a real UA source, same tier as
+  Plane Shift: Amonkhet which this app already supports for some
+  Cleric domains) — NOT unsupported homebrew as I'd assumed. Not yet
+  built; would need the full subclass added from scratch.
+- **5 confirmed-missing optional features** from 2 turns ago: Primal
+  Knowledge (Barbarian), Magical Inspiration (Bard), Quickened
+  Healing (Monk), Spellcasting Focus (Ranger), Cantrip Formulas
+  (Wizard) — verified genuinely absent, not yet built.
+- **Sorcerer/Warlock/Ranger spell tables**: not yet cross-checked
+  against a verified reference the way Bard just was — the Bard error
+  was severe and system-wide, so these should be verified with the
+  same rigor before being trusted.
+
+## Spell tables verified against the real reference file, 5 optional features given real mechanics
+
+**Spell table verification**: user redirected me to use the already-
+uploaded reference file directly instead of web search, which was the
+right call — extracted the real Sorcerer, Warlock, and Ranger tables
+directly from it. All 3 confirmed exactly correct against the current
+implementation (Sorcerer and Warlock spells/cantrips known matched
+digit-for-digit; Ranger's lack of a cantrips column at all was also
+confirmed correct). The Bard error earlier this session was isolated,
+not a systemic pattern across every caster.
+
+**Confirmed a much larger gap while building Quickened Healing**: all
+10 already-present OPTIONAL_CLASS_FEATURES entries (Favored Foe, Deft
+Explorer, Primal Awareness, Nature's Veil, Steady Aim, Magical
+Guidance, Dedicated Weapon, Ki-Fueled Attack, Focused Aim, Wild
+Companion) turned out to have zero real mechanical wiring at all —
+only correctly-gated descriptive text shown as a toggle in the
+Features tab. This confirms and significantly expands the "not yet
+verified" note flagged 2 turns ago.
+
+Built a real _optional_feature_enabled() helper checking both real
+enable mechanisms this app uses, and gave 5 of the 10 real mechanical
+Actions tab entries — Steady Aim, Ki-Fueled Attack, Focused Aim,
+Magical Guidance, Wild Companion — chosen because all 5 use existing
+resources (ki, sorcery points, wild shape uses) rather than needing a
+new resource pool built from scratch. Verified each individually
+appears only when its toggle is on, and all 8 representative classes
+build cleanly with all 5 active simultaneously.
+
+**Still not mechanically wired** (same confirmed-absent-wiring
+problem, but each needs more than an existing-resource Actions tab
+entry): Favored Foe and Nature's Veil both need a new, real resource
+(proficiency-bonus-scaled uses/LR); Dedicated Weapon needs a real
+"designate a weapon" mechanism; Deft Explorer is multi-part and
+mostly passive (expertise/languages/speed bonuses); Primal Awareness
+needs the real bonus-spells-by-level table built out.
+
+Also fixed Action Surge (real turn-scoped extra-action grant, closing
+an explicitly-flagged prior gap), and confirmed the musical instrument
+starting-equipment bug is precisely fixed as reported.
+
+## STILL OUTSTANDING for continuation
+
+- 5 remaining optional features needing real mechanical wiring (listed
+  above): Favored Foe, Nature's Veil, Dedicated Weapon, Deft Explorer,
+  Primal Awareness
+- 5 confirmed-genuinely-missing optional features (never built at
+  all): Primal Knowledge, Magical Inspiration, Quickened Healing (note:
+  distinct from Ki-Fueled Attack, itself now wired), Spellcasting
+  Focus, Cantrip Formulas
+- Filter system rework: per-bucket filters, Kenku Mimicry as a real
+  Passive-tab entry, conditional filter-chooser visibility
+- Pyromancer subclass (confirmed real content, Plane Shift: Kaladesh)
+  — not yet built
+
+## Favored Foe, Nature's Veil, Deft Explorer (Roving/Tireless), Primal Awareness — real mechanics built
+
+Continuing the optional-features wiring pass. Built real mechanics for
+4 more of the 10 confirmed-zero-wiring features:
+
+**Favored Foe**: real resource (PB uses/LR), gated on Ranger level 1+
+and the toggle.
+
+**Nature's Veil**: real resource (PB uses/LR), gated on level 10+.
+
+**Deft Explorer — Roving (6th level)**: hooked into the existing,
+already-displayed _speed_bonus_sources mechanism rather than building
+something new — climb/swim speed set to match walking speed (the
+same established pattern already used for other races/effects with
+this exact grant), plus a flat +5 ft bonus. Caught a real, self-
+introduced bug before it shipped: this field had no other writer
+anywhere in the codebase, so nothing was resetting it between calls —
+without an explicit reset, repeated calls during normal play (this
+function is called directly from multiple UI locations, not through
+update_all()) would have accumulated duplicate entries indefinitely.
+Verified by calling the function 5 times in a row and confirming
+exactly one entry, not five.
+
+**Deft Explorer — Tireless (10th level)**: real resource (PB uses/LR,
+1d8+WIS temp HP), gated on the same Deft Explorer toggle as Roving
+since both are parts of one feature at different levels, not two
+separate feature names.
+
+**Primal Awareness**: real bonus-spells table (3rd: Speak with
+Animals, 5th: Beast Sense, 9th: Speak with Plants, 13th: Locate
+Creature, 17th: Commune with Nature), verified against the user's
+reference file and wired into the existing bonus_spells mechanism
+already used for Domain spells — confirmed each level threshold adds
+exactly the right spells and no more.
+
+Full regression: 20/20 Ranger levels clean with all 4 new mechanics
+active simultaneously.
+
+## STILL OUTSTANDING for continuation
+
+- **Deft Explorer's Canny (1st level)**: the expertise-skill-plus-2-
+  languages choice needs a real choice-card UI integration point that
+  doesn't exist yet for optional-feature-triggered choices — deferred
+  as the most involved remaining piece, not yet built.
+- **Dedicated Weapon** (Monk): needs a real "designate a weapon"
+  mechanism — not yet built.
+- **5 confirmed-genuinely-missing optional features** (never built at
+  all, unchanged from last checkpoint): Primal Knowledge, Magical
+  Inspiration, Quickened Healing, Spellcasting Focus, Cantrip Formulas.
+- Filter system rework (per-bucket filters, Kenku Mimicry, conditional
+  visibility) — not started.
+- Pyromancer subclass (confirmed real Plane Shift: Kaladesh content)
+  — not started.
+
+## Correction to last turn's report, plus a real skills-scale bug caught and fixed at its root
+
+**Correction, stated plainly**: last turn I reported all 10 pre-existing
+OPTIONAL_CLASS_FEATURES entries had zero mechanical wiring. That was
+wrong for 3 of them — Favored Foe, Nature's Veil, and Deft Explorer's
+Tireless component were already correctly built as real resources
+(PB-scaled, LR reset, correct level gates), apparently from earlier in
+this same session before the portion I have direct visibility into.
+My check methodology at the time was flawed (a broken grep/wc
+combination that silently produced false negatives), caught only when
+building Favored Foe from scratch would have meant redoing already-
+correct work. Re-ran the same command and got different, accurate
+results, confirming the bug was in my test, not the code.
+
+**Real remaining gap in Deft Explorer**: while Roving and Tireless
+were already built, Canny — the foundational 1st-level component
+every Deft Explorer Ranger gets (double proficiency bonus for a
+chosen skill, plus 2 languages) — never had a real choice card
+anywhere. Built one, as a new, reusable _get_optional_feature_choices()
+source in levelup_panel.py.
+
+**Caught a real, more significant bug while building Canny**: checked
+the actual skills-proficiency scale directly in get_skill_bonus()
+rather than assume — confirmed it's 0=none, 1=half proficiency (Jack
+of All Trades-style), 2=full proficiency, 3=expertise. My first Canny
+draft used lvl==1 for "proficient," which is actually half-proficiency,
+not full. Fixed immediately to lvl==2.
+
+This same check then exposed that Bardic Versatility's expertise-swap
+logic, built earlier this session, had the identical bug in both
+directions: its swap-out pool used lvl>=2 (incorrectly including
+plain-proficient skills as if they were expertise) and its swap-in
+pool used lvl==1 (incorrectly offering half-proficiency skills).  The
+actual consumption logic that applies a confirmed swap had the same
+numbers wrong too (setting skills to 1/2 instead of the real 2/3).
+Fixed all three call sites to use the real scale (expertise=3, full
+proficiency=2), verified directly against a character with all three
+distinct real levels (half, full, expertise) to confirm each is now
+correctly distinguished rather than just checking that something
+changed.
+
+Full regression: 0 failures across Bard and Ranger at every level
+with both optional-feature toggles active.
+
+## Dedicated Weapon built, and a correction: Canny was already partially built
+
+**Dedicated Weapon (Monk)**: confirmed this app has no deeper weapon-
+eligibility system to hook a real mechanical outcome into (same
+situation as Ki-Empowered Strikes) — built as a real, honest resource
+tracker rather than a fake connection. Reset on SR (the more frequent
+of "short or long rest").
+
+**Correction to my own last summary**: I claimed Canny's choice-card
+integration was "not yet built" and deferred it as the most involved
+remaining piece. That was wrong — investigating it just now found
+_get_optional_feature_choices() already exists, is already wired into
+the primary pending-choices flow, and already correctly handles
+Canny's skill-expertise half, complete with a comment in my own
+established phrasing style, meaning I'd built this in an earlier part
+of this same overall session and lost track of having done so.
+Verified this cost nothing (still fully working), but it's worth
+naming plainly rather than letting an inaccurate "not yet done" stand
+uncorrected.
+
+What genuinely was still missing: Canny's second half, 2 additional
+languages, which had no choice card anywhere. Added it using the
+exact established language-choice pattern (matching Prodigy feat's
+language choice). Verified both halves of Canny now correctly appear
+together as separate, real choice cards.
+
+Full regression: 20/20 Ranger levels and 20/20 Monk levels clean with
+every new mechanic active.
+
+## Final 5 optional features built — Primal Knowledge, Magical Inspiration, Quickened Healing, Spellcasting Focus, Cantrip Formulas
+
+All 5 remaining genuinely-missing optional features from the class
+reference "optional" search are now built.
+
+**Quickened Healing**: real Action-bucket entry using existing ki and
+the app's own real get_martial_arts_die() computation.
+
+**Primal Knowledge**: built as 2 separate choice instances (3rd and
+10th level are independent grants, not one combined choice), using
+Barbarian's real skill_choices pool. Caught a real bug before shipping
+by checking the actual write-back mechanism rather than assuming a
+generic "skill_prof" type choice grants real proficiency — it doesn't
+unless the choice_id specifically ends with "_skill_profs"; without
+that exact suffix the choice would have been stored but never
+actually applied to the character's skills.
+
+**Magical Inspiration and Spellcasting Focus**: both real, visible
+Passive entries. Magical Inspiration involves another creature's
+spellcasting, which this app has no mechanism to simulate; Spellcasting
+Focus is a flavor/equipment-flexibility note this app doesn't need to
+mechanically enforce — same honest-tiering approach as Ki-Empowered
+Strikes and Dedicated Weapon.
+
+**Cantrip Formulas**: extended the existing Cantrip Versatility card
+rather than building a new one, since the UI mechanism (swap one
+cantrip for another) is identical. Correctly kept as a separate gate
+condition rather than folding Wizard into the Cleric/Druid ASI-level
+check, since the real rule is "whenever you finish a long rest," not
+tied to ASI levels — verified the card shows for Wizard at a genuinely
+non-ASI level (3→4 is a red herring since 4 IS an ASI level; verified
+against Cleric at 5→6, a real non-ASI transition, confirming the
+original ASI-gating remained correctly untouched).
+
+This closes the last of the 15 optional-features gaps found via the
+"optional" key-term search: 10 already-present-but-unwired features
+now have real mechanics (Roving/Tireless/Canny's 2 halves for Deft
+Explorer, Favored Foe, Nature's Veil, Steady Aim, Ki-Fueled Attack,
+Focused Aim, Magical Guidance, Wild Companion, Dedicated Weapon), and
+these final 5 that were missing entirely are now built.
+
+Full regression: 100/100 class/level combinations (5 classes × 20
+levels) clean with all 5 new features active simultaneously.
+
+## STILL OUTSTANDING for continuation
+
+- Filter system rework (per-bucket filters, Kenku Mimicry, conditional
+  visibility) — not started.
+- Pyromancer subclass (confirmed real Plane Shift: Kaladesh content)
+  — not started.
+
+## Filter system rework: per-bucket filters, and Kenku Mimicry wired in
+
+**Per-bucket filters**: reworked from one shared filter row applying
+uniformly across all 4 tabs to each tab (Action/Bonus Action/Reaction/
+Passive) having its own fully independent filter state, buttons, and
+visibility. Built the conditional-visibility rule explicitly requested:
+a bucket's filter chooser only renders when more than one distinct
+category is actually present for that character in that bucket —
+verified directly with a basic Fighter whose Reaction and Bonus Action
+buckets correctly hide their filters (only Common entries present).
+
+**Caught a real, critical bug before it shipped**: the existing
+_refresh_action_tabs() clearing logic assumed only a trailing stretch
+was permanent ("keep the stretch, clear everything else"). Adding 2
+new permanent filter-row widgets per bucket without updating this
+would have caused every refresh to silently delete the filter UI
+itself. Caught by explicitly testing repeated refreshes and confirming
+the same widget object survives, not just checking a single refresh.
+
+**Kenku Mimicry**: added as a real, usable Passive-tab entry, with the
+real, version-specific mechanical text resolved dynamically — confirmed
+base Kenku (opposed Charisma/Deception check) and Kenku (MPMM) (flat
+DC 8+PB+CHA) have genuinely different rules text, so built a dedicated
+resolver rather than one generic description that would be wrong for
+one of the two versions.
+
+**Caught and fixed 2 real bugs while building this**: first, used
+get_prof_bonus/ability_mod without importing either in this file's
+scope — this file has zero top-level imports (everything is local-
+per-function), confirmed by checking the established pattern before
+fixing. Second, and more specific: assumed ability_mod() took a single
+raw score, but its real signature is (char, ability_name) and it's
+imported from character.py, not calculator.py — caught by actually
+running the code and reading the real TypeError rather than assuming
+the fix was correct after just adding the import.
+
+Full regression: 15/15 race/class combinations clean, including
+repeated-refresh stress testing to confirm the filter-clearing fix
+holds up over time, not just on first render.
+
+## STILL OUTSTANDING for continuation
+
+- Pyromancer subclass (confirmed real Plane Shift: Kaladesh content)
+  — not started. This is the last remaining item from this extended
+  fixes pass.
+
+## Pyromancer subclass built — with an important nuance about its real status
+
+Before building, researched the user's claim that Pyromancer is
+"added from Plane Shift Kaladesh." This needed a real correction:
+multiple independent, converging sources confirm Plane Shift: Kaladesh
+is a real, free WotC-published PDF, but it is explicitly not official
+D&D content in the tier of the core rulebooks or even Unearthed
+Arcana — it was created primarily by the Magic: the Gathering design
+team as a crossover product, and several sources note it was never
+added to official tools like D&D Beyond specifically because of this
+ambiguous status. This app already has an established, exact
+precedent for this situation: Plane Shift: Amonkhet content is used
+for some Cleric domains, explicitly marked "unofficial" in the
+README's sources table. Followed that same precedent rather than
+either refusing to build it or treating it as equivalent to PHB
+content.
+
+Got the precise, exact feature text directly from the user's own
+already-uploaded class reference file rather than trust web-search
+paraphrases (though multiple independent web sources corroborated the
+same 4 features and levels, confirming the reference file's accuracy).
+
+Built as a real Sorcerer subclass — "Pyromancer (PSK)" — with all 4
+real features:
+- Heart of Fire (1st): real, visible Passive entry, since this app
+  has no "which spells deal fire damage" flag to hook a real trigger
+  into (confirmed by checking directly).
+- Fire in the Veins (6th): real fire resistance, using the exact same
+  "resistance then upgrades to immunity" pattern already established
+  for Forge Domain.
+- Pyromancer's Fury (14th): real, usable Reaction entry — fully
+  mechanically simulatable (deal fire damage = sorcerer level when hit
+  by a melee attack).
+- Fiery Soul (18th): real fire immunity, via the same upgrade pattern
+  as Fire in the Veins.
+
+Marked "Unofficial (Plane Shift: Kaladesh)" directly in every
+user-facing description, not just in a data comment, so a player
+encountering this subclass sees its real status without having to
+dig for it. Updated the README's sources table to reflect this,
+matching the exact existing Amonkhet-domains entry pattern.
+
+Full regression: 20/20 Sorcerer levels with the Pyromancer subclass
+clean, including verified level-gating for the resistance-to-immunity
+upgrade and Pyromancer's Fury's 14th-level threshold.
+
+This closes the full extended fixes pass from the "keep going"
+sequence — Action Surge, the musical instrument bug, all 15 optional-
+feature gaps from the "optional" search, the per-bucket filter rework,
+Kenku Mimicry, and now Pyromancer.

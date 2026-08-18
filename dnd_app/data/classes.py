@@ -985,6 +985,7 @@ ALL_CLASSES = [
             "Divine Soul (XGE) – chosen of the gods; divine spell list",
             "Draconic Bloodline – draconic ancestor; +1 HP/level; scaled skin",
             "Lunar Sorcery (DSotDQ) – moon phases; moonfire",
+            "Pyromancer (PSK) – unofficial Plane Shift: Kaladesh; fire magic incarnate",
             "Shadow Magic (XGE) – Hound of Ill Omen; Shadow Walk",
             "Storm Sorcery (SCAG/XGE) – wind speaker; Tempestuous Magic",
             "Wild Magic – Wild Magic Surge table; Tides of Chaos",

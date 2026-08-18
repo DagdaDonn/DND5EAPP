@@ -1258,6 +1258,7 @@ class LevelUpPanel(QWidget):
         pending += _get_class_tool_choices(self.char)
         pending += _get_feat_choices(self.char)
         pending += _get_dm_reward_choices(self.char)
+        pending += _get_optional_feature_choices(self.char)
 
         unfinished = [p for p in pending if len(p.get("already_chosen",[])) < p.get("count",1)]
 
@@ -2596,6 +2597,63 @@ def _get_feat_choices(char):
                 "label": "Choose 1 Eldritch Invocation",
                 "already_chosen": already,
             })
+    return choices
+
+
+def _get_optional_feature_choices(char):
+    """TCE optional-feature choices — extensible for future ones.
+    Canny (Deft Explorer's foundational 1st-level component) confirmed
+    genuinely missing a real choice card, even though its other two
+    parts (Roving, Tireless) were already correctly built elsewhere."""
+    choices = []
+    made = char.get("_choices", {})
+    ranger_lvl = sum(c.get("level", 0) for c in char.get("classes", []) if c.get("class") == "Ranger")
+    deft_on = (made.get("optional_features", {}).get("Deft Explorer", False)
+               or char.get("optional_rules", {}).get("deft_explorer", False))
+    if ranger_lvl >= 1 and deft_on:
+        already_canny = made.get("deft_explorer_canny", [])
+        if not already_canny:
+            proficient_only = [s for s, lvl in char.get("skills", {}).items() if lvl == 2]
+            if proficient_only:
+                choices.append({
+                    "id": "deft_explorer_canny", "source": "class", "source_name": "Ranger",
+                    "type": "expertise", "count": 1,
+                    "pool": sorted(proficient_only),
+                    "label": "Canny (Deft Explorer): choose 1 proficient skill for doubled "
+                             "proficiency bonus",
+                    "already_chosen": already_canny,
+                })
+        already_canny_lang = made.get("deft_explorer_canny_languages", [])
+        if len(already_canny_lang) < 2:
+            choices.append({
+                "id": "deft_explorer_canny_languages", "source": "class", "source_name": "Ranger",
+                "type": "language", "count": 2,
+                "label": "Canny (Deft Explorer): choose 2 additional languages",
+                "already_chosen": already_canny_lang,
+            })
+
+    # Primal Knowledge (Barbarian, TCE optional, genuinely missing
+    # entirely): 2 separate choice instances since 3rd and 10th level
+    # are independent grants, not one combined choice. Uses Barbarian's
+    # real 1st-level skill pool rather than a hardcoded guess.
+    from dnd_app.data.classes import CLASS_DICT
+    barb_lvl = sum(c.get("level", 0) for c in char.get("classes", []) if c.get("class") == "Barbarian")
+    primal_on = (made.get("optional_features", {}).get("Primal Knowledge", False)
+                 or char.get("optional_rules", {}).get("primal_knowledge", False))
+    if primal_on:
+        barb_skill_pool = CLASS_DICT.get("Barbarian", {}).get("skill_choices", [])
+        for req_lvl, choice_id in ((3, "primal_knowledge_3_skill_profs"), (10, "primal_knowledge_10_skill_profs")):
+            if barb_lvl >= req_lvl:
+                already_pk = made.get(choice_id, [])
+                if not already_pk:
+                    choices.append({
+                        "id": choice_id, "source": "class", "source_name": "Barbarian",
+                        "type": "skill_prof", "count": 1,
+                        "pool": barb_skill_pool,
+                        "label": f"Primal Knowledge ({req_lvl}th level): choose 1 skill "
+                                 f"proficiency",
+                        "already_chosen": already_pk,
+                    })
     return choices
 
 

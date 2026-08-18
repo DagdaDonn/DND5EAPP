@@ -178,6 +178,7 @@ SUBCLASS_FEATURES: dict[tuple[str,str], list[str]] = {
     ('Sorcerer', 'Clockwork Soul'): ['Clockwork Magic', 'Restore Balance', 'Bastion of Law', 'Trance of Order', 'Clockwork Cavalcade'],
     ('Sorcerer', 'Divine Soul'): ['Divine Magic', 'Favored by the Gods', 'Empowered Healing', 'Otherworldly Wings', 'Unearthly Recovery'],
     ('Sorcerer', 'Lunar Sorcery'): ['Lunar Embodiment + Moon Fire', 'Lunar Boons + Waxing and Waning', 'Lunar Empowerment', 'Lunar Phenomenon'],
+    ('Sorcerer', 'Pyromancer'): ['Heart of Fire', 'Fire in the Veins', "Pyromancer's Fury", 'Fiery Soul'],
     ('Sorcerer', 'Storm Sorcery'): ['Wind Speaker', 'Tempestuous Magic', 'Heart of the Storm', 'Storm Guide', "Storm's Fury", 'Wind Soul'],
     ('Warlock', 'The Celestial'): ['Bonus Cantrips', 'Healing Light', 'Radiant Soul', 'Celestial Resilience', 'Searing Vengeance'],
     ('Warlock', 'The Fathomless'): ['Tentacle of the Deep', 'Gift of the Sea', 'Oceanic Soul', 'Guardian Coil', 'Grasping Tentacles', 'Fathomless Plunge'],
@@ -957,6 +958,12 @@ CLASS_FEATURE_INDEX: dict[str, dict] = {
             6: ["Empowered Healing"],
             14: ["Otherworldly Wings"],
             18: ["Unearthly Recovery"],
+        },
+        "Pyromancer": {
+            1: ["Heart of Fire"],
+            6: ["Fire in the Veins"],
+            14: ["Pyromancer's Fury"],
+            18: ["Fiery Soul"],
         },
         "Shadow Magic": {
             1: ["Eyes of the Dark", "Strength of the Grave"],

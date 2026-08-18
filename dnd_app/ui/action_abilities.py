@@ -180,6 +180,19 @@ def _get_artificer_infusion_base_names():
 _ARTIFICER_INFUSION_BASE_NAMES = _get_artificer_infusion_base_names()
 
 
+def _optional_feature_enabled(char, feature_name):
+    """Confirmed all optional features in OPTIONAL_CLASS_FEATURES had
+    zero real mechanical wiring — only correctly-gated descriptive
+    text. Checks both real enable mechanisms this app uses (a per-
+    feature toggle, or the broader optional_rules toggle), matching
+    the same dual-check already used for display in sheet.py."""
+    enabled = char.get("_choices", {}).get("optional_features", {})
+    if enabled.get(feature_name, False):
+        return True
+    rules_key = feature_name.lower().replace(" ", "_").replace("'", "")
+    return char.get("optional_rules", {}).get(rules_key, False)
+
+
 def build_action_abilities(char):
     """
     Return {bucket: [(name, desc, source), ...]} for the action economy display.
@@ -625,6 +638,7 @@ def build_action_abilities(char):
         ('Rogue','Elegant Maneuver'): ('Bonus Action', 'Elegant Maneuver', "Gain advantage on the next Acrobatics or Athletics check you make before the end of your turn."),
         ('Rogue','Master Duelist'):  ('Reaction', 'Master Duelist', "When you miss with an attack roll, reroll it with advantage. 1/SR."),
         ('Monk','Elemental Attunement'): ('Action', 'Elemental Attunement', "Free, automatic discipline (doesn't count against known disciplines): briefly control elemental forces within 30 ft for a minor sensory or utility effect (create/reshape a small amount of an element, light/snuff a small flame, etc.), no ki cost."),
+        ('Monk','Ki-Empowered Strikes'): ('Passive', 'Ki-Empowered Strikes (passive)', "Your unarmed strikes count as magical for the purpose of overcoming resistance and immunity to nonmagical attacks and damage."),
         ('Monk','Open Hand Technique'): ('Passive', 'Open Hand Technique (passive)', "When you hit with Flurry of Blows, choose one: the target DEX saves or is knocked prone; the target STR saves or is pushed 15 ft; or the target can't take reactions until the end of your next turn."),
         ('Monk','Wholeness of Body'): ('Action', 'Wholeness of Body', "Regain HP equal to 3x your Monk level. 1/LR."),
         ('Monk','Tranquility'):      ('Passive', 'Tranquility (passive)', "At the end of a long rest, gain the effect of Sanctuary until the start of your next long rest (ends early if you attack/cast a spell)."),
@@ -1484,6 +1498,7 @@ def build_action_abilities(char):
             ('Bard', 'Extra Attack'): 6,
             ('Wizard', 'Extra Attack'): 6,
             ('Blood Hunter', 'Fighting Style'): 2,
+            ('Monk', 'Ki-Empowered Strikes'): 6,
             # Paladin's Channel Divinity (and every subclass option that
             # uses it) doesn't unlock until 3rd level — confirmed a real,
             # directly-reported bug: these had no gate at all (defaulting
@@ -1655,6 +1670,52 @@ def build_action_abilities(char):
                         f"extra {die} damage of that rite's element until "
                         f"your next short or long rest.")
             buckets[bucket].append((display, desc, cls_name))
+
+    # TCE optional class features: confirmed all 10 already-present
+    # entries in OPTIONAL_CLASS_FEATURES had zero real mechanical
+    # wiring, only correctly-gated descriptive text. These 5 use
+    # existing resources (ki, sorcery points, wild shape uses) rather
+    # than needing a new resource pool, so building real Actions tab
+    # entries for them closes a genuine, confirmed gap.
+    if _optional_feature_enabled(char, "Steady Aim") and char_classes.get("Rogue", 0) >= 3:
+        buckets["Bonus Action"].append((
+            "Steady Aim", "Give yourself advantage on your next attack roll this turn. You "
+            "must not have moved this turn; your speed is then 0 until the end of the turn.",
+            "Rogue"))
+    if _optional_feature_enabled(char, "Ki-Fueled Attack") and char_classes.get("Monk", 0) >= 3:
+        buckets["Bonus Action"].append((
+            "Ki-Fueled Attack", "If you spend 1+ ki points as part of your action this turn, "
+            "make one attack with a monk weapon as a bonus action.", "Monk"))
+    if _optional_feature_enabled(char, "Focused Aim") and char_classes.get("Monk", 0) >= 5:
+        buckets["Reaction"].append((
+            "Focused Aim", "When you miss with an attack roll, spend 1-3 ki points to increase "
+            "that roll by 2 per ki point spent — potentially turning the miss into a hit.",
+            "Monk"))
+    if _optional_feature_enabled(char, "Quickened Healing") and char_classes.get("Monk", 0) >= 4:
+        from dnd_app.core.calculator import get_martial_arts_die
+        buckets["Action"].append((
+            "Quickened Healing", f"Spend 2 ki points: roll your Martial Arts die "
+            f"({get_martial_arts_die(char)}) and regain that many HP, plus your proficiency "
+            f"bonus.", "Monk"))
+    if _optional_feature_enabled(char, "Magical Guidance") and char_classes.get("Sorcerer", 0) >= 5:
+        buckets["Reaction"].append((
+            "Magical Guidance", "When you fail an ability check, spend 1 sorcery point to "
+            "reroll the d20 — you must use the new roll.", "Sorcerer"))
+    if _optional_feature_enabled(char, "Wild Companion") and char_classes.get("Druid", 0) >= 2:
+        buckets["Action"].append((
+            "Wild Companion", "Expend a use of Wild Shape to cast Find Familiar without "
+            "material components; the familiar is a fey and disappears after hours equal to "
+            "half your Druid level.", "Druid"))
+    if _optional_feature_enabled(char, "Magical Inspiration") and char_classes.get("Bard", 0) >= 2:
+        buckets["Passive"].append((
+            "Magical Inspiration (passive)", "If a creature holding one of your Bardic "
+            "Inspiration dice casts a spell that heals or deals damage, it can roll that die "
+            "and add the result to the healing or damage — the die is then lost.", "Bard"))
+    if _optional_feature_enabled(char, "Spellcasting Focus") and char_classes.get("Ranger", 0) >= 2:
+        buckets["Passive"].append((
+            "Spellcasting Focus (passive)", "You can use a druidic focus (sprig of mistletoe "
+            "or holly, a wand/rod of special wood, a staff drawn from a living tree, etc.) as "
+            "a spellcasting focus for your ranger spells.", "Ranger"))
 
     # Add active magic item abilities from equipped + attuned items.
     # ITEM_ACTIONS matches by substring of the item's catalog name (fragment
@@ -2327,6 +2388,24 @@ def build_action_abilities(char):
         buckets['Bonus Action'].append(('Waxing and Waning',
             "Spend 1 sorcery point to change your current Lunar Embodiment phase for a "
             "different one.", 'Sorcerer'))
+    # Pyromancer's Fury (Pyromancer, PSK, 14th level): confirmed zero
+    # implementation existed despite accurate tooltip text. Unofficial
+    # (Plane Shift: Kaladesh), noted in the description itself.
+    sorc_lvl_pf = class_levels(char).get("Sorcerer", 0)
+    if sorc_lvl_pf >= 14 and "pyromancer" in subclasses(char).get("Sorcerer", "").lower():
+        buckets['Reaction'].append(("Pyromancer's Fury",
+            f"Unofficial (Plane Shift: Kaladesh). When hit by a melee attack, deal fire "
+            f"damage equal to your sorcerer level ({sorc_lvl_pf}) to the attacker, ignoring "
+            f"resistance to fire damage.", 'Sorcerer'))
+    # Heart of Fire (Pyromancer, PSK, 1st level): confirmed this app has
+    # no "which spells deal fire damage" flag to hook a real mechanical
+    # trigger into — real, visible Passive note instead.
+    if sorc_lvl_pf >= 1 and "pyromancer" in subclasses(char).get("Sorcerer", "").lower():
+        buckets['Passive'].append(("Heart of Fire (passive)",
+            f"Unofficial (Plane Shift: Kaladesh). Whenever you start casting a spell of 1st "
+            f"level or higher that deals fire damage, creatures of your choice within 10 ft "
+            f"that you can see take fire damage equal to half your sorcerer level "
+            f"({max(1, sorc_lvl_pf // 2)}).", 'Sorcerer'))
     buckets['Bonus Action'].append(('Offhand Attack','When you take the Attack action with a light weapon, attack with your off-hand light weapon (no ability mod to damage unless negative).', 'Universal'))
     buckets['Reaction'].append(('Opportunity Attack','When enemy leaves your melee reach: make one melee attack against them.', 'Universal'))
     buckets['Passive'].append(('Spellcasting (passive)','Cast spells using your prepared/known spells and available spell slots.', 'Universal'))
@@ -2347,6 +2426,7 @@ def build_action_abilities(char):
             "When you take damage: reduce it by 1d12 + CON. 1/SR."),
         "Daunting Roar":     ("Bonus Action", "Daunting Roar",
             "Creatures within 10 ft: CON save or frightened until your next turn. 1/SR."),
+        "Mimicry":           ("Passive", "Mimicry (passive)", "MIMICRY_DYNAMIC"),
         "Goring Rush":       ("Bonus Action", "Goring Rush",
             "After you Dash: one melee attack with your horns."),
         "Hammering Horns":   ("Bonus Action", "Hammering Horns",
@@ -2390,6 +2470,24 @@ def build_action_abilities(char):
                     # character's chosen ancestry, real dice for their level,
                     # real DC — not the generic level-progression text.
                     desc = _breath_weapon_desc(char)
+                elif frag == "Mimicry":
+                    # Confirmed the base and MPMM Kenku versions have
+                    # genuinely different real mechanics (opposed
+                    # Deception check vs. flat DC) — resolved separately
+                    # rather than shown as one, potentially-wrong
+                    # generic description.
+                    if race_name == "Kenku (MPMM)":
+                        from dnd_app.core.calculator import get_prof_bonus
+                        from dnd_app.core.character import ability_mod
+                        pb_mim = get_prof_bonus(char)
+                        cha_mim = ability_mod(char, "CHA")
+                        desc = ("You can accurately mimic sounds you've heard, including "
+                                f"voices. A listener can tell it's an imitation only with a "
+                                f"successful Wisdom (Insight) check (DC {8+pb_mim+cha_mim}).")
+                    else:
+                        desc = ("You can mimic sounds you've heard, including voices. A "
+                                "listener can tell it's an imitation with a successful Wisdom "
+                                "(Insight) check opposed by your Charisma (Deception) check.")
                 else:
                     desc = _resolve_dynamic_combat_text(char, spec[2])
                 buckets[bucket].append((spec[1], desc, race_name))

@@ -1085,8 +1085,16 @@ class LevelUpMulticlassDialog(QDialog):
         CV_CLASSES = {"Cleric", "Druid"}
         current_cv_lvl = existing.get(cls_name, 0)
         is_cv_asi_level = (current_cv_lvl + 1) in ASI_LEVELS
-        show_cv = (self.char.get("optional_rules", {}).get("cantrip_versatility", False)
+        show_cv_versatility = (self.char.get("optional_rules", {}).get("cantrip_versatility", False)
                    and cls_name in CV_CLASSES and cls_name in existing and is_cv_asi_level)
+        # Cantrip Formulas (Wizard, TCE optional, genuinely missing
+        # entirely): same swap mechanism, but correctly NOT ASI-gated —
+        # the real rule is "whenever you finish a long rest," so kept
+        # as a separate, always-available condition rather than
+        # incorrectly folded into the ASI-level check above.
+        show_cv_formulas = (self.char.get("optional_rules", {}).get("cantrip_formulas", False)
+                   and cls_name == "Wizard" and existing.get("Wizard", 0) >= 3)
+        show_cv = show_cv_versatility or show_cv_formulas
         self._cv_card.setVisible(show_cv)
         if show_cv:
             from dnd_app.data.spells import ALL_SPELLS
@@ -1192,8 +1200,8 @@ class LevelUpMulticlassDialog(QDialog):
         if kind is None:
             return
         if kind == "expertise":
-            expert_skills = [s for s, lvl in self.char.get("skills", {}).items() if lvl >= 2]
-            proficient_only = [s for s, lvl in self.char.get("skills", {}).items() if lvl == 1]
+            expert_skills = [s for s, lvl in self.char.get("skills", {}).items() if lvl == 3]
+            proficient_only = [s for s, lvl in self.char.get("skills", {}).items() if lvl == 2]
             for s in expert_skills:
                 self._bv_out_combo.addItem(s, s)
             for s in proficient_only:
@@ -2822,8 +2830,8 @@ class CharacterSheet(QWidget):
         if bv_kind and bv_old and bv_new:
             if bv_kind == "expertise":
                 skills = self.char.setdefault("skills", {})
-                skills[bv_old] = 1
-                skills[bv_new] = 2
+                skills[bv_old] = 2
+                skills[bv_new] = 3
                 self._toast(f"🎵 Bardic Versatility: moved Expertise from {bv_old} to {bv_new}")
             elif bv_kind == "cantrip":
                 known = self.char.setdefault("spells_known", [])
@@ -3455,56 +3463,10 @@ class CharacterSheet(QWidget):
         # claims whatever height the layout — including a manual splitter
         # drag — actually gives it.
 
-        # ── Category filter row: Common/Magic Item (placeholder)/Race/Spell,
-        # with a secondary spell-level filter shown only when Spell is active.
-        self._action_category_filter = "All"
-        self._action_spell_level_filter = "All"
-        filter_row = QHBoxLayout(); filter_row.setSpacing(6)
-        self._action_cat_btns = {}
-        CAT_ICONS = {"All": "◆", "Common": "⚔", "Magic Item": "✨", "Race": "🧬", "Spell": "📖"}
-        def _make_cat_click(cat):
-            def _click():
-                self._action_category_filter = cat
-                for c, b in self._action_cat_btns.items():
-                    b.setStyleSheet(self._action_cat_btn_style(c == cat))
-                self._action_level_filter_row.setVisible(cat == "Spell")
-                self._refresh_action_tabs()
-            return _click
-        for cat in ["All", "Common", "Magic Item", "Race", "Spell"]:
-            btn = QPushButton(f"{CAT_ICONS[cat]} {cat}")
-            btn.setMinimumHeight(26)
-            btn.setStyleSheet(self._action_cat_btn_style(cat == "All"))
-            btn.clicked.connect(_make_cat_click(cat))
-            if cat == "Magic Item":
-                btn.setToolTip("Placeholder — magic items aren't mechanically wired into "
-                                "Known Actions yet.")
-            self._action_cat_btns[cat] = btn
-            filter_row.addWidget(btn)
-        filter_row.addStretch()
-        top_half_lay.addLayout(filter_row)
-
-        # Secondary spell-level filter — hidden until "Spell" is selected.
-        self._action_level_filter_row = QWidget()
-        lvl_row = QHBoxLayout(self._action_level_filter_row)
-        lvl_row.setContentsMargins(0,0,0,0); lvl_row.setSpacing(4)
-        self._action_lvl_btns = {}
-        def _make_lvl_click(lvl):
-            def _click():
-                self._action_spell_level_filter = lvl
-                for l, b in self._action_lvl_btns.items():
-                    b.setStyleSheet(self._action_cat_btn_style(l == lvl, small=True))
-                self._refresh_action_tabs()
-            return _click
-        for lvl_label in ["All", "Cantrip"] + [f"L{n}" for n in range(1, 10)]:
-            btn = QPushButton(lvl_label)
-            btn.setMinimumHeight(22); btn.setMaximumWidth(52)
-            btn.setStyleSheet(self._action_cat_btn_style(lvl_label == "All", small=True))
-            btn.clicked.connect(_make_lvl_click(lvl_label))
-            self._action_lvl_btns[lvl_label] = btn
-            lvl_row.addWidget(btn)
-        lvl_row.addStretch()
-        self._action_level_filter_row.setVisible(False)
-        top_half_lay.addWidget(self._action_level_filter_row)
+        # Per-bucket category filters are built inside the tab-construction
+        # loop below (each tab gets its own independent filter row), not
+        # here as one shared row across all 4 — confirmed the user
+        # specifically wants each tab filtered independently.
 
         # ── BOTTOM: Action Economy tabs (full remaining height) ───────────────
         self._action_tabs = QTabWidget()
@@ -3520,12 +3482,76 @@ class CharacterSheet(QWidget):
             f"QTabBar::tab:hover{{background:{qa(AMBER,0x11)};color:{AMBE2};}}"
         )
         self._action_bucket_widgets = {}
+        self._action_cat_filters = {}
+        self._action_cat_btns_by_bucket = {}
+        self._action_filter_rows = {}
+        self._action_spell_level_filters = {}
+        self._action_lvl_btns_by_bucket = {}
+        self._action_level_filter_rows = {}
         _TAB_DISPLAY_LABEL = {"Action":"Action","Bonus Action":"Bonus Action",
                                "Reaction":"Reaction","Passive":"Other"}
+        CAT_ICONS = {"All": "◆", "Common": "⚔", "Magic Item": "✨", "Race": "🧬", "Spell": "📖"}
         for bucket_name, icon in [("Action","⚔"),("Bonus Action","✦"),
                                    ("Reaction","⚡"),("Passive","◎")]:
             bw = QWidget(); bw.setStyleSheet("background:transparent;")
             bl = QVBoxLayout(bw); bl.setContentsMargins(8,8,8,8); bl.setSpacing(5)
+
+            # Per-bucket category filter row — own independent state,
+            # confirmed the user wants each tab (including Passive)
+            # filtered independently rather than one shared row.
+            self._action_cat_filters[bucket_name] = "All"
+            self._action_cat_btns_by_bucket[bucket_name] = {}
+            filter_row_w = QWidget()
+            filter_row = QHBoxLayout(filter_row_w)
+            filter_row.setContentsMargins(0,0,0,0); filter_row.setSpacing(6)
+            def _make_cat_click(cat, _bucket=bucket_name):
+                def _click():
+                    self._action_cat_filters[_bucket] = cat
+                    for c, b in self._action_cat_btns_by_bucket[_bucket].items():
+                        b.setStyleSheet(self._action_cat_btn_style(c == cat))
+                    self._action_level_filter_rows[_bucket].setVisible(cat == "Spell")
+                    self._refresh_action_tabs()
+                return _click
+            for cat in ["All", "Common", "Magic Item", "Race", "Spell"]:
+                btn = QPushButton(f"{CAT_ICONS[cat]} {cat}")
+                btn.setMinimumHeight(24)
+                btn.setStyleSheet(self._action_cat_btn_style(cat == "All"))
+                btn.clicked.connect(_make_cat_click(cat))
+                if cat == "Magic Item":
+                    btn.setToolTip("Placeholder — magic items aren't mechanically wired into "
+                                    "Known Actions yet.")
+                self._action_cat_btns_by_bucket[bucket_name][cat] = btn
+                filter_row.addWidget(btn)
+            filter_row.addStretch()
+            self._action_filter_rows[bucket_name] = filter_row_w
+            bl.addWidget(filter_row_w)
+
+            # Secondary spell-level filter — hidden until "Spell" is
+            # selected in THIS bucket's own filter row.
+            self._action_spell_level_filters[bucket_name] = "All"
+            self._action_lvl_btns_by_bucket[bucket_name] = {}
+            lvl_row_w = QWidget()
+            lvl_row = QHBoxLayout(lvl_row_w)
+            lvl_row.setContentsMargins(0,0,0,0); lvl_row.setSpacing(4)
+            def _make_lvl_click(lvl, _bucket=bucket_name):
+                def _click():
+                    self._action_spell_level_filters[_bucket] = lvl
+                    for l, b in self._action_lvl_btns_by_bucket[_bucket].items():
+                        b.setStyleSheet(self._action_cat_btn_style(l == lvl, small=True))
+                    self._refresh_action_tabs()
+                return _click
+            for lvl_label in ["All", "Cantrip"] + [f"L{n}" for n in range(1, 10)]:
+                btn = QPushButton(lvl_label)
+                btn.setMinimumHeight(20); btn.setMaximumWidth(48)
+                btn.setStyleSheet(self._action_cat_btn_style(lvl_label == "All", small=True))
+                btn.clicked.connect(_make_lvl_click(lvl_label))
+                self._action_lvl_btns_by_bucket[bucket_name][lvl_label] = btn
+                lvl_row.addWidget(btn)
+            lvl_row.addStretch()
+            lvl_row_w.setVisible(False)
+            self._action_level_filter_rows[bucket_name] = lvl_row_w
+            bl.addWidget(lvl_row_w)
+
             bl.addStretch()
             self._action_bucket_widgets[bucket_name] = (bw, bl)
             scroll = QScrollArea(); scroll.setWidgetResizable(True)
@@ -3837,6 +3863,7 @@ class CharacterSheet(QWidget):
         self._sneak_used = False
         self._action_spell_is_cantrip = None
         self._bonus_action_spell_is_cantrip = None
+        self.char["_action_surge_used_this_turn"] = False
         # Reckless Attack lasts only the turn it was activated on
         fx = self.char.get("active_effects", [])
         if "Reckless Attack" in fx:
@@ -8010,8 +8037,8 @@ class CharacterSheet(QWidget):
         formula drifted into a bug — keeping one copy avoids that class
         of error here.)"""
         SPELLS_KNOWN = {
-            "Bard":     {1:2,2:3,3:4,4:5,5:6,6:7,7:8,8:9,9:10,10:11,11:12,12:12,
-                         13:13,14:13,15:14,16:14,17:15,18:15,19:15,20:15},
+            "Bard":     {1:4,2:5,3:6,4:7,5:8,6:9,7:10,8:11,9:12,10:14,11:15,12:15,
+                         13:16,14:18,15:19,16:19,17:20,18:22,19:22,20:22},
             "Sorcerer": {1:2,2:3,3:4,4:5,5:6,6:7,7:8,8:9,9:10,10:11,11:12,12:12,
                          13:13,14:13,15:14,16:14,17:15,18:15,19:15,20:15},
             "Warlock":  {1:2,2:3,3:4,4:5,5:6,6:7,7:8,8:9,9:10,10:10,11:11,12:11,
@@ -8023,7 +8050,7 @@ class CharacterSheet(QWidget):
             "Wizard":   {1:3,4:4,10:5},
             "Cleric":   {1:3},
             "Druid":    {1:2,6:3,11:4},
-            "Bard":     {1:2,4:3,10:4,16:5},
+            "Bard":     {1:2,4:3,10:4},
             "Sorcerer": {1:4,4:5,10:6},
             "Warlock":  {1:2,4:3,10:4},
             "Artificer":{1:2},
@@ -10579,6 +10606,14 @@ class CharacterSheet(QWidget):
                                 res["current"] = max(0, res.get("current", 0) - 1)
                                 self._mark_dirty()
                                 QTimer.singleShot(0, self.ctrl.refresh)
+                # Action Surge: confirmed a real, reported gap — existed
+                # only as a spendable resource with zero connection to
+                # the turn-economy system, despite genuinely granting an
+                # extra action for the current turn per the real rule.
+                if _key == "action_surge":
+                    self.char["_action_surge_used_this_turn"] = True
+                    self._toast("⚡ Action Surge: gained an extra action this turn")
+                    self._apply_turn_state()
             minus.clicked.connect(_on_minus_click)
             plus.clicked.connect(lambda: sp.setValue(min(maximum, sp.value()+1)))
 
@@ -10742,9 +10777,13 @@ class CharacterSheet(QWidget):
         buckets = build_action_abilities(self.char)
 
         for bucket_name, (bw, bl) in self._action_bucket_widgets.items():
-            # Clear existing rows (keep the stretch at end)
-            while bl.count() > 1:
-                item = bl.takeAt(0)
+            # Clear existing rows — items 0 and 1 are the permanent
+            # filter row and level-filter row (confirmed the old
+            # "clear everything but the stretch" logic would have
+            # wrongly deleted these on every refresh), keep the
+            # stretch at the end too.
+            while bl.count() > 3:
+                item = bl.takeAt(2)
                 if item.widget():
                     item.widget().setParent(None)
 
@@ -10760,11 +10799,20 @@ class CharacterSheet(QWidget):
                 'Blood Hunter': CRIM2,
             }
             rows = buckets.get(bucket_name, [])
-            cat_filter = getattr(self, "_action_category_filter", "All")
+
+            # Conditional filter visibility: only show the chooser for
+            # THIS bucket if more than one distinct category is
+            # actually present — confirmed this is exactly what the
+            # user asked for ("if you only have common actions or only
+            # 1 of any filter type then the filter chooser doesnt show").
+            present_cats = {self._classify_action_entry(e) for e in rows}
+            self._action_filter_rows[bucket_name].setVisible(len(present_cats) > 1)
+
+            cat_filter = self._action_cat_filters.get(bucket_name, "All")
             if cat_filter != "All":
                 rows = [e for e in rows if self._classify_action_entry(e) == cat_filter]
                 if cat_filter == "Spell":
-                    lvl_filter = getattr(self, "_action_spell_level_filter", "All")
+                    lvl_filter = self._action_spell_level_filters.get(bucket_name, "All")
                     if lvl_filter != "All":
                         def _entry_level_tag(e):
                             src = e[2] if len(e) > 2 else ""

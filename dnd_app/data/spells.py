@@ -998,6 +998,22 @@ def get_bonus_spells(char: dict) -> list[str]:
         if reward_name in DM_REWARD_CANTRIPS:
             out.append(DM_REWARD_CANTRIPS[reward_name])
 
+    # Primal Awareness (Ranger, TCE optional, replaces Primeval
+    # Awareness): confirmed zero mechanical wiring anywhere despite
+    # existing as displayable text. Real table verified against the
+    # user's reference file.
+    ranger_lvl_pa = cl.get("Ranger", 0)
+    pa_enabled = (char.get("_choices", {}).get("optional_features", {}).get("Primal Awareness", False)
+                  or char.get("optional_rules", {}).get("primal_awareness", False))
+    if pa_enabled:
+        PRIMAL_AWARENESS_SPELLS = {
+            3: "Speak with Animals", 5: "Beast Sense", 9: "Speak with Plants",
+            13: "Locate Creature", 17: "Commune with Nature",
+        }
+        for req_lvl, sp_name in PRIMAL_AWARENESS_SPELLS.items():
+            if ranger_lvl_pa >= req_lvl:
+                out.append(sp_name)
+
     # Player-chosen racial cantrips (High Elf / Half-Elf High Descent /
     # Astral Elf) — the choice itself is made via the level-up panel's
     # race choosers; this just reads back whatever was picked.

@@ -515,6 +515,12 @@ def effect_speed(char: dict, base: int) -> int:
 
 
 def has_extra_action(char: dict) -> bool:
-    """True if any active effect grants an additional action (Haste)."""
-    return any(EFFECT_TABLE.get(n, {}).get("extra_action")
-               for n in char.get("active_effects", []))
+    """True if any active effect grants an additional action (Haste),
+    or Action Surge was spent this turn. Confirmed Action Surge existed
+    only as a spendable resource with zero connection to the turn-
+    economy system despite genuinely granting an extra action per the
+    real rule — kept as a separate, turn-scoped flag rather than an
+    active_effect, since it's a one-time spend, not a duration effect."""
+    return (char.get("_action_surge_used_this_turn", False)
+            or any(EFFECT_TABLE.get(n, {}).get("extra_action")
+                   for n in char.get("active_effects", [])))
