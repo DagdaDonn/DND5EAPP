@@ -1,0 +1,62 @@
+
+This file lists modules PyInstaller was not able to find. This does not
+necessarily mean these modules are required for running your program. Both
+Python's standard library and 3rd-party Python packages often conditionally
+import optional modules, some of which may be available only on certain
+platforms.
+
+Types of import:
+* top-level: imported at the top-level - look at these first
+* conditional: imported within an if-statement
+* delayed: imported within a function
+* optional: imported within a try-except-statement
+
+IMPORTANT: Do NOT post this list to the issue-tracker. Use it as a basis for
+            tracking down the missing module yourself. Thanks!
+
+missing module named 'email.message' - imported by importlib.metadata._adapters (top-level)
+missing module named 'collections.abc' - imported by traceback (top-level), typing (top-level), inspect (top-level), logging (top-level), importlib.resources.readers (top-level), selectors (top-level), tracemalloc (top-level), PySide6.QtCore (top-level), PySide6.QtGui (top-level), PySide6.QtWidgets (top-level), xml.etree.ElementTree (top-level), tomllib._parser (top-level)
+missing module named pwd - imported by posixpath (delayed, conditional, optional), shutil (delayed, optional), tarfile (optional), pathlib._local (optional), subprocess (delayed, conditional, optional), netrc (delayed, optional), getpass (delayed, optional)
+missing module named grp - imported by shutil (delayed, optional), tarfile (optional), pathlib._local (optional), subprocess (delayed, conditional, optional)
+excluded module named email - imported by importlib.metadata (top-level), urllib.request (top-level)
+missing module named posix - imported by os (conditional, optional), posixpath (optional), shutil (conditional), importlib._bootstrap_external (conditional)
+missing module named resource - imported by posix (top-level)
+missing module named _frozen_importlib_external - imported by importlib._bootstrap (delayed), importlib (optional), importlib.abc (optional)
+excluded module named _frozen_importlib - imported by importlib (optional), importlib.abc (optional)
+missing module named PySide6.support.feature - imported by PySide6.support (delayed, conditional), PySide6.support.generate_pyi (delayed, conditional)
+missing module named 'PySide6.support.signature' - imported by PySide6.support.generate_pyi (delayed)
+missing module named qtpy2cpp_lib - imported by PySide6.scripts.qtpy2cpp (top-level)
+missing module named _posixsubprocess - imported by subprocess (conditional)
+missing module named fcntl - imported by subprocess (optional)
+missing module named _scproxy - imported by urllib.request (conditional)
+missing module named termios - imported by getpass (optional)
+missing module named 'email.utils' - imported by urllib.request (delayed)
+missing module named 'http.cookiejar' - imported by urllib.request (delayed)
+missing module named 'http.client' - imported by urllib.request (top-level)
+missing module named 'setuptools._vendor' - imported by 'setuptools._vendor' (top-level)
+missing module named project_lib - imported by PySide6.scripts.project (top-level)
+missing module named deploy_lib - imported by PySide6.scripts.deploy (top-level)
+excluded module named PySide6.QtXml - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtWebSockets - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtWebChannel - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtUiTools - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtTest - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtSvgWidgets - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtSvg - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtSql - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtSerialPort - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtSerialBus - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtSensors - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtRemoteObjects - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtPrintSupport - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtPositioning - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtOpenGLWidgets - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtOpenGL - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtNfc - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtNetwork - imported by PySide6 (delayed, conditional, optional), C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtLocation - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtHelp - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtDesigner - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtDBus - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named PySide6.QtBluetooth - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (top-level)
+excluded module named tkinter - imported by C:\Users\OBRIET\Downloads\mimic_v253\run_dnd_creator.py (delayed, optional)
