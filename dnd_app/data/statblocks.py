@@ -833,6 +833,38 @@ VEHICLE_STATBLOCKS_MAGIC = {
             ("Shift Engine (requires Mark of Storm)", "Suppress or reengage the ship's elemental core."),
         ],
     },
+    "Flying Chariot": {
+        "size": "Large", "ac": 16, "hp": 50, "speed": "drawn (set by the animal(s) pulling it); "
+                                                        "can fly if pulled by one or more flying creatures",
+        "crew": "1", "supply": "40", "is_magic_item": True,
+        "traits": [
+            ("Magic Bonus", "The chariot's riders and creatures pulling it gain a +1 bonus to AC."),
+            ("Flight", "If the chariot is pulled by one or more flying creatures, it too can fly."),
+        ],
+        "actions": [],
+    },
+    "Ornithopter of Flying": {
+        "size": "Large", "ac": "—", "hp": "—", "speed": "fly 30 ft. (can't hover)",
+        "cargo": "300 lb", "is_magic_item": True, "no_combat_stats": True,
+        "traits": [
+            ("Description", "An 8-foot-long contraption with a 14-foot wingspan, weighing 25 pounds. "
+             "Carries a rider (plus worn/carried gear) up to 300 pounds total, moving according to the "
+             "rider's spoken directions."),
+            ("Falling", "If the ornithopter loses its rider while airborne, it falls and can't fly "
+             "again for 1d6 + 4 days."),
+        ],
+        "actions": [],
+    },
+    "Bobbing Lily Pad": {
+        "size": "Large", "ac": "—", "hp": "—",
+        "speed": "20 ft., fly 20 ft. (hover), swim 20 ft. (can't go underwater)",
+        "cargo": "300 lb (600 lb overloaded, half speed)", "is_magic_item": True, "no_combat_stats": True,
+        "traits": [
+            ("Description", "A 10-foot-diameter floating leaf with tendrils that propel it across "
+             "land, water, and air, moving according to the rider's spoken directions."),
+        ],
+        "actions": [],
+    },
     "Strider Airship": {
         "size": "Gargantuan", "ac": 16, "hp": 350, "speed": "8 mph (fly 80 ft., hover)",
         "crew": "6", "passengers": "20", "cargo": "1 ton", "is_magic_item": True,

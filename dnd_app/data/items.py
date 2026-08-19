@@ -372,7 +372,8 @@ VEHICLES_ASTRAL = ["Astral Brig", "Astral Skiff", "Battle Balloon", "Mechanical 
 VEHICLES_AIR = ["Cloud Galleon", "Hot-air Balloon", "Sky Skiff", "Wind Raider"]
 VEHICLES_BGDIA = ["Demon Grinder", "Devil's Ride", "Scavenger", "Tormentor", "Venatrix"]
 VEHICLES_MAGIC = ["Apparatus of Kwalish", "Tasha's Creeping Keelboat", "Lyrandar Air Cruiser",
-    "Lyrandar Skyskiff", "Strider Airship"]
+    "Lyrandar Skyskiff", "Strider Airship", "Flying Chariot", "Ornithopter of Flying",
+    "Bobbing Lily Pad"]
 VEHICLES = (VEHICLES_LAND + VEHICLES_WATER + VEHICLES_SPELLJAMMING + VEHICLES_ASTRAL
             + VEHICLES_AIR + VEHICLES_BGDIA + VEHICLES_MAGIC)
 

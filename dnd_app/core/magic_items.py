@@ -196,6 +196,8 @@ def reset_magic_item_modifiers(char: dict) -> None:
     # bonuses) so applying or removing an item can never clobber either.
     char["magic_ability_bonuses"] = {}    # {"STR": 2, ...}
     char["magic_prof_bonus"] = 0
+    char["magic_senses"] = {}     # {"darkvision": 60, ...} from equipped/attuned items
+    char["magic_hp_max_bonus"] = 0
 
 
 def apply_magic_item_effect(char: dict, item_name: str) -> None:
@@ -371,6 +373,19 @@ def _apply_single_effect(char: dict, item_name: str, effect: dict) -> None:
 
     elif etype == "prof_bonus":
         char["magic_prof_bonus"] = char.get("magic_prof_bonus", 0) + effect.get("value", 0)
+
+    elif etype == "senses":
+        senses = char.setdefault("magic_senses", {})
+        sense = effect["sense"]
+        senses[sense] = max(senses.get(sense, 0), effect.get("value", 0))
+
+    elif etype == "hp_max_bonus":
+        if effect.get("formula") == "10_plus_level":
+            from .calculator import total_level
+            val = 10 + total_level(char)
+        else:
+            val = effect.get("value", 0)
+        char["magic_hp_max_bonus"] = char.get("magic_hp_max_bonus", 0) + val
 
 
 def apply_equipment_skill_effects(char: dict) -> None:

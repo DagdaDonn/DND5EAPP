@@ -2085,6 +2085,12 @@ def get_character_senses(char: dict) -> dict:
     if "Draconic Transformation" in char.get("active_effects", []):
         senses["blindsight"] = max(senses["blindsight"], 30)
 
+    # Magic items (Goggles of Night, Dragon Masks, etc.) — populated by
+    # apply_all_magic_item_effects()'s "senses" effect type.
+    for sense_name, val in char.get("magic_senses", {}).items():
+        if sense_name in senses:
+            senses[sense_name] = max(senses[sense_name], val)
+
     return senses
 
 
@@ -2310,6 +2316,7 @@ def update_all(char: dict) -> dict:
     # overwritten by the next recompute — the override IS the computed value.
     override = char.get("hp_max_override")
     base_max = override if override is not None else compute_max_hp(char)
+    base_max += char.get("magic_hp_max_bonus", 0)
     # Exhaustion level 4+: hit point maximum is halved (PHB p.291). Applied as
     # a display-time adjustment (not baked into the stored/override value) so
     # recovering from exhaustion correctly restores full max HP.

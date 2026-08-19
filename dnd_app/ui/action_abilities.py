@@ -1928,6 +1928,12 @@ def build_action_abilities(char):
             picks = char.get('_choices', {}).get(f'item_dmgtype_{item_name}', [])
             dtype = picks[0] if picks else "a damage type (choose one on the Gear tab)"
             return f"Resistance to {dtype} damage"
+        if t == 'senses':
+            return f"You have {sub.get('sense','?')} out to {sub.get('value',0)} ft. (or +{sub.get('value',0)} ft. if you already have it)"
+        if t == 'hp_max_bonus':
+            if sub.get('formula') == '10_plus_level':
+                return "Your hit point maximum increases by 10 + your level"
+            return f"+{sub.get('value',0)} bonus to your hit point maximum"
         return None
 
     for _iname in _active_item_names(char):
