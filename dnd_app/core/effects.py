@@ -594,6 +594,136 @@ EFFECT_TABLE: dict[str, dict] = {
         "note": "Removes exhaustion and cures disease/poison affecting you. For the next 24 "
                 "hours, Hit Dice you spend restore the maximum possible instead of a roll.",
     },
+    "Oil of Slipperiness": {
+        "duration_category": "long",
+        "note": "Applied over 10 minutes: effect of freedom of movement for 8 hours (or, poured "
+                "on the ground, creates a 10-ft.-square patch of grease for 8 hours).",
+    },
+    "Oil of Etherealness": {
+        "duration_category": "short",
+        "note": "Applied over 10 minutes: effect of the etherealness spell for 1 hour.",
+    },
+    "Oil of Sharpness": {
+        "duration_category": "short",
+        "note": "Applied to a slashing/piercing weapon or up to 5 pieces of ammunition (1 minute): "
+                "for 1 hour, the coated item is magical and has a +3 bonus to attack and damage rolls.",
+    },
+    "Philter of Love": {
+        "duration_category": "short",
+        "note": "The next creature you see within 10 minutes charms you for 1 hour.",
+    },
+    "Bottled Breath": {
+        "duration_category": "short",
+        "note": "Exhale for the effect of gust of wind, or hold your breath to not need to "
+                "breathe for 1 hour (ends early if you speak or choose to end it).",
+    },
+    "Potion of Comprehension": {
+        "duration_category": "short",
+        "note": "Effect of the comprehend languages spell for 1 hour.",
+    },
+    "Potion of Polychromy": {
+        "duration_category": "short",
+        "note": "You and your gear take on a rainbow-hued appearance for 1 hour; bonus action to "
+                "change colors, with advantage on Stealth checks while matching your surroundings.",
+    },
+    "Potion of Aqueous Form": {
+        "duration_category": "short",
+        "note": "Transform into a pool of water for 10 minutes (ends early if incapacitated or "
+                "killed): swimming speed 30 ft., can move through liquids and occupy a creature's "
+                "space, resistance to bludgeoning/piercing/slashing, can't attack or manipulate objects normally.",
+    },
+    "Potion of Maximum Power": {
+        "duration_category": "short",
+        "note": "The first damage-dealing spell of 4th level or lower you cast within 1 minute "
+                "deals maximum damage on each die instead of rolling.",
+    },
+    "Potion of Mind Control": {
+        "duration_category": "short",
+        "note": "Cast Dominate Monster (no save) on a beast, humanoid, giant, or DM-chosen monster "
+                "within 30 feet (type set randomly when the potion was found). Lasts 1 hour, no concentration required.",
+    },
+    "Potion of Mind Control (Beast)": {
+        "duration_category": "short",
+        "note": "Cast Dominate Monster (no save) on a beast within 30 feet. Lasts 1 hour, no concentration required.",
+    },
+    "Potion of Mind Control (Humanoid)": {
+        "duration_category": "short",
+        "note": "Cast Dominate Monster (no save) on a humanoid within 30 feet. Lasts 1 hour, no concentration required.",
+    },
+    "Potion of Mind Control (Monster)": {
+        "duration_category": "short",
+        "note": "Cast Dominate Monster (no save) on a monster within 30 feet. Lasts 1 hour, no concentration required.",
+    },
+    "Potion of Possibility": {
+        "duration_category": "long",
+        "note": "Grants two Fragments of Possibility (8 hours or until used): expend one when you "
+                "make an attack roll, ability check, or saving throw to roll an extra d20 and use either result.",
+    },
+    "Potion of Dragon's Majesty": {
+        "duration_category": "short",
+        "note": "Transform into an adult dragon matching the potion's scale for 1 hour, using the "
+                "dragon's statistics (your gear melds into the new form or falls, your choice).",
+    },
+    "Potion of Giant Size": {
+        "ability_override": {"STR": 25},
+        "duration_category": "long",
+        "note": "If Medium or smaller, become Huge for 24 hours: Strength becomes 25 (if not "
+                "already higher), hit point maximum and current hit points double, and melee reach increases by 5 feet.",
+    },
+}
+
+
+EFFECT_TABLE["Scroll of the Comet"] = {
+    "duration_category": "short",
+    "note": "Reading the scroll (outdoors only, or it's wasted) calls down a comet at a point you can "
+            "see up to 1 mile away: a 50-ft.-deep, 500-ft.-radius crater forms on impact. Every creature "
+            "in that radius fails a DC 20 Dexterity save (30d10 force damage) or succeeds (half damage); "
+            "all structures and unworn/unheld nonmagical objects in the crater are destroyed. One-shot "
+            "effect -- clear it from the Effects tab once resolved.",
+}
+
+
+for _prot_type in ("Aberrations", "Beasts", "Celestials", "Elementals", "Fey", "Fiends", "Plants", "Undead"):
+    EFFECT_TABLE[f"Scroll of Protection from {_prot_type}"] = {
+        "duration_category": "short",
+        "note": f"Reading the scroll (action) encloses you in an invisible 5-ft.-radius, 10-ft.-high "
+                f"barrier for 5 minutes that prevents {_prot_type.lower()} from entering or affecting "
+                f"anything within it. Moves with you; ends if you'd move it to enclose one of them. A "
+                f"creature can overcome it with a successful DC 15 Charisma check (action).",
+    }
+
+
+# Potions/oils with an instant, one-shot effect rather than a lingering
+# active_effect -- healing, curing, or (for Potion of Poison) harming the
+# drinker immediately. Applied directly to current_hp/conditions by
+# sheet.py's _use_potion() instead of being added to active_effects, since
+# there's no ongoing state to track or fade on a rest.
+INSTANT_POTION_EFFECTS: dict[str, dict] = {
+    "Potion of Healing": {"heal_dice": (2, 4, 2)},
+    "Potion of Greater Healing": {"heal_dice": (4, 4, 4)},
+    "Potion of Superior Healing": {"heal_dice": (8, 4, 8)},
+    "Potion of Supreme Healing": {"heal_dice": (10, 4, 20)},
+    "Elixir of Health": {
+        "cure_conditions": ["Blinded", "Deafened", "Paralyzed", "Poisoned"],
+        "cure_note": "Also cures any disease afflicting you.",
+    },
+    "Potion of Poison": {
+        "damage_dice": (3, 6, 0), "damage_type": "poison", "add_condition": "Poisoned",
+        "cure_note": "Looks/smells/tastes like a beneficial potion. DC 13 Constitution save or "
+                      "remain poisoned, taking 3d6 poison damage at the start of each of your turns "
+                      "until the condition ends (repeat the save at the end of each of your turns).",
+    },
+    "Blood of the Lycanthrope Antidote": {
+        "cure_note": "Ends a lycanthropy curse, if drunk before your first full moon as a lycanthrope.",
+    },
+    "Mummy Rot Antidote": {
+        "cure_note": "Neutralizes the Mummy Rot curse and restores your hit point maximum, if "
+                      "administered within 24 hours of contracting it.",
+    },
+    "Thessaltoxin Antidote": {
+        "cure_conditions": ["Poisoned"],
+        "cure_note": "Neutralizes thessaltoxin poison.",
+    },
 }
 
 

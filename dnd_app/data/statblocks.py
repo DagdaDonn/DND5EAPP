@@ -865,6 +865,16 @@ VEHICLE_STATBLOCKS_MAGIC = {
         ],
         "actions": [],
     },
+    "Quaal's Feather Token, Swan Boat": {
+        "size": "Huge", "ac": "—", "hp": "—", "speed": "6 mph (self-propelled on water)",
+        "is_magic_item": True, "no_combat_stats": True,
+        "traits": [
+            ("Description", "Touch the token to a body of water at least 60 feet in diameter to create "
+             "a 50-foot-long, 20-foot-wide boat shaped like a swan. Single use; the token disappears "
+             "when the boat is created."),
+        ],
+        "actions": [],
+    },
     "Strider Airship": {
         "size": "Gargantuan", "ac": 16, "hp": 350, "speed": "8 mph (fly 80 ft., hover)",
         "crew": "6", "passengers": "20", "cargo": "1 ton", "is_magic_item": True,

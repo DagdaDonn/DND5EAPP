@@ -5999,6 +5999,23 @@ class CharacterSheet(QWidget):
         is_consumable = itype in ("Potion","Scroll") or "potion" in name.lower() or "scroll" in name.lower()
         if is_consumable:
             eq = self.char.setdefault("equipment", [])
+            # A generic "Spell Scroll (Nth level)" catalog entry doesn't say
+            # which spell is actually written on this copy -- prompt for one
+            # so the scroll becomes a concrete item (e.g. "Spell Scroll (3rd
+            # level) — Fireball") instead of a vague inert placeholder.
+            # Confirmed there was no mechanism anywhere to record this.
+            import re as _re
+            m = _re.match(r'^Spell Scroll \((Cantrip|\d+(?:st|nd|rd|th) level)\)$', name)
+            if m:
+                from dnd_app.data.spells import SPELLS_BY_LEVEL
+                lvl = 0 if m.group(1) == "Cantrip" else int(_re.match(r'\d+', m.group(1)).group())
+                choices = sorted(s["name"] for s in SPELLS_BY_LEVEL.get(lvl, []))
+                if choices:
+                    spell_choice, ok = QInputDialog.getItem(
+                        self, "Spell Scroll", f"Which spell is inscribed on this {name}?",
+                        choices, 0, False)
+                    if ok and spell_choice:
+                        name = f"{name} — {spell_choice}"
             existing = next((e for e in eq if isinstance(e,dict) and e.get("name")==name), None)
             if existing:
                 existing["qty"] = existing.get("qty", 1) + 1   # stack
@@ -6490,6 +6507,9 @@ class CharacterSheet(QWidget):
             if _eq.get("type") == "Potion" or "potion" in _name.lower():
                 drink_act = menu.addAction(f"🧪  Drink {_name[:36]}")
                 drink_act.triggered.connect(lambda checked=False, n=_name: self._use_potion(n))
+            if "scroll" in _name.lower():
+                read_act = menu.addAction(f"📜  Read {_name[:36]}")
+                read_act.triggered.connect(lambda checked=False, n=_name: self._use_scroll(n))
             rm_act = menu.addAction(f"✕  Remove {_name[:36]}")
             rm_act.triggered.connect(lambda: self._remove_equipment(_name))
             if _eq.get("_mi_only"):
@@ -6606,17 +6626,83 @@ class CharacterSheet(QWidget):
         if entry["qty"] <= 0:
             self.char["equipment"] = [e for e in eq if e.get("name") != name]
 
+        from dnd_app.core.effects import EFFECT_TABLE, INSTANT_POTION_EFFECTS
+        instant = INSTANT_POTION_EFFECTS.get(name)
+        if instant:
+            msgs = []
+            if "heal_dice" in instant:
+                count, sides, bonus = instant["heal_dice"]
+                rolled = sum(random.randint(1, sides) for _ in range(count)) + bonus
+                mx = self.char.get("max_hp", 0)
+                cur = self.char.get("current_hp", 0)
+                self.char["current_hp"] = min(mx, cur + rolled)
+                msgs.append(f"healed {rolled} HP")
+            if "damage_dice" in instant:
+                count, sides, bonus = instant["damage_dice"]
+                rolled = sum(random.randint(1, sides) for _ in range(count)) + bonus
+                self.char["current_hp"] = max(0, self.char.get("current_hp", 0) - rolled)
+                dtype = instant.get("damage_type", "")
+                msgs.append(f"took {rolled} {dtype} damage".replace("  ", " "))
+            if "add_condition" in instant:
+                conds = self.char.setdefault("conditions", [])
+                if instant["add_condition"] not in conds:
+                    conds.append(instant["add_condition"])
+                msgs.append(f"gained {instant['add_condition']}")
+            if "cure_conditions" in instant:
+                conds = self.char.get("conditions", [])
+                removed = [c for c in instant["cure_conditions"] if c in conds]
+                self.char["conditions"] = [c for c in conds if c not in instant["cure_conditions"]]
+                if removed:
+                    msgs.append(f"cured {', '.join(removed)}")
+            summary = "; ".join(msgs) if msgs else instant.get("cure_note", "used")
+            self._toast(f"🧪 {name} — {summary}")
+        else:
+            info = EFFECT_TABLE.get(name, {})
+            if info:
+                fx = self.char.setdefault("active_effects", [])
+                if name not in fx:
+                    fx.append(name)
+                    self._toast(f"🧪 {name} — active (see Effects tab)")
+                else:
+                    self._toast(f"🧪 {name} — already active")
+            else:
+                self._toast(f"🧪 Drank {name}")
+
+        self.ctrl.refresh()
+        self._refresh_gear_equipment()
+        self._refresh_effects_list()
+        self._apply_turn_state()
+        self._mark_dirty()
+
+    def _use_scroll(self, name: str):
+        """Read one scroll: consumes it from inventory and, if it has a
+        lasting effect (EFFECT_TABLE entry, e.g. the Scroll of Protection
+        family), adds it to active_effects the same way potions do.
+        Generic "Spell Scroll (Nth level)" entries don't record which
+        specific spell is written on this copy, so reading one just
+        confirms the scroll was used rather than auto-applying a spell
+        effect — casting any known spell already works the same way
+        everywhere else in this app (no spell has automatic mechanical
+        application from a spellbook either)."""
+        eq = self.char.get("equipment", [])
+        entry = next((e for e in eq if e.get("name") == name), None)
+        if not entry:
+            return
+        entry["qty"] = entry.get("qty", 1) - 1
+        if entry["qty"] <= 0:
+            self.char["equipment"] = [e for e in eq if e.get("name") != name]
+
         from dnd_app.core.effects import EFFECT_TABLE
         info = EFFECT_TABLE.get(name, {})
         if info:
             fx = self.char.setdefault("active_effects", [])
             if name not in fx:
                 fx.append(name)
-                self._toast(f"🧪 {name} — active (see Effects tab)")
+                self._toast(f"📜 {name} — active (see Effects tab)")
             else:
-                self._toast(f"🧪 {name} — already active")
+                self._toast(f"📜 {name} — already active")
         else:
-            self._toast(f"🧪 Drank {name}")
+            self._toast(f"📜 Read {name}")
 
         self.ctrl.refresh()
         self._refresh_gear_equipment()
