@@ -9,6 +9,88 @@ from dnd_app.data.magic_items import get_item_effect, get_magic_item
 import re as _re
 
 
+SPELLCASTING_CLASSES = ("Bard", "Cleric", "Druid", "Paladin", "Ranger",
+                         "Sorcerer", "Warlock", "Wizard", "Artificer")
+CLASS_NAMES = ("Artificer", "Barbarian", "Bard", "Blood Hunter", "Cleric",
+               "Druid", "Fighter", "Monk", "Paladin", "Ranger", "Rogue",
+               "Sorcerer", "Warlock", "Wizard")
+
+
+def attunement_prereq_met(char: dict, item_name: str) -> tuple[bool, str]:
+    """Checks a magic item's 'requires attunement by X' restriction (a
+    class, race/species, or alignment, or the catch-all 'a spellcaster')
+    against the character's real data — same shape and same reasoning as
+    levelup_panel.py's feat_prereq_met(), which the D&D 5e Discord
+    confirmed was the established pattern for this kind of gating in this
+    app. Confirmed via direct grep this had zero enforcement anywhere
+    before: attune_req was only ever prose inside the item's own
+    description, never checked against the character at attune time.
+    Returns (met, reason_if_not_met); complex/narrative requirements this
+    can't parse (e.g. "a creature that has slain a dragon") are left
+    unenforced, same as feat_prereq_met leaves campaign-specific feat
+    prereqs unenforced — the requirement still reads in the item's own
+    description for the player/DM to adjudicate by hand."""
+    item = get_magic_item(item_name)
+    if not item:
+        return True, ""
+    req = item.get("attune_req", "")
+    if not req:
+        return True, ""
+    if not char.get("optional_rules", {}).get("attunement_prereqs", True):
+        return True, ""
+    req_low = req.lower()
+
+    if "spellcaster" in req_low:
+        classes_held = {c.get("class", "") for c in char.get("classes", []) if c.get("level", 0) > 0}
+        if any(c in SPELLCASTING_CLASSES for c in classes_held):
+            return True, ""
+        return False, req
+
+    matched_classes = [c for c in CLASS_NAMES if c.lower() in req_low]
+    if matched_classes:
+        classes_held = {c.get("class", "") for c in char.get("classes", []) if c.get("level", 0) > 0}
+        if any(c in classes_held for c in matched_classes):
+            return True, ""
+        return False, req
+
+    # Single-word alignment gates ("a good creature", "a lawful creature").
+    # Skip compound/negated phrasing ("neither good nor evil", "non-evil")
+    # this simple check would get wrong.
+    if "neither" not in req_low and "non-" not in req_low:
+        align_words = [w for w in ("good", "evil", "lawful", "chaotic") if w in req_low]
+        if len(align_words) == 1:
+            alignment = char.get("alignment", "").lower()
+            if align_words[0] in alignment:
+                return True, ""
+            return False, req
+
+    race = (char.get("species") or char.get("race", "")).lower()
+    subrace = char.get("subrace", "").lower()
+    RACE_WORDS = ("warforged", "dwarf", "elf", "gnome", "halfling", "human",
+                  "dragonborn", "tiefling", "half-orc", "half-elf", "orc",
+                  "goliath", "tabaxi", "aasimar", "genasi", "tortle", "kenku",
+                  "satyr", "triton", "firbolg", "fairy", "harengon",
+                  "changeling", "shifter", "kalashtar", "goblin", "hobgoblin",
+                  "bugbear", "lizardfolk", "yuan-ti", "centaur", "loxodon",
+                  "minotaur", "githyanki", "githzerai", "plasmoid",
+                  "thri-kreen", "autognome", "giff", "hexblood", "owlin",
+                  "vedalken", "verdan", "reborn", "locathah")
+    for w in RACE_WORDS:
+        if w not in req_low:
+            continue
+        if w in race or w in subrace:
+            return True, ""
+        # Only hard-fail when the requirement IS just that race (e.g. "a
+        # warforged") — a race word appearing inside a more elaborate
+        # phrase ("a creature with the Mark of Warding") isn't something
+        # this parser actually understood, so it shouldn't block.
+        if req_low.strip() in (w, f"a {w}", f"an {w}"):
+            return False, req
+        break
+
+    return True, ""
+
+
 def parse_magic_suffix(name: str) -> tuple[str, int]:
     """
     Split 'Longsword +1' -> ('Longsword', 1). Returns (name, 0) if no suffix.
@@ -107,6 +189,13 @@ def reset_magic_item_modifiers(char: dict) -> None:
     char["damage_immunities"] = []        # [(damage_type, item_name), ...]
     char["condition_immunities_magic"] = []  # [(condition, item_name), ...]
     char["advantage_saves_magic"] = []    # [(ability_or_'all', item_name), ...]
+    char["initiative_advantage_magic"] = []  # [item_name, ...]
+    # Additive ability-score/proficiency bonuses (Ioun Stones) — kept separate
+    # from ability_overrides (a floor, e.g. Belt of Giant Strength) and from
+    # char["ability_bonuses"] (owned/rebuilt by builder.py for racial/ASI
+    # bonuses) so applying or removing an item can never clobber either.
+    char["magic_ability_bonuses"] = {}    # {"STR": 2, ...}
+    char["magic_prof_bonus"] = 0
 
 
 def apply_magic_item_effect(char: dict, item_name: str) -> None:
@@ -260,6 +349,29 @@ def _apply_single_effect(char: dict, item_name: str, effect: dict) -> None:
         ability = effect.get("ability", "all")
         char.setdefault("advantage_saves_magic", []).append((ability, item_name))
 
+    elif etype == "initiative_advantage":
+        lst = char.setdefault("initiative_advantage_magic", [])
+        if item_name not in lst:
+            lst.append(item_name)
+
+    elif etype == "ability_bonus":
+        # Additive, e.g. Ioun Stones — stacks on top of the character's own
+        # score, unlike set_ability's "becomes X unless already higher".
+        # Ioun Stones' real text caps the result ("...to a maximum of 20"),
+        # unlike set_ability items (Belt of Giant Strength etc.), which
+        # deliberately go higher — so the cap is per-effect, not global.
+        ab = effect["ability"]
+        val = effect.get("value", 0)
+        cap = effect.get("cap")
+        if cap is not None:
+            current = char["abilities"].get(ab, 10) + char.get("ability_bonuses", {}).get(ab, 0)
+            val = max(0, min(val, cap - current))
+        bonuses = char.setdefault("magic_ability_bonuses", {})
+        bonuses[ab] = bonuses.get(ab, 0) + val
+
+    elif etype == "prof_bonus":
+        char["magic_prof_bonus"] = char.get("magic_prof_bonus", 0) + effect.get("value", 0)
+
 
 def apply_equipment_skill_effects(char: dict) -> None:
     """
@@ -327,9 +439,17 @@ def sync_item_charges(char: dict) -> None:
             continue
         effect_list = effect if isinstance(effect, list) else [effect]
         for sub in effect_list:
-            if sub.get("type") != "grant_spell":
+            # grant_spell: a single fixed spell with its own charge pool
+            # (Wand of Fireballs). charges: a general charge pool for items
+            # whose reference text describes multiple charge-costed
+            # abilities that don't fit the single-spell grant_spell model
+            # (Staff of Power, Blackstaff, etc.) — confirmed these had zero
+            # charge tracking despite the catalog description naming an
+            # exact charge count, because nothing but grant_spell populated
+            # item_charges at all.
+            if sub.get("type") not in ("grant_spell", "charges"):
                 continue
-            uses = sub.get("uses", 0)
+            uses = sub.get("uses") if sub["type"] == "grant_spell" else sub.get("max", 0)
             if not uses:
                 continue
             recharge = sub.get("recharge", "dawn")

@@ -223,7 +223,12 @@ def ability_score(char: dict, ability: str, ignore_wildshape: bool = False) -> i
     override = char.get("ability_overrides", {}).get(ability)
     base = char["abilities"].get(ability, 10)
     bonus = char["ability_bonuses"].get(ability, 0)
-    total = base + bonus
+    # Ioun Stones etc. — additive on top of everything else, tracked
+    # separately from ability_bonuses (which builder.py rebuilds from
+    # scratch each call) so a magic item's contribution can never be wiped
+    # by the next racial/ASI recompute or vice versa.
+    item_bonus = char.get("magic_ability_bonuses", {}).get(ability, 0)
+    total = base + bonus + item_bonus
     if override is not None:
         return max(total, override)
     return total

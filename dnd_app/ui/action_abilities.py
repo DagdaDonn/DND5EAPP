@@ -1852,6 +1852,92 @@ def build_action_abilities(char):
         action_type = _ia.get('action_type', 'Passive')
         buckets[action_type].append((_ia.get('name','Special'), _ia.get('description',''), _ia.get('source','')))
 
+    # ── Passive numeric/stat effects (AC, saves, spell DC/attack, resistance,
+    # ability score bonuses, initiative/skill advantage, etc.) ────────────────
+    # Confirmed via direct testing that get_item_effect() results for these
+    # types were fully applied to char state (AC, spell DC, resistances...)
+    # but never summarized anywhere in the Known Actions / Passive tab — a
+    # player attuning to, say, a +2 AC/spell-attack staff saw their numbers
+    # change with no on-sheet explanation of which item did it. This block
+    # doesn't duplicate the grant_action/grant_spell entries above; it only
+    # describes the effect types nothing else already narrates.
+    from dnd_app.data.magic_items import get_item_effect as _get_item_effect
+
+    def _describe_passive_effect(sub, char, item_name):
+        t = sub.get('type')
+        if t == 'ac_bonus':
+            v = sub.get('value', 0)
+            parts = [f"+{v} bonus to AC"] if v else []
+            sb = sub.get('save_bonus', 0)
+            if sb:
+                parts.append(f"+{sb} bonus to saving throws")
+            return " and ".join(parts) if parts else None
+        if t == 'save_bonus':
+            v = sub.get('value', 0)
+            return f"+{v} bonus to saving throws" if v else None
+        if t == 'spell_dc_bonus':
+            v = sub.get('value', 0)
+            atk = sub.get('atk_bonus', 0)
+            if atk:
+                return f"+{v} bonus to spell attack rolls and spell save DC"
+            return f"+{v} bonus to spell save DC" if v else None
+        if t == 'spell_attack_bonus':
+            v = sub.get('value', 0)
+            return f"+{v} bonus to spell attack rolls" if v else None
+        if t == 'weapon_attack_bonus':
+            v = sub.get('value', 0)
+            return f"+{v} bonus to attack and damage rolls" if v else None
+        if t == 'weapon_damage_bonus':
+            v = sub.get('value', 0)
+            wt = sub.get('weapon_type', 'weapon')
+            return f"+{v} bonus to damage rolls with {wt} weapons" if v else None
+        if t == 'set_ability':
+            return f"Your {sub.get('ability','?')} score is {sub.get('value','?')} (unless already higher)"
+        if t == 'ability_bonus':
+            cap = sub.get('cap')
+            cap_str = f", to a maximum of {cap}" if cap else ""
+            return f"+{sub.get('value',0)} bonus to your {sub.get('ability','?')} score{cap_str}"
+        if t == 'prof_bonus':
+            return f"+{sub.get('value',0)} bonus to your proficiency bonus"
+        if t == 'speed_bonus':
+            v = sub.get('value', 0)
+            return f"+{v} ft. to your speed" if v else None
+        if t == 'min_speed':
+            return f"Your speed is at least {sub.get('value',0)} ft."
+        if t == 'resistance':
+            return f"Resistance to {sub.get('damage_type','?')} damage"
+        if t == 'immunity':
+            return f"Immunity to {sub.get('damage_type','?')} damage"
+        if t == 'condition_immunity':
+            return f"Immunity to the {sub.get('condition','?')} condition"
+        if t == 'advantage_save':
+            ab = sub.get('ability', 'all')
+            return "Advantage on all saving throws" if ab == 'all' else f"Advantage on {ab} saving throws"
+        if t == 'initiative_advantage':
+            return "Advantage on initiative rolls"
+        if t == 'skill_advantage':
+            return f"Advantage on {sub.get('skill','?')} checks"
+        if t == 'skill_disadvantage':
+            return f"Disadvantage on {sub.get('skill','?')} checks"
+        if t == 'resistance_choice':
+            picks = char.get('_choices', {}).get(f'item_dmgtype_{item_name}', [])
+            dtype = picks[0] if picks else "a damage type (choose one on the Gear tab)"
+            return f"Resistance to {dtype} damage"
+        return None
+
+    for _iname in _active_item_names(char):
+        _effect = _get_item_effect(_iname)
+        if not _effect:
+            continue
+        _sub_list = _effect if isinstance(_effect, list) else [_effect]
+        _lines = []
+        for _sub in _sub_list:
+            _text = _describe_passive_effect(_sub, char, _iname)
+            if _text:
+                _lines.append(_text)
+        if _lines:
+            buckets['Passive'].append((_iname, "; ".join(_lines) + ".", _iname))
+
     # ── Feat-granted abilities ─────────────────────────────────────────────────
     # Feats have no equip/attune gating — once taken, they're always active.
     FEAT_ACTIONS = {

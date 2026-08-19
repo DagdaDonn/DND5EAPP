@@ -1534,6 +1534,7 @@ class CharacterSheet(QWidget):
         char["pact_slots_used"] = 0
         # Relentless Rage's DC resets to 10 after a short or long rest
         char["_relentless_rage_uses"] = 0
+        expired = self._clear_expired_active_effects(("short",))
         update_all(char)
         self.ctrl.refresh()
         self._mark_dirty()
@@ -1542,6 +1543,8 @@ class CharacterSheet(QWidget):
             self._toast(f"⏸ Short rest: spent {dice_spent} hit dice, healed {healed} HP")
         else:
             self._toast("⏸ Short rest complete — SR resources restored")
+        if expired:
+            self._toast(f"⏸ Faded: {', '.join(expired)}")
 
     def _long_rest(self):
         """Long rest: full HP, all resources reset, reduce exhaustion by 1."""
@@ -1568,11 +1571,29 @@ class CharacterSheet(QWidget):
         char["_relentless_rage_uses"] = 0
         # Reduce exhaustion
         char["exhaustion"] = max(0, char.get("exhaustion", 0) - 1)
+        expired = self._clear_expired_active_effects(("short", "long"))
         rebuild(char); update_all(char)
         self.ctrl.refresh()
         self._mark_dirty()
         self._offer_rest_options("long")
         self._toast("🌙 Long rest complete — HP, slots & resources restored")
+        if expired:
+            self._toast(f"🌙 Faded: {', '.join(expired)}")
+
+    def _clear_expired_active_effects(self, categories: tuple[str, ...]) -> list[str]:
+        """Remove active_effects (mainly consumable potions) whose
+        EFFECT_TABLE entry's duration_category is in categories — 'short'
+        for effects lasting about an hour or less (a short rest takes at
+        least that long per RAW), 'long' for effects that outlast a short
+        rest but not a full night. Effects with no duration_category are
+        untouched — same as they were before this existed, manual removal
+        only. Returns the names actually removed, for the rest toast."""
+        from dnd_app.core.effects import EFFECT_TABLE
+        fx = self.char.get("active_effects", [])
+        removed = [n for n in fx if EFFECT_TABLE.get(n, {}).get("duration_category") in categories]
+        for n in removed:
+            fx.remove(n)
+        return removed
 
     def _offer_rest_options(self, rest_type: str):
         """Opens RestOptionsDialog after finishing a rest, and applies
@@ -6141,6 +6162,13 @@ class CharacterSheet(QWidget):
         att = self.char.setdefault("attuned_items", [])
         if on:
             if name not in att:
+                from dnd_app.core.magic_items import attunement_prereq_met
+                met, reason = attunement_prereq_met(self.char, name)
+                if not met:
+                    QMessageBox.warning(self, "Attunement",
+                        f"{name} requires attunement by {reason} — this character doesn't qualify.\n\n"
+                        "(Disable this check under Optional Rules if your table allows it anyway.)")
+                    self._refresh_magic_items(); return
                 # Artificer attunement scaling: 4 at 10th (Magic Item
                 # Adept), 5 at 14th (Magic Item Savant), 6 at 18th (Magic
                 # Item Master). Previously only Adept's 4 was handled.
@@ -6459,6 +6487,9 @@ class CharacterSheet(QWidget):
                         full_act = infuse_menu.addAction(
                             f"(At max active infusions: {active_count}/{max_active})")
                         full_act.setEnabled(False)
+            if _eq.get("type") == "Potion" or "potion" in _name.lower():
+                drink_act = menu.addAction(f"🧪  Drink {_name[:36]}")
+                drink_act.triggered.connect(lambda checked=False, n=_name: self._use_potion(n))
             rm_act = menu.addAction(f"✕  Remove {_name[:36]}")
             rm_act.triggered.connect(lambda: self._remove_equipment(_name))
             if _eq.get("_mi_only"):
@@ -6557,6 +6588,41 @@ class CharacterSheet(QWidget):
             self.char["armor_worn"] = "No Armor"
         self._refresh_gear_equipment()
         self._refresh_combat(); self._mark_dirty()
+
+    def _use_potion(self, name: str):
+        """Drink one dose of a potion: consumes it from inventory and, if
+        it has a lasting effect (EFFECT_TABLE entry), adds it to
+        active_effects so it's visible on the combat page immediately —
+        the same list Rage/Haste/etc. already use — and can be removed by
+        hand or fades automatically on a short/long rest per its
+        duration_category. Confirmed there was previously no consumption
+        path for potions at all: they only ever sat in the equipment list
+        as an inert line item with a quantity."""
+        eq = self.char.get("equipment", [])
+        entry = next((e for e in eq if e.get("name") == name), None)
+        if not entry:
+            return
+        entry["qty"] = entry.get("qty", 1) - 1
+        if entry["qty"] <= 0:
+            self.char["equipment"] = [e for e in eq if e.get("name") != name]
+
+        from dnd_app.core.effects import EFFECT_TABLE
+        info = EFFECT_TABLE.get(name, {})
+        if info:
+            fx = self.char.setdefault("active_effects", [])
+            if name not in fx:
+                fx.append(name)
+                self._toast(f"🧪 {name} — active (see Effects tab)")
+            else:
+                self._toast(f"🧪 {name} — already active")
+        else:
+            self._toast(f"🧪 Drank {name}")
+
+        self.ctrl.refresh()
+        self._refresh_gear_equipment()
+        self._refresh_effects_list()
+        self._apply_turn_state()
+        self._mark_dirty()
 
     def _toggle_weapon_equipped(self, name: str, equip: bool):
         from dnd_app.data.items import WEAPON_DICT

@@ -204,7 +204,10 @@ def can_ritual_cast(char: dict, spell: dict) -> bool:
 
 
 def get_prof_bonus(char: dict) -> int:
-    return prof_bonus(total_level(char))
+    # magic_prof_bonus: Ioun Stone (Mastery) — confirmed via grep this
+    # effect type existed in MAGIC_ITEM_EFFECTS but had no handler anywhere,
+    # so attuning to the stone silently did nothing.
+    return prof_bonus(total_level(char)) + char.get("magic_prof_bonus", 0)
 
 
 INITIATIVE_ADVANTAGE_SOURCES = [
@@ -225,6 +228,10 @@ def get_initiative_advantage_status(char: dict) -> dict:
             if lvl < entry.get("min_level", 1):
                 continue
         sources.append(entry)
+    # Magic items (Rod of Alertness, Helm of Awareness) — see
+    # initiative_advantage effect type in core/magic_items.py.
+    for item_name in char.get("initiative_advantage_magic", []):
+        sources.append({"source": item_name, "note": "Advantage on initiative rolls."})
     return {
         "has_advantage": len(sources) > 0,
         "conditional": any(s.get("conditional") for s in sources),
@@ -2222,6 +2229,24 @@ def update_all(char: dict) -> dict:
             entry = (dmg_type, "Hybrid Transformation")
             if entry not in res:
                 res.append(entry)
+
+    # Generic active-effect resistance/ability-override hooks (mainly
+    # consumable potions — Potion of Invulnerability, the resistance
+    # potions, the Giant Strength potions). Reuses the exact same
+    # add-back-after-magic-items-reset pattern as Hybrid Transformation
+    # just above, driven by EFFECT_TABLE instead of a hardcoded name so
+    # new active effects don't each need their own bespoke block here.
+    from .effects import EFFECT_TABLE as _EFFECT_TABLE
+    for _fx_name in char.get("active_effects", []):
+        _fx_info = _EFFECT_TABLE.get(_fx_name, {})
+        for _dmg_type in _fx_info.get("resistance", []):
+            res = char.setdefault("damage_resistances", [])
+            entry = (_dmg_type, _fx_name)
+            if entry not in res:
+                res.append(entry)
+        for _ab, _val in _fx_info.get("ability_override", {}).items():
+            overrides = char.setdefault("ability_overrides", {})
+            overrides[_ab] = max(overrides.get(_ab, 0), _val)
 
     # Heavy Armor Master: -3 flat damage reduction (not true resistance)
     # against nonmagical bludgeoning/piercing/slashing, while wearing

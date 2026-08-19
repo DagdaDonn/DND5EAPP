@@ -449,6 +449,151 @@ EFFECT_TABLE: dict[str, dict] = {
     "Warding Bond": {
         "note": "2nd-level spell (Cleric/Paladin, 1 hour, no concentration): while within 60 ft of the bonded creature, you both gain +1 AC and +1 to saving throws, and resistance to all damage. Whenever the target takes damage, you take the same amount.",
     },
+
+    # ── Consumable potions ──────────────────────────────────────────────────
+    # duration_category drives auto-clearing on rest (see _short_rest /
+    # _long_rest in sheet.py): "short" = fades by/during a short rest
+    # (roughly potions lasting an hour or less — a short rest is at least
+    # that long per RAW), "long" = lasts longer than that but still fades
+    # by the next long rest. Potions with no duration_category here are
+    # either instantaneous (no lingering state to track) or have a duration
+    # long/vague enough (Longevity, multi-day effects) that guessing a rest
+    # boundary would be less honest than just not auto-clearing them.
+    "Potion of Hill Giant Strength": {
+        "ability_override": {"STR": 21}, "duration_category": "short",
+        "note": "Your Strength score becomes 21 for 1 hour (no effect if already higher).",
+    },
+    "Potion of Fire Giant Strength": {
+        "ability_override": {"STR": 25}, "duration_category": "short",
+        "note": "Your Strength score becomes 25 for 1 hour (no effect if already higher).",
+    },
+    "Potion of Frost Giant Strength": {
+        "ability_override": {"STR": 23}, "duration_category": "short",
+        "note": "Your Strength score becomes 23 for 1 hour (no effect if already higher).",
+    },
+    "Potion of Stone Giant Strength": {
+        "ability_override": {"STR": 23}, "duration_category": "short",
+        "note": "Your Strength score becomes 23 for 1 hour (no effect if already higher).",
+    },
+    "Potion of Giant Strength (Cloud)": {
+        "ability_override": {"STR": 27}, "duration_category": "short",
+        "note": "Your Strength score becomes 27 for 1 hour (no effect if already higher).",
+    },
+    "Potion of Storm Giant Strength": {
+        "ability_override": {"STR": 29}, "duration_category": "short",
+        "note": "Your Strength score becomes 29 for 1 hour (no effect if already higher).",
+    },
+    "Potion of Acid Resistance": {"resistance": ["acid"], "duration_category": "short",
+        "note": "Resistance to acid damage for 1 hour."},
+    "Potion of Cold Resistance": {"resistance": ["cold"], "duration_category": "short",
+        "note": "Resistance to cold damage for 1 hour."},
+    "Potion of Fire Resistance": {"resistance": ["fire"], "duration_category": "short",
+        "note": "Resistance to fire damage for 1 hour."},
+    "Potion of Force Resistance": {"resistance": ["force"], "duration_category": "short",
+        "note": "Resistance to force damage for 1 hour."},
+    "Potion of Lightning Resistance": {"resistance": ["lightning"], "duration_category": "short",
+        "note": "Resistance to lightning damage for 1 hour."},
+    "Potion of Necrotic Resistance": {"resistance": ["necrotic"], "duration_category": "short",
+        "note": "Resistance to necrotic damage for 1 hour."},
+    "Potion of Poison Resistance": {"resistance": ["poison"], "duration_category": "short",
+        "note": "Resistance to poison damage for 1 hour."},
+    "Potion of Psychic Resistance": {"resistance": ["psychic"], "duration_category": "short",
+        "note": "Resistance to psychic damage for 1 hour."},
+    "Potion of Radiant Resistance": {"resistance": ["radiant"], "duration_category": "short",
+        "note": "Resistance to radiant damage for 1 hour."},
+    "Potion of Thunder Resistance": {"resistance": ["thunder"], "duration_category": "short",
+        "note": "Resistance to thunder damage for 1 hour."},
+    "Potion of Invulnerability": {
+        "resistance": ["acid","bludgeoning","cold","fire","force","lightning","necrotic",
+                       "piercing","poison","psychic","radiant","slashing","thunder"],
+        "duration_category": "short",
+        "note": "Resistance to all damage for 1 minute.",
+    },
+    "Potion of Speed": {
+        "extra_action": True, "duration_category": "short",
+        "note": "Effect of the haste spell for 1 minute (no concentration): +2 AC, double speed, "
+                "advantage on DEX saves, +1 action (Attack ×1/Dash/Disengage/Hide/Use Object). "
+                "Lethargy (no actions/movement) for 1 round when it ends.",
+    },
+    "Potion of Heroism": {
+        "duration_category": "short",
+        "note": "10 temporary hit points, plus the effect of bless (+1d4 to attack rolls and "
+                "saving throws, no concentration) for 1 hour.",
+    },
+    "Potion of Invisibility": {
+        "duration_category": "short",
+        "note": "You (and anything you wear/carry) are invisible for 1 hour, or until you attack "
+                "or cast a spell.",
+    },
+    "Potion of Advantage": {
+        "duration_category": "short",
+        "note": "Advantage on one ability check, attack roll, or saving throw of your choice, "
+                "usable within the next hour.",
+    },
+    "Potion of Psionic Fortitude": {
+        "duration_category": "short",
+        "note": "Advantage on saving throws to avoid or end the charmed or stunned condition on "
+                "yourself, for 1 hour.",
+    },
+    "Potion of Fire Breath": {
+        "duration_category": "short",
+        "note": "As a bonus action, exhale fire at a target within 30 ft: DC 13 DEX save, 4d6 fire "
+                "damage (half on a success). Usable once; the effect ends 1 hour after drinking "
+                "or once used.",
+    },
+    "Potion of Growth": {
+        "duration_category": "short",
+        "note": "Effect of enlarge (from enlarge/reduce) for 1d4 hours, no concentration: size up "
+                "one category, +1d4 damage on Strength-based weapon hits, advantage on Strength "
+                "checks/saves.",
+    },
+    "Potion of Diminution": {
+        "duration_category": "short",
+        "note": "Effect of reduce (from enlarge/reduce) for 1d4 hours, no concentration: size down "
+                "one category, -1d4 damage on Strength-based weapon hits, disadvantage on "
+                "Strength checks/saves.",
+    },
+    "Potion of Flying": {
+        "duration_category": "short",
+        "note": "Flying speed equal to your walking speed for 1 hour, and you can hover. Falling "
+                "if airborne when it ends, unless you have another way to stay aloft.",
+    },
+    "Potion of Climbing": {
+        "duration_category": "short",
+        "note": "Climbing speed equal to your walking speed for 1 hour, plus advantage on "
+                "Strength (Athletics) checks to climb.",
+    },
+    "Potion of Water Breathing": {
+        "duration_category": "short",
+        "note": "You can breathe underwater for 1 hour.",
+    },
+    "Potion of Gaseous Form": {
+        "duration_category": "short",
+        "note": "Effect of gaseous form for 1 hour, no concentration, or until ended early as a "
+                "bonus action.",
+    },
+    "Potion of Mind Reading": {
+        "duration_category": "short",
+        "note": "Effect of detect thoughts (save DC 13).",
+    },
+    "Potion of Clairvoyance": {
+        "duration_category": "short",
+        "note": "Effect of clairvoyance.",
+    },
+    "Potion of Animal Friendship": {
+        "duration_category": "short",
+        "note": "Can cast animal friendship (save DC 13) at will for 1 hour.",
+    },
+    "Potion of Watchful Rest": {
+        "duration_category": "long",
+        "note": "For 8 hours: magic can't put you to sleep, and you can remain awake through a "
+                "long rest and still gain its benefits.",
+    },
+    "Potion of Vitality": {
+        "duration_category": "long",
+        "note": "Removes exhaustion and cures disease/poison affecting you. For the next 24 "
+                "hours, Hit Dice you spend restore the maximum possible instead of a roll.",
+    },
 }
 
 
