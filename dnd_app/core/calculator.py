@@ -449,6 +449,14 @@ def get_save_advantage_status(char: dict, ability: str) -> dict:
             if char_race != entry["race"]:
                 continue
         sources.append(entry)
+    # Magic items (Ring of Protection, Mindguard Crown, etc.) — see
+    # advantage_save effect type in core/magic_items.py. Confirmed via
+    # direct grep that this list was populated by _apply_single_effect but
+    # never read anywhere, so any item using "advantage_save" silently did
+    # nothing; wiring it in here is what actually makes it work.
+    for item_ability, item_name in char.get("advantage_saves_magic", []):
+        if item_ability in ("all", ability):
+            sources.append({"ability": ability, "source": item_name})
     return {
         "has_advantage": len(sources) > 0,
         "conditional": any(s.get("conditional") for s in sources),
