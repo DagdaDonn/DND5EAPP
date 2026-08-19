@@ -1904,6 +1904,11 @@ def build_action_abilities(char):
             return f"+{v} ft. to your speed" if v else None
         if t == 'min_speed':
             return f"Your speed is at least {sub.get('value',0)} ft."
+        if t in ('swim_speed', 'climb_speed', 'fly_speed'):
+            kind = {'swim_speed': 'swimming', 'climb_speed': 'climbing', 'fly_speed': 'flying'}[t]
+            v = sub.get('value')
+            v_str = "equal to your walking speed" if v == 'walking' else f"of {v} ft"
+            return f"You have a {kind} speed {v_str}"
         if t == 'resistance':
             return f"Resistance to {sub.get('damage_type','?')} damage"
         if t == 'immunity':

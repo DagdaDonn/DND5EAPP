@@ -2284,6 +2284,26 @@ def update_all(char: dict) -> dict:
     char["climb_speed"] = _moves["climb"]
     char["fly_speed"] = _moves["fly"]
 
+    # Magic items granting a swim/climb/fly speed (Ring of Swimming, Cloak
+    # of the Manta Ray, Wings of Flying, etc.) — a real gap: these speeds
+    # are computed here, after apply_all_magic_item_effects() already ran
+    # earlier in this function, so a magic item has no other way to reach
+    # them. "walking" as a value means "equal to your walking speed",
+    # matching how most of these items are actually worded.
+    from .magic_items import _active_item_names as _active_magic_item_names
+    from dnd_app.data.magic_items import get_item_effect as _get_item_effect
+    walk_speed = char.get("speed", 30) + char.get("magic_speed_bonus", 0)
+    for _fx_name in _active_magic_item_names(char):
+        _fx_info = _get_item_effect(_fx_name)
+        if not _fx_info:
+            continue
+        for _sub in (_fx_info if isinstance(_fx_info, list) else [_fx_info]):
+            if _sub.get("type") not in ("swim_speed", "climb_speed", "fly_speed"):
+                continue
+            _val = _sub.get("value", 0)
+            _val = walk_speed if _val == "walking" else _val
+            char[_sub["type"]] = max(char.get(_sub["type"], 0), _val)
+
     # ── Max HP ────────────────────────────────────────────────────────────────
     # hp_max_override lets a player manually set Max HP (homebrew items, DM
     # rulings, features this app doesn't model) without it being silently
