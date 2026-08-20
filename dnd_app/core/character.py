@@ -354,9 +354,6 @@ def long_rest(char: dict) -> None:
     char["spell_slots_used"] = [0] * 9
     char["pact_slots_used"] = 0
     char["death_saves"] = default_death_saves()
-    # Wild Shape uses a separate counter (not the "resources" list
-    # system), so it needs its own explicit reset here.
-    char["_wildshape_uses_spent"] = 0
     # Companions that died mid-adventure (Steel Defender, Beast of the
     # Land/Sea/Sky) become available to recreate again at the end of a
     # long rest, matching the real rule — clear both the pending flag
@@ -402,9 +399,12 @@ def long_rest(char: dict) -> None:
 def short_rest(char: dict) -> None:
     """Reset SR resources (SR resets do NOT reset LR resources)."""
     char["pact_slots_used"] = 0
-    # Wild Shape recovers on a short OR long rest — same fix as long_rest()
-    # above, since this counter lives outside the normal resources list.
-    char["_wildshape_uses_spent"] = 0
+    # Wild Shape (key "wild_shape") recovers here too via the generic
+    # "SR"/"SR/LR" resource-reset loop below -- it used to be tracked by
+    # a separate ad hoc counter with its own explicit reset in both this
+    # function and long_rest(), now retired in favor of the shared
+    # char["resources"] entry (see the reset="SR/LR" note on its
+    # definition in classes.py/classes_2024.py).
     for res in char.get("resources", []):
         if res.get("reset") in ("SR", "SR/LR"):
             res["current"] = res.get("current_max") or res.get("max", 0)

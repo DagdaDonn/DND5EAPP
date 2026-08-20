@@ -3056,6 +3056,46 @@ class CharacterSheet(QWidget):
         # calls via the observer chain.
         self._mark_dirty()
 
+    def _wildshape_resource(self):
+        """The formal char['resources'] entry for Wild Shape (key
+        'wild_shape') -- the SAME entry the Passive/Other tab's generic
+        resource tracker (_build_resource_rows) reads and writes. This
+        card previously tracked uses via a separate, disconnected
+        char['_wildshape_uses_spent'] counter: transforming here never
+        moved that tab's pips, and editing that tab's spinbox never
+        blocked/allowed a transform here. Returns None if Wild Shape
+        isn't available yet (not a Druid, or below 2nd level)."""
+        return next((r for r in self.char.get("resources", [])
+                     if r.get("key") == "wild_shape"), None)
+
+    def _wildshape_uses_left(self):
+        """(uses_remaining, uses_max), both ints -- or (None, None) for
+        unlimited (Archdruid, 20th level: current_max is the string
+        "Unlimited" at that point, not a number)."""
+        res = self._wildshape_resource()
+        if res is None:
+            return (0, 0)
+        mx = res.get("current_max", 0)
+        if not isinstance(mx, int):
+            return (None, None)
+        return (res.get("current", 0), mx)
+
+    def _spend_wildshape_use(self) -> bool:
+        """Spend one Wild Shape use against the shared resource. Returns
+        False (and spends nothing) if none remain; always True for
+        unlimited (Archdruid)."""
+        res = self._wildshape_resource()
+        if res is None:
+            return False
+        mx = res.get("current_max", 0)
+        if not isinstance(mx, int):
+            return True
+        cur = res.get("current", 0)
+        if cur <= 0:
+            return False
+        res["current"] = cur - 1
+        return True
+
     def _build_wildshape_control_card(self) -> QFrame:
         """Wild Shape transformation control — prime (pick a beast), fire
         (transform, consuming one use), reload (the use is spent
@@ -3115,17 +3155,19 @@ class CharacterSheet(QWidget):
             picker_row.addWidget(combo, 1)
             cl.addLayout(picker_row)
 
-            uses_spent = self.char.get("_wildshape_uses_spent", 0)
-            uses_max = 2  # PHB: 2 uses per short or long rest, regardless of level
-            uses_left = max(0, uses_max - uses_spent)
-            cl.addWidget(_lbl(f"{uses_left}/{uses_max} uses remaining (short/long rest)", TEXT2, FS_SMALL))
+            uses_left, uses_max = self._wildshape_uses_left()
+            if uses_left is None:
+                cl.addWidget(_lbl("Unlimited uses (Archdruid)", TEXT2, FS_SMALL))
+            else:
+                cl.addWidget(_lbl(f"{uses_left}/{uses_max} uses remaining (short/long rest)", TEXT2, FS_SMALL))
             from dnd_app.core.calculator import subclasses as _sc_wsp
             if "moon" in _sc_wsp(self.char).get("Druid", "").lower():
                 cl.addWidget(_lbl("Combat Wild Shape: use as a bonus action instead of an action.",
                                    GOLD2, FS_TINY, wrap=True))
 
-            fire_btn = QPushButton(f"\U0001f43e Transform ({uses_left} left)")
-            fire_btn.setEnabled(uses_left > 0 and combo.count() > 0)
+            fire_btn = QPushButton("\U0001f43e Transform" if uses_left is None
+                                    else f"\U0001f43e Transform ({uses_left} left)")
+            fire_btn.setEnabled((uses_left is None or uses_left > 0) and combo.count() > 0)
             fire_btn.setStyleSheet(pill_btn("", PURPLE).styleSheet())
             fire_btn.clicked.connect(lambda checked=False, cb=combo: self._wildshape_transform(cb.currentData()))
             cl.addWidget(fire_btn)
@@ -3155,9 +3197,11 @@ class CharacterSheet(QWidget):
         from dnd_app.data.statblocks import WILDSHAPE_BEASTS
         beast = WILDSHAPE_BEASTS.get(beast_name)
         if not beast: return
+        if not self._spend_wildshape_use():
+            self._toast("No Wild Shape uses remaining — available again after a short or long rest.")
+            return
         self.char["_wildshape_active"] = beast_name
         self.char["_wildshape_hp"] = beast["hp"]
-        self.char["_wildshape_uses_spent"] = self.char.get("_wildshape_uses_spent", 0) + 1
         if "Wild Shape" not in self.char.get("active_effects", []):
             self.char.setdefault("active_effects", []).append("Wild Shape")
         self._mark_dirty()
@@ -5143,12 +5187,9 @@ class CharacterSheet(QWidget):
         if not tmpl:
             return
         if tmpl.get("summon_uses_wild_shape"):
-            uses_spent = self.char.get("_wildshape_uses_spent", 0)
-            uses_max = 2  # PHB: 2 uses per short or long rest, regardless of level
-            if uses_spent >= uses_max:
+            if not self._spend_wildshape_use():
                 self._toast("No Wild Shape uses remaining — available again after a short or long rest.")
                 return
-            self.char["_wildshape_uses_spent"] = uses_spent + 1
         else:
             res_key = tmpl.get("summon_resource_key")
             if res_key:
@@ -5350,8 +5391,9 @@ class CharacterSheet(QWidget):
             scl2 = QVBoxLayout(sc); scl2.setContentsMargins(14,12,14,12); scl2.setSpacing(6)
             scl2.addWidget(_lbl(tmpl.get("display_name", key), TEAL2, FS_TITLE, bold=True))
             if tmpl.get("summon_uses_wild_shape"):
-                uses_spent = self.char.get("_wildshape_uses_spent", 0)
-                uses_txt = f" ({max(0, 2-uses_spent)}/2 Wild Shape uses left)"
+                ws_left, ws_max = self._wildshape_uses_left()
+                uses_txt = (" (Unlimited Wild Shape uses)" if ws_left is None
+                            else f" ({ws_left}/{ws_max} Wild Shape uses left)")
             else:
                 res_key = tmpl.get("summon_resource_key")
                 res = next((r for r in self.char.get("resources", []) if r.get("key") == res_key), None)
@@ -9609,7 +9651,20 @@ class CharacterSheet(QWidget):
                 rw = _get_dm_reward(rname)
                 if rw:
                     pre = rw.get("prereq","")
-                    desc = self._summarize_feature_text(rw.get("desc",""), max_len=180)
+                    # NOT _summarize_feature_text() here, unlike DM-Granted
+                    # Feats above -- DM Rewards (Supernatural Gifts, Dark
+                    # Gifts, Iconoclast's tiers, etc.) routinely run several
+                    # paragraphs, and a max_len=180 summary truncated mid-
+                    # sentence with no way to see the rest: the row label
+                    # has no height cap (it just grows), and the right-click
+                    # "Show Details" fallback reuses this same string when
+                    # there's no separate FEATURE_DESCS lookup for a DM
+                    # reward's custom name -- so a truncated summary here
+                    # was truncated everywhere, with no path to the full
+                    # text at all. _format_multi_para() renders the real
+                    # paragraph breaks and bolds each trait's name, same as
+                    # the feat browser's detail panel does for these.
+                    desc = self._format_multi_para(rw.get("desc",""))
                     cat = rw.get("category",""); src = rw.get("source","")
                     tag = f"{cat} \u2014 {src}" if cat else ""
                     reward_items.append(

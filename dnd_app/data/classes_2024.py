@@ -427,7 +427,10 @@ ALL_CLASSES_2024 = [
         },
         subclasses=['Circle of the Land', 'Circle of the Moon', 'Circle of the Sea', 'Circle of the Stars'],
         resources=[
-            dict(name="Wild Shape", key="wild_shape", formula="2", reset="SR", track="uses"),
+            # Recovers on a short OR long rest (same "SR" vs "SR/LR" reset
+            # bug pattern already fixed elsewhere in this app -- see the
+            # matching note in classes.py's Wild Shape entry).
+            dict(name="Wild Shape", key="wild_shape", formula="2", reset="SR/LR", track="uses"),
         ],
         level_choices={
             1: ["Choose Primal Order: Warden or Magician"],

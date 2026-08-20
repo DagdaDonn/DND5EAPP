@@ -35,6 +35,16 @@ class DiceRollerPanel(QWidget):
 
     def __init__(self, char_ref: dict, parent=None):
         super().__init__(parent, Qt.Window | Qt.Tool | Qt.WindowStaysOnTopHint)
+        # `from .theme import *` above only captured whatever the theme
+        # was when this module was first imported -- a persistent
+        # floating window like this one is exactly the case where that
+        # staleness is most visible, since it can outlive several later
+        # theme switches. main_window.py's _set_theme() destroys and
+        # recreates this panel (preserving position/visibility) on every
+        # theme change specifically so this line picks up fresh colors
+        # each time, rather than trying to re-style already-built child
+        # widgets in place.
+        from .theme import sync_globals as _sg; _sg(globals())
         self.char = char_ref
         self.setWindowTitle("Dice Roller")
         self.setFixedWidth(380)

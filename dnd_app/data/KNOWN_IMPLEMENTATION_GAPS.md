@@ -8582,3 +8582,123 @@ onefile .exe was 90MB+) had been getting committed by accident, which
 is most of why this repo's `.git` directory ballooned to 100MB+.
 Added both to `.gitignore` and untracked them with `git rm --cached`
 (the files themselves are untouched on disk, just no longer tracked).
+
+## DM-Granted Bonus Features: no longer truncated on the sheet
+
+User-reported: "Supernatural gifts still get cut off." Found the real
+cause -- the Features tab's "DM-Granted Bonus Features" section built
+each granted DM Reward's row text with
+`_summarize_feature_text(desc, max_len=180)`. Fine for an ordinary
+feat's one-line `special` text, but DM Rewards like Supernatural Gifts
+routinely run several paragraphs (the longest, "Oracle", is 3,690
+characters) -- so the row showed maybe the first sentence before an
+ellipsis, with no way to see the rest: the row label itself has no
+height cap (it just grows to fit), and the right-click "Show Details"
+fallback reuses that same already-truncated string whenever there's no
+separate `FEATURE_DESCS` lookup for a DM reward's custom name (there
+never is), so the truncation wasn't just a display quirk -- there was
+no path to the full text anywhere on the sheet.
+
+Fixed by rendering the full description through `_format_multi_para()`
+(the same paragraph-formatting helper already used by the "Bonus
+Feature Browser"'s detail panel) instead of summarizing it. Verified
+directly against the real data: the "Oracle" Supernatural Gift's full
+3,690-character, 21-paragraph description now renders end to end with
+nothing missing. DM-Granted Feats (ordinary feats, not DM Rewards)
+were left on the existing summarizer -- their `special` text is
+normally a sentence or two, and that wasn't the reported problem.
+
+## Wild Shape's two disconnected use-trackers, unified into one
+
+User-reported: the Combat tab's Wild Shape card and the Passive/Other
+tab's resource tracker weren't wired together. Confirmed a real,
+significant bug: two completely separate trackers existed for the same
+resource. The Combat tab card (transform/revert), the Companions tab
+(Wildfire Spirit, which shares the Wild Shape pool per its real rule),
+and a stat-block preview all read/wrote a legacy ad hoc
+`char["_wildshape_uses_spent"]` counter with its own hardcoded
+`uses_max = 2`. Meanwhile `char["resources"]` already had a proper,
+formally-defined Wild Shape entry (`key="wild_shape"`, correctly
+level-scaled via `by_level={2:2, 20:"Unlimited"}`) that the
+Passive/Other tab's generic resource-pip tracker read and wrote
+independently. Transforming via the Combat tab never moved that tab's
+pips; editing that tab's spinbox never blocked or allowed a transform.
+The hardcoded `uses_max = 2` was also its own separate bug (silently
+wrong for a 20th-level Archdruid, who has unlimited uses).
+
+Unified onto the formal `resources` entry as the single source of
+truth: added `_wildshape_resource()` / `_wildshape_uses_left()` /
+`_spend_wildshape_use()` helpers on `CharacterSheet`, and switched
+every read/write site (the Combat tab card, `_wildshape_transform()`,
+the Companions tab's Wildfire Spirit summon, and the stat-block
+preview's "uses left" text) to go through them. All four now correctly
+show "Unlimited uses (Archdruid)" for a 20th-level Druid instead of a
+wrong "0/2 left".
+
+Unifying surfaced a second real bug, needed to avoid a regression:
+Wild Shape's resource definition was tagged plain `reset="SR"` in both
+`classes.py` and `classes_2024.py`. This app's `long_rest()` only
+resets resources tagged `"LR"` or `"SR/LR"` -- a plain `"SR"` resource
+never recovers on a long rest at all. This is the exact same bug
+pattern a previous audit already found and fixed for 10 other
+resources (Hexblade's Curse, Misty Escape, Indestructible Life,
+Mutagens, Control Undead, Vow of Enmity, Favored by the Gods, Firbolg
+Magic's two spells) and believed fully closed out -- Wild Shape was
+simply missed since that sweep covered `multiclass.py`/`calculator.py`
+specifically, not the `classes.py`/`classes_2024.py` CLASS_DICT
+definitions where Wild Shape's entry actually lives. The real rule
+(PHB p.66) is explicitly "short or long rest," and the retired ad hoc
+counter's own reset code already reset on both -- so this was a latent
+regression risk in the unification itself, now fixed by retagging both
+entries `"SR/LR"`. Retired the now-fully-redundant
+`char["_wildshape_uses_spent"] = 0` lines from both `long_rest()` and
+`short_rest()` in `character.py`, since the generic resource-reset loop
+now correctly covers it.
+
+**Not fixed, flagged for a future pass**: this investigation found the
+"SR" vs "SR/LR" sweep's own "zero remaining" closing note appears to
+be inaccurate -- `classes.py`/`classes_2024.py` still have several
+other plain-`"SR"` resources (Channel Divinity, Second Wind, Action
+Surge, Superiority Dice, Ki Points, Blood Maledict, Crimson Rite) that
+weren't re-checked here, since only Wild Shape was in scope for this
+report. Some of these may be genuinely SR-only by their real rule
+(no action taken without checking each one against its actual text);
+worth a dedicated audit of `classes.py`/`classes_2024.py` specifically
+to confirm which, if any, share this same gap.
+
+Verified directly: a level-2 Circle of the Moon Druid's resource
+correctly shows 2/2, spending both blocks a third transform, a
+simulated long rest now correctly restores it to 2 (previously would
+have stayed depleted -- the actual regression this fix avoided), and a
+level-20 Druid's `current_max` is confirmed to be the string
+`"Unlimited"`, correctly detected as non-numeric by the new helpers.
+Full 1190-item magic-item-effects regression: 0 errors.
+
+## Floating/dialog windows now pick up theme changes
+
+User-reported: the Dice Roller (and other windows) didn't follow a
+theme change made while they were open. Root cause: `main_window.py`'s
+own `from .theme import *` only ever captured whatever the theme was
+the moment the module was first imported (Python's `import *` is a
+one-time snapshot, not a live binding) -- unlike `sheet.py`/
+`wizard.py`/`levelup_panel.py`, which already call `sync_globals()` at
+the top of their own `__init__` for exactly this reason, nothing built
+in `main_window.py` (SettingsDialog, CreditsDialog, StartMenu) or
+`dice_roller.py` (DiceRollerPanel) ever re-synced, so every one of them
+was frozen at whatever theme was active at app startup, regardless of
+later switches.
+
+Added the same `sync_globals()` call to `SettingsDialog.__init__`,
+`CreditsDialog.__init__`, `StartMenu.__init__`, and
+`DiceRollerPanel.__init__` -- fixes staleness for any freshly-opened
+instance of these. For the two windows that can actually survive a
+theme switch already open — StartMenu (reachable from the menu bar
+regardless of which screen is showing, since Settings isn't scoped to
+the character sheet) and the Dice Roller (the one genuinely persistent,
+non-modal floating window) — `_set_theme()` now also destroys and
+recreates them in place on every theme change, restoring StartMenu's
+stack position and the Dice Roller's screen position/visibility,
+rather than trying to re-style already-built nested custom-styled
+cards in place (fragile, since Qt widget-instance stylesheets take
+precedence over a parent's, so simply re-applying a top-level
+stylesheet doesn't cascade down into them).

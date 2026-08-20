@@ -49,6 +49,7 @@ class StartMenu(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        from dnd_app.ui.theme import sync_globals as _sg; _sg(globals())
         root = QVBoxLayout(self); root.setContentsMargins(0,0,0,0)
 
         hero = QFrame(); hero.setStyleSheet(f"QFrame{{background:{SURF};}}")
@@ -132,6 +133,14 @@ class SettingsDialog(QDialog):
 
     def __init__(self, app_window, parent=None):
         super().__init__(parent)
+        # main_window.py's `from .theme import *` only ever captured
+        # whatever the theme was at the moment this module was first
+        # imported (Python's `import *` is a one-time snapshot, not a
+        # live binding) -- every dialog/window built here was frozen at
+        # startup's theme regardless of later switches, unlike sheet.py/
+        # wizard.py/levelup_panel.py, which already call this at the top
+        # of their own __init__.
+        from dnd_app.ui.theme import sync_globals as _sg; _sg(globals())
         self.app_window = app_window
         self.setWindowTitle("Settings")
         self.setMinimumSize(420, 420)
@@ -416,6 +425,7 @@ class CreditsDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        from dnd_app.ui.theme import sync_globals as _sg; _sg(globals())
         self.setWindowTitle("Credits")
         self.setMinimumSize(640, 560)
         self.setStyleSheet(parent.styleSheet() if parent else "")
@@ -568,6 +578,38 @@ class CharacterCreatorApp(QMainWindow):
                 self._show_sheet(char)
                 if self._sheet:
                     self._sheet._tabs.setCurrentIndex(cur_tab)
+
+            # StartMenu was built once at app startup and, like the
+            # sheet before the fix above, never rebuilt on a theme
+            # switch -- if the player switches themes from the start
+            # screen (Settings is reachable from the menu bar regardless
+            # of which screen is showing), it stayed the old colors
+            # underneath the dialog. Rebuilt in place, restoring which
+            # stack widget was current if StartMenu itself was showing.
+            was_current_start = (self._stack.currentWidget() is self._start)
+            self._stack.removeWidget(self._start); self._start.deleteLater()
+            self._start = StartMenu()
+            self._start.new_char.connect(self._go_wizard)
+            self._start.load_char.connect(self._go_sheet_from_path)
+            self._stack.insertWidget(0, self._start)
+            if was_current_start:
+                self._stack.setCurrentWidget(self._start)
+
+            # The Dice Roller is the one persistent, non-modal window
+            # that can genuinely outlive a theme switch (it isn't inside
+            # self._stack, and isn't rebuilt/closed by anything else
+            # here) -- rebuilt in place, preserving its screen position
+            # and only re-shown if it was actually visible.
+            if self._dice_roller:
+                from .dice_roller import DiceRollerPanel
+                was_visible = self._dice_roller.isVisible()
+                pos = self._dice_roller.pos()
+                dice_char = self._dice_roller.char
+                self._dice_roller.deleteLater()
+                self._dice_roller = DiceRollerPanel(dice_char, parent=self)
+                self._dice_roller.move(pos)
+                if was_visible:
+                    self._dice_roller.show()
         finally:
             self._switching_theme = False
 

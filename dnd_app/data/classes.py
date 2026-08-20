@@ -618,7 +618,13 @@ ALL_CLASSES = [
             "Circle of Wildfire (TCE) – summon wildfire spirit; fiery healing",
         ],
         resources=[
-            dict(name="Wild Shape", key="wild_shape", reset="SR", track="uses",
+            # PHB p.66: "You regain expended uses when you finish a short
+            # or long rest" -- was plain "SR" (this app's long_rest() only
+            # resets resources tagged "LR" or "SR/LR", so a plain "SR"
+            # resource never recovered on a long rest at all), the exact
+            # bug already found and fixed for 10 other resources elsewhere
+            # in this file/multiclass.py, just missed for this one.
+            dict(name="Wild Shape", key="wild_shape", reset="SR/LR", track="uses",
                  by_level={2:2, 20:"Unlimited"}),
         ],
         level_choices={
