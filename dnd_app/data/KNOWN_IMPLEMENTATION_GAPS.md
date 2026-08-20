@@ -8561,3 +8561,24 @@ errors. Live widget rendering (the actual dice roller layout, the
 death screen re-appearing on load) could not be exercised directly in
 this environment -- PySide6 is not installed here -- so this is
 verified at the logic/compile level only.
+
+## Dice Roller: stale "Roll with Bonus" numbers fixed
+
+Found during a follow-up error check: `DiceRollerPanel.refresh_bonuses()`
+existed but was never called from anywhere, so the "Roll with Bonus"
+dropdown's skill/save/ability numbers were frozen at whatever they were
+when the panel was first constructed -- a level-up or ability score
+change afterward left it showing stale bonuses until the whole panel
+was destroyed and recreated. `main_window.py`'s `_open_dice_roller()`
+now calls `refresh_bonuses()` every time the panel is (re)opened or
+brought to front, alongside the existing `self._dice_roller.char = char`
+reassignment, without needing a live subscription that would also have
+to survive the sheet being rebuilt from scratch.
+
+## Repo hygiene: stopped committing PyInstaller build output
+
+`build/` and `dist/` (PyInstaller's regenerated output -- one single
+onefile .exe was 90MB+) had been getting committed by accident, which
+is most of why this repo's `.git` directory ballooned to 100MB+.
+Added both to `.gitignore` and untracked them with `git rm --cached`
+(the files themselves are untouched on disk, just no longer tracked).

@@ -694,6 +694,15 @@ class CharacterCreatorApp(QMainWindow):
         char = self._sheet.char if self._sheet else new_character()
         if self._dice_roller:
             self._dice_roller.char = char
+            # "Roll with Bonus" caches skill/save/ability bonuses at
+            # construction time and never refreshed them again -- a
+            # level-up or ability score change while the roller sat open
+            # (or just in the background) left it showing stale numbers
+            # until the whole panel was recreated. Re-deriving them here,
+            # every time the roller is (re)opened or brought to front,
+            # covers that without needing a live subscription that would
+            # also have to survive the sheet being rebuilt from scratch.
+            self._dice_roller.refresh_bonuses()
         if not self._dice_roller:
             self._dice_roller = DiceRollerPanel(char, parent=self)
         if self._dice_roller.isHidden():
