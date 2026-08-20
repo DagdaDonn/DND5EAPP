@@ -2095,7 +2095,10 @@ def compute_max_hp(char: dict) -> int:
     """
     Compute maximum HP from class levels + CON.
     PHB: only the very first character level uses max die value.
-    All other levels (including multiclass level 1) use floor(hd/2)+1.
+    All other levels (including multiclass level 1) use floor(hd/2)+1,
+    unless the "max_hp_per_level" optional rule is on, in which case
+    every level uses the hit die's maximum value instead — a common
+    table variant, not an official rule.
     Class order is preserved from char['classes'] — first entry = primary class.
     """
     classes = char.get("classes", [])
@@ -2105,6 +2108,7 @@ def compute_max_hp(char: dict) -> int:
     con = ability_mod(char, "CON", ignore_wildshape=True)
     total = total_level(char)
     tough_bonus = 2 * total if "Tough" in char.get("feats", []) else 0
+    max_per_level = char.get("optional_rules", {}).get("max_hp_per_level", False)
 
     hp = 0
     first_level_done = False
@@ -2112,7 +2116,7 @@ def compute_max_hp(char: dict) -> int:
         cname = entry.get("class", "")
         lvl   = entry.get("level", 1)
         hd    = entry.get("hit_die") or CLASS_DICT.get(cname, {}).get("hit_die", 8)
-        avg   = hd // 2 + 1          # PHB average formula
+        avg   = hd if max_per_level else hd // 2 + 1  # PHB average formula, or max if the optional rule is on
         if not first_level_done:
             # Character level 1: max hit die
             hp += hd + con
@@ -2324,11 +2328,25 @@ def update_all(char: dict) -> dict:
     if new_max > 0:
         diff = new_max - char.get("max_hp", 0)
         char["max_hp"] = new_max
-        if diff > 0:
+        # A level-up genuinely grants new hit points (PHB: you gain hit
+        # points equal to the new hit die roll/average + CON), so current
+        # HP should rise with it. Other sources of a higher max — a CON
+        # score increase, attuning a magic item with an hp_max_bonus,
+        # exhaustion 4+ clearing — only raise the ceiling, not your
+        # current HP, per the real rule text for each (none of them say
+        # "and you gain that many hit points"). Gated on whether total
+        # character level actually went up since the last recompute,
+        # since compute_max_hp() has no other way to tell why max grew.
+        prev_level = char.get("_hp_level_snapshot")
+        cur_level = total_level(char)
+        char["_hp_level_snapshot"] = cur_level
+        leveled_up = prev_level is None or cur_level > prev_level
+        if diff > 0 and leveled_up:
             char["current_hp"] = min(char["current_hp"] + diff, new_max)
         else:
-            # Max HP dropped (e.g. exhaustion just hit 4): clamp current HP
-            # down too, same as the 5e rule for a shrinking maximum.
+            # Max HP dropped, or rose from a non-level-up source: clamp
+            # current HP down if it now exceeds the new max, otherwise
+            # leave it exactly as it was.
             char["current_hp"] = min(char.get("current_hp", new_max), new_max)
     # Exhaustion level 6: death (PHB p.291).
     if char.get("exhaustion", 0) >= 6 and char.get("current_hp", 1) > 0:

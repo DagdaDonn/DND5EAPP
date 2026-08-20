@@ -1366,6 +1366,14 @@ class CharacterSheet(QWidget):
                       lambda idx=i-1: self._tabs.setCurrentIndex(idx)
                       if idx < self._tabs.count() else None)
 
+        # A character saved while dead (3 failed death saves, massive
+        # damage, or exhaustion 6) and never revived should still show
+        # the death screen on reopen -- deferred to the next event loop
+        # tick since the overlay sizes itself from self.rect(), which
+        # isn't finalized yet mid-construction.
+        if self.char.get("is_dead", False):
+            QTimer.singleShot(0, self._show_death_screen)
+
     def _autosave(self):
         """Silently write a .autosave backup when there are unsaved changes."""
         if not getattr(self, "_is_dirty", False):
@@ -1419,6 +1427,7 @@ class CharacterSheet(QWidget):
             # permanently stale on controller-driven updates.
             self._do_refresh_combat()
             self._refresh_spells()
+            self._refresh_spell_row_titles()
             self._refresh_concentration()
             self._refresh_magic_items()
             if hasattr(self, "_levelup_panel"):
@@ -1436,6 +1445,20 @@ class CharacterSheet(QWidget):
             self._sync_infusions_tab()
         finally:
             self._blocking_refresh = False
+
+    def _refresh_spell_row_titles(self):
+        """Immersive Spells (optional rule): re-derive each spell row's
+        title text on every controller-driven refresh, so it stays in
+        sync with whatever triggered the change (transforming/reverting
+        Wild Shape, Rage turning on/off via any of its several toggle
+        paths, a level-up granting a Paladin Oath, or the setting itself
+        being flipped on/off) without needing a hook at every one of
+        those individual call sites."""
+        if not self._spell_rows:
+            return
+        from dnd_app.ui.immersive_spells import compute_display_spell_title
+        for row in self._spell_rows:
+            row.set_display_name(compute_display_spell_title(self.char, row.spell["name"]))
 
     def _sync_infusions_tab(self):
         """Add/remove the Infusions tab as eligibility changes, and refresh
@@ -1559,9 +1582,12 @@ class CharacterSheet(QWidget):
         self.ctrl.refresh()
         self._mark_dirty()
         self._offer_rest_options("long")
-        self._toast("🌙 Long rest complete — HP, slots & resources restored")
+        from dnd_app.ui.flavor_text import random_long_rest_dream
         if expired:
             self._toast(f"🌙 Faded: {', '.join(expired)}")
+        else:
+            self._toast(f"🌙 Long rest complete — HP, slots & resources restored\n"
+                        f"{random_long_rest_dream()}")
 
     def _clear_expired_active_effects(self, categories: tuple[str, ...]) -> list[str]:
         """Remove active_effects (mainly consumable potions) whose
@@ -2360,6 +2386,16 @@ class CharacterSheet(QWidget):
         self._mark_dirty()
 
     def _show_death_screen(self):
+        # Persisted (not just a transient UI event) so that loading a
+        # character who died and was saved before being revived shows
+        # the death screen again on reopen, instead of silently landing
+        # back on a live-looking sheet with no indication anything
+        # happened. Only mark dirty on an actual new death, not when
+        # __init__ re-shows this for an already-dead loaded character
+        # (that shouldn't flag an untouched file as having unsaved edits).
+        if not self.char.get("is_dead", False):
+            self.char["is_dead"] = True
+            self._mark_dirty()
         overlay = QFrame(self)
         overlay.setObjectName("death_overlay")
         overlay.setStyleSheet(
@@ -2390,6 +2426,9 @@ class CharacterSheet(QWidget):
         )
         def _revive():
             overlay.deleteLater()
+            if hasattr(self, "_toast_lbl"):
+                self._toast_lbl.hide()
+            self.char["is_dead"] = False
             self.char["current_hp"] = 1
             self.char["death_saves"] = {"successes": 0, "failures": 0}
             self.char["exhaustion"] = 0          # reviving clears exhaustion
@@ -2405,6 +2444,14 @@ class CharacterSheet(QWidget):
         vl.addWidget(revive_btn, alignment=Qt.AlignCenter)
         vl.addStretch(3)
         overlay.show()
+
+        # Critical Flavor (DM Secrets, optional rule, default off): a
+        # random quip at the bottom of the screen -- the death overlay
+        # above is centered and mechanical, this is a separate, smaller
+        # aside underneath it.
+        if self.char.get("optional_rules", {}).get("critical_flavor", False):
+            from dnd_app.ui.flavor_text import random_death_message
+            self._toast(random_death_message(), duration_ms=0)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -3778,6 +3825,7 @@ class CharacterSheet(QWidget):
                         f"Failed ({total} vs DC {dc}). Dropped {conc_spell}.",
                     )
                     self._refresh_concentration()
+                    self._toast("Your focus shatters like cheap glass.")
         self._mark_dirty()
 
     def _roll_initiative(self):
@@ -4124,7 +4172,11 @@ class CharacterSheet(QWidget):
 
     # ── Toast notifications (non-blocking) ────────────────────────────────────
     def _toast(self, text: str, duration_ms: int = 3200):
-        """Show a transient notification banner at the bottom of the sheet."""
+        """Show a transient notification banner at the bottom of the sheet.
+        Pass duration_ms=0 for a persistent toast that stays up until the
+        caller explicitly hides self._toast_lbl (used for the death
+        screen's quip, which should last until the character is revived
+        rather than fade out from under a modal overlay)."""
         if not hasattr(self, "_toast_lbl"):
             self._toast_lbl = QLabel(self)
             self._toast_lbl.setAlignment(Qt.AlignCenter)
@@ -4143,7 +4195,9 @@ class CharacterSheet(QWidget):
         self._toast_lbl.move(max(8, x), max(8, y))
         self._toast_lbl.raise_()
         self._toast_lbl.show()
-        self._toast_timer.start(duration_ms)
+        self._toast_timer.stop()
+        if duration_ms > 0:
+            self._toast_timer.start(duration_ms)
 
     # ── Hit dice: spend one to heal (short-rest style) ────────────────────────
     def _spend_hit_die(self, die_key: str):
@@ -8802,7 +8856,9 @@ class CharacterSheet(QWidget):
             self._level_headers[lvl] = hdr
             ins = self._find_hdr_pos(lvl)
             self._my_spells_lay.insertWidget(ins, hdr)
-        row = SpellRow(spell, prepared, locked=is_bonus)
+        from dnd_app.ui.immersive_spells import compute_display_spell_title
+        row = SpellRow(spell, prepared, locked=is_bonus,
+                        display_name=compute_display_spell_title(self.char, spell["name"]))
         from dnd_app.core.calculator import can_ritual_cast
         row.set_can_ritual(can_ritual_cast(self.char, spell))
         row.remove.connect(self._remove_spell_row)
@@ -8953,7 +9009,10 @@ class CharacterSheet(QWidget):
                 self._refresh_concentration()
             self._apply_spell_active_effect(spell)
             self._mark_spell_cast_time(spell)
-            self._toast(f"✨ Cast {spell['name']} — pact slot expended")
+            # A little flavor for Warlocks specifically -- Pact Magic is
+            # power borrowed from your patron, unlike an ordinary prepared
+            # or known spell slot, so spending one gets its own tiny nod.
+            self._toast(f"✨ Cast {spell['name']} — pact slot expended\nYour patron approves.")
             self._mark_dirty()
             return
         self._toast(f"🔒 Can't cast {spell['name']} — no level-{lvl}+ spell slots available")
@@ -9085,6 +9144,7 @@ class CharacterSheet(QWidget):
             drop_concentration(self.char)
             self.ctrl.update("concentration", self.char["concentration"], rebuild_char=False)
             QMessageBox.warning(self, "Concentration", f"Failed ({total} vs DC {dc}) — concentration dropped.")
+            self._toast("Your focus shatters like cheap glass.")
         self._refresh_concentration()
         self._mark_dirty()
 

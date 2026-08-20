@@ -206,6 +206,7 @@ a = Analysis(
     datas=[
         ('dnd_app/data',     'dnd_app/data'),
         ('dnd_app/icon.ico', 'dnd_app'),
+        *([('README.md', '.')] if os.path.isfile('README.md') else []),
         *([('dnd_app/assets', 'dnd_app/assets')] if os.path.isdir('dnd_app/assets') else []),
         *pyside6_datas,
     ],

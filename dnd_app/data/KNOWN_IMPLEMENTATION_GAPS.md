@@ -8275,3 +8275,289 @@ directly — Berserker Axe/Tloques' hp_max_bonus scales with character
 level (+8 at level 8), Blasted Goggles/Tloques' both track a real
 charge pool, and Orb of the Veil grants 60 ft darkvision with no prior
 darkvision or a correct +60 ft on top of an existing value.
+
+## Wyrmreaver Gauntlets fabricated effect fixed; Elemental Essence Shards given accurate notes
+
+While re-checking "player-choice resistance items," found Wyrmreaver
+Gauntlets wired to `{"type": "set_ability", "ability": "STR", "value":
+23}` -- another fabricated effect matching nothing in its real text
+(no STR override anywhere in the DMG entry). Replaced with its actual
+grants: resistance_choice from the correct 5-type pool (acid/cold/
+fire/lightning/poison, not the generic 10-type pool other resistance-
+choice items use), plus a note covering the unarmed-strike force
+damage and the Invoking the Runes bonus action (too situational/
+multi-part for this app's static effect vocabulary).
+
+Also gave all 4 Elemental Essence Shard variants (previously only a
+generic "attach/detach" reminder, missing their entire actual
+Metamagic-triggered property) accurate per-element notes: Air (bonus
+flight), Earth (temporary resistance), Fire (delayed burn damage),
+Water (a knockback burst). Kept note-only rather than wiring Earth's
+resistance via resistance_choice, since the real grant only lasts
+"until the start of your next turn" after a trigger -- this app's
+resistance system has no concept of a temporary window, so a static
+grant would misrepresent it as permanent.
+
+Verified: full 1283-item catalog regression, 0 errors.
+
+## Fixed current HP silently following every max HP increase, not just level-ups
+
+User: "if something increases your maximum health that doesn't
+necessarily increase your current, that includes increases to
+constitution in the moment." Confirmed a real bug in `update_all()`'s
+Max HP block: any increase in max HP -- from a level-up, a
+Constitution score increase, attuning a magic item with an
+hp_max_bonus grant, or exhaustion 4+ clearing -- unconditionally added
+the same amount to current HP. Only a level-up should do that (PHB:
+"you gain hit points" as part of leveling); the other sources only say
+"your hit point maximum increases," with no matching current-HP grant
+in their real text.
+
+Fixed by tracking `char["_hp_level_snapshot"]` (total character level
+at the last recompute) and only applying the current-HP bump when
+total level has actually gone up since then (or on the very first
+computation, so a freshly created character still starts at full HP).
+Every other max-HP increase now only raises the ceiling; current HP
+is left untouched unless it now exceeds the new max, in which case it
+clamps down, matching the real rule for a shrinking maximum.
+
+Verified directly: a level-up still correctly raises current HP to
+match; taking damage then raising CON leaves current HP exactly where
+it was while max HP still increases; attuning Berserker Axe (a
+hp_max_bonus item) behaves the same way. Full 1283-item catalog
+regression: 0 errors.
+
+## New optional rule: Maximum Hit Points Per Level
+
+User requested a Settings toggle that uses each class's maximum hit
+die value for every level, not just the first -- e.g. a Barbarian
+gains 12 + CON at every level instead of 12 + CON at 1st and the PHB
+average (7 + CON) afterward. Added `max_hp_per_level` to
+`optional_rules` (default off, a common table variant rather than an
+official rule) with a checkbox in the Settings dialog, and wired it
+into `compute_max_hp()`: when on, every level's `avg` value is the
+class's full hit die instead of `hd // 2 + 1`, for both the primary
+class's levels beyond 1st and every multiclass entry.
+
+Verified directly: a level-3 Barbarian with +2 CON computes 32 max HP
+with the rule off (12+2 + (7+2)*2, the real PHB average formula) and
+42 with it on (12+2 + (12+2)*2), matching the user's worked example
+exactly.
+
+## Credits menu, theme catalog expansion, and UI text-size fix
+
+Three requested additions/fixes, wired together this pass:
+
+- **Credits menu.** Added a `&Credits` top-level menu next to File/Tools/
+  Settings, with a "View Credits..." action opening a new
+  `CreditsDialog` that renders the project's own README.md (via
+  `QTextBrowser.setMarkdown`) in a scrollable, read-only view.
+  `_find_readme_text()` locates README.md whether running from source
+  (repo root, resolved relative to this file) or from a frozen
+  PyInstaller build (`sys._MEIPASS` / the executable's directory), with
+  a short embedded fallback blurb if it can't be found. The .spec file's
+  `datas` list now bundles `README.md` into frozen builds so the dialog
+  has something to find there too.
+
+- **Theme catalog: (Dark)/(Light) prefixes + 2 new light themes.** All
+  14 theme names in `THEMES` now carry an explicit `(Dark)` or `(Light)`
+  prefix so the Settings theme picker states its mode instead of leaving
+  it to guesswork from the name alone. Added two new light themes,
+  "(Light) Moonlit Vellum" (cool blue-grey/indigo) and "(Light) Sunlit
+  Meadow" (warm parchment/olive), built with the same WCAG
+  contrast-validation approach used for the original palettes: every
+  TEXT/TEXT2/TEXT3 pairing against BG/SURF2/SURF3 hits >=4.5:1, BORDER
+  against BG hits ~2.6:1, and all six accent colors against SURF clear
+  their respective thresholds. Renaming was a pure key-string change --
+  `is_light` theme detection already worked off BG brightness, not the
+  name, so no downstream logic needed touching. All 14 themes verified
+  to `apply_theme()`/`build_qss()` cleanly with no exceptions.
+
+- **UI text-size setting, actually wired.** The Settings "UI text size"
+  dropdown (Small/Medium/Large) previously only wrote
+  `char["ui_font_scale"]` and never used it anywhere -- a dead control.
+  `theme.py` now tracks the scale as `_font_scale`, with `_BASE_FS`
+  holding the reference ("Medium") pixel sizes and `set_font_scale()`
+  recomputing the live `FS_SMALL`..`FS_BIG` module globals from it; every
+  hardcoded `font-size: Npx;` literal inside `build_qss()` now routes
+  through a `px()` helper that applies the same scale.
+
+  Two deliberate guards against clipped/truncated text, since a lot of
+  small UI chrome (level pills, source badges, reset badges) lives in
+  `setFixedHeight`/`setFixedSize` containers as tight as 16-18px tall
+  with only 1-2px of padding: `FS_TINY` -- used exclusively for that
+  badge/pill text -- is excluded from scaling entirely and always stays
+  at its base 11px, and the "Large" scale factor is a modest 1.15
+  rather than a more aggressive jump, so the sizes that DO scale
+  (body text, labels, headings, stat numbers) still have headroom in
+  their own fixed-height buttons and badges. `main_window.py`
+  wires the dropdown's change handler to call `set_font_scale()`, then
+  re-runs the same rebuild path theme switching already uses
+  (`_set_theme()` re-applies `build_qss()` and reconstructs
+  `CharacterSheet`, whose `__init__` calls `sync_globals()` to pick up
+  the freshly recomputed `FS_*` values -- the same mechanism that
+  already propagated theme colors to rebuilt widgets, extended to also
+  carry font scale). `_show_sheet()` now also applies a character's
+  saved `ui_font_scale` before constructing its sheet, so a saved scale
+  takes effect on load/reopen instead of only being reflected in the
+  combo box's initial selection.
+
+  Verified: `python3 -m py_compile` on both changed files; all 14
+  themes apply cleanly under every scale (Small/Medium/Large each
+  produce distinct, correctly-rounded FS_* values); no un-scaled
+  `font-size:` literal remains in `build_qss()`'s source. Full
+  1190-item magic-item-effects regression (the subset of the 1283-item
+  catalog wired through `MAGIC_ITEM_EFFECTS`): 0 errors. Live widget
+  rendering could not be exercised directly in this environment
+  (PySide6 is not installed here), so this is verified at the logic/
+  compile level only, not with an actual on-screen render.
+
+## New optional rule: Immersive Spells
+
+User-requested flavor feature, off by default: a new `immersive_spells`
+toggle in `optional_rules` that changes ONLY the spell list's title
+label (never the underlying spell name, tooltip, description, or any
+casting mechanic) to reflect what the character can actually say,
+based on their current state. New module `dnd_app/ui/immersive_spells.py`
+holds all the logic; `SpellRow` (shared.py) takes an optional
+`display_name` and a `set_display_name()` method to update just the
+title text; `sheet.py`'s `_add_spell_row()` computes the initial title
+and a new `_refresh_spell_row_titles()` re-derives it for every
+existing row on each controller-driven refresh (`_on_char_updated()`),
+so it stays correct no matter which of Rage's several toggle paths, a
+Wild Shape transform/revert, or the setting itself changed -- without
+needing a hook at each individual call site.
+
+Checked in order, first match wins (a full override outranks a merely
+thematic prefix):
+
+1. Wild Shaped without Beast Spells (Circle of the Moon, 18th level):
+   every spell title becomes the current beast's noise, one word per
+   original word, each padded to roughly that word's length by
+   repeating one designated letter in the beast's base sound (~30
+   beast-name keyword families covering the WILDSHAPE_BEASTS roster,
+   plus a generic growl fallback for fantastical creatures with no
+   real-world sound to draw on).
+2. Rage active (Barbarian): titles collapse to a shout -- a couple of
+   iconic spells get their own line (Fireball -> "FIRE!", Magic
+   Missile -> "MAGIC MISSILE!"), any other single word gets uppercased
+   and exclaimed, anything else multi-word becomes "SMASH!". Path of
+   the Totem Warrior with a Bear/Eagle/Wolf totem spirit chosen reuses
+   the Wild Shape beast-noise mechanic for that totem animal instead.
+3. Thematic prefixes (checked in this order): Warlock patron (all 9),
+   Sorcerer origin (all 8 current subclasses), Cleric domain (all 14
+   PHB/XGE/TCE domains), Paladin Oath (all 10, including Oathbreaker).
+
+Caught one real bug while testing this against every real subclass
+name in the data: "Twilight Domain (TCE)" was matching Cleric's Light
+Domain prefix instead of its own, because "light" is a substring of
+"twilight" and dict key order put it first. Fixed by having
+`_match_prefix()` always try the longest (most specific) keyword
+first rather than relying on manual dict ordering -- a generic fix
+that guards against the same class of bug anywhere else in these
+prefix maps, not just this one collision.
+
+Also added, unrelated to the toggle above and always on: casting a
+spell from a Warlock's Pact Magic slot now appends "Your patron
+approves." to the existing cast-confirmation toast.
+
+Verified: `python3 -m py_compile` + `ast.parse` on every changed file;
+`compute_display_spell_title()` exercised directly against every real
+subclass name in the data (all 9 Warlock patrons, all 8 Sorcerer
+origins, all 14 Cleric domains, all 10 Paladin Oaths, plus Wild Shape
+and Rage/Totem Warrior scenarios) with manually-checked expected
+output; full 1190-item magic-item-effects regression: 0 errors.
+
+## Two small easter eggs (always on, no setting)
+
+- Typing "cheese" anywhere in the app (an application-wide event
+  filter, so it works regardless of which widget has focus) pops a
+  tiny cheese icon in the corner of the main window for 5 seconds.
+  Purely decorative, no gameplay effect.
+- Naming a character "Ethan O'Brien" (case-insensitive) turns the menu
+  bar gold, regardless of the active theme -- applied via the menu
+  bar's own `setStyleSheet()`, which takes precedence over the
+  window-level theme stylesheet and so survives later theme switches
+  without needing to be re-applied from `_set_theme()`.
+
+## Settings dialog: regrouped into cards, added a DM Secrets section
+
+User feedback: the Settings dialog had grown to one long "OPTIONAL
+RULES" card with 10 checkboxes in it and was getting hard to scan.
+Split into four cards:
+
+- **Appearance** (unchanged) -- theme, UI text size.
+- **Character Rules** -- feat prereqs, multiclass ability requirements,
+  DMG/XGE optional actions, Maximum Hit Points Per Level: the core
+  enforcement toggles.
+- **Tasha's Cauldron Options** -- the six TCE "swap something at an
+  ASI level" class options (Eldritch/Martial/Cantrip/Bardic/Sorcerous
+  Versatility, Harness Divine Power), all the same shape, now grouped
+  together instead of interleaved with unrelated rules.
+- **DM Secrets** (new, at the bottom) -- a home for purely cosmetic
+  flavor toggles with zero gameplay effect, as opposed to the actual
+  rule toggles above it. Currently holds Immersive Spells; built to
+  hold more of the same kind going forward.
+
+No checkbox's variable name, default, or `optional_rules` key changed
+-- purely a layout reorganization, so `_on_done()`'s write-back needed
+no changes. Verified: `py_compile` + `ast.parse` clean; full
+1190-item magic-item-effects regression: 0 errors.
+
+## Dice roller visual overhaul + Critical Flavor + small flavor toasts
+
+User feedback: the dice roller "isn't the best looking." Rewrote
+`dnd_app/ui/dice_roller.py`'s layout to match the rest of the app
+instead of native `QGroupBox` chrome: each section is now a card
+(`QFrame`, rounded corners, `SURF`/`BORDER` theme tokens, a small-caps
+`TEAL2` header label) matching Settings/Credits, all hardcoded pixel
+font sizes replaced with the theme's `FS_*` tokens, the panel widened
+320px -> 380px so the Custom Roll row has breathing room, and the
+result display moved to the top of the panel (previously buried below
+three stacked control groups) with a bigger number and a colored
+NAT 20/NAT 1 badge. The result frame's border now settles to a
+crit-colored border after its flash animation instead of always
+reverting to the plain default, so the last roll's crit status stays
+visible at a glance. Also fixed a real gap while doing this: only
+"Roll with Bonus" ever detected nat 20/nat 1 -- a quick d20 button or
+a custom "1d20" roll got no crit styling at all. Both now do too
+(custom rolls only flag crit for a genuine single natural d20, not
+multi-die rolls, where "natural 20" isn't a meaningful concept).
+
+New optional rule in DM Secrets: **Critical Flavor** (default off) --
+on character death, appends a random one-liner from a small pool
+(`dnd_app/ui/flavor_text.py`) to the bottom-of-screen toast. Per
+user follow-up, this toast is now persistent (`_toast(..., duration_ms=0)`,
+a new persistent mode added to `_toast()` itself) rather than
+auto-fading, and is explicitly hidden again on Revive.
+
+Also fixed, per user follow-up: death was previously a purely
+transient UI event with no durable state -- a character saved while
+dead (3 failed death saves, massive damage, or exhaustion 6) and
+never revived would reopen looking like a live, healthy character,
+with no indication anything had happened. `_show_death_screen()` now
+sets a persistent `char["is_dead"]` flag (only marking the file dirty
+on an actual new death, not when redisplaying on load), `_revive()`
+clears it, and `CharacterSheet.__init__` re-shows the death screen via
+a deferred `QTimer.singleShot(0, ...)` (needed since the overlay sizes
+itself from `self.rect()`, not yet finalized mid-construction) if a
+freshly-loaded character has the flag set. Confirmed the flag survives
+a save/load round-trip (`is_dead` deliberately has no leading
+underscore, since `save_character()` strips underscore-prefixed keys
+as runtime-only state).
+
+Two more always-on flavor toasts, no setting: a long rest appends a
+random "you dream of--" line to its existing completion toast (unless
+active effects also expired that rest, in which case only the
+"Faded: ..." toast shows, matching the pre-existing one-toast-at-a-time
+behavior); a failed concentration save (both the damage-triggered
+prompt and the manual "Roll Concentration Save" button) now also
+shows "Your focus shatters like cheap glass."
+
+Verified: `py_compile` + `ast.parse` clean on every changed file; a
+direct `save_character`/`load_character` round-trip confirming
+`is_dead` survives; full 1190-item magic-item-effects regression: 0
+errors. Live widget rendering (the actual dice roller layout, the
+death screen re-appearing on load) could not be exercised directly in
+this environment -- PySide6 is not installed here -- so this is
+verified at the logic/compile level only.

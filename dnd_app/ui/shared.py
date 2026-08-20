@@ -189,7 +189,7 @@ class SpellRow(QFrame):
 
     LEVEL_COLORS = [SURF3,TEAL,IND2,PURPLE,AMBER,GOLD,CRIMSON,"#8b0000","#6b0000","#4b0000"]
 
-    def __init__(self, spell, prepared=False, parent=None, locked=False):
+    def __init__(self, spell, prepared=False, parent=None, locked=False, display_name=None):
         super().__init__(parent)
         self.spell = spell
         lvl = spell["level"]
@@ -233,7 +233,8 @@ class SpellRow(QFrame):
         # Spell info
         info_col = QVBoxLayout(); info_col.setSpacing(1)
         name_row = QHBoxLayout(); name_row.setSpacing(6)
-        name_row.addWidget(h(spell["name"], TEXT, FS_BODY, bold=True, wrap=False))
+        self._name_lbl = h(display_name or spell["name"], TEXT, FS_BODY, bold=True, wrap=False)
+        name_row.addWidget(self._name_lbl)
         if spell.get("concentration"):
             name_row.addWidget(badge("Conc", PURPLE, FS_TINY))
         if spell.get("ritual"):
@@ -270,6 +271,12 @@ class SpellRow(QFrame):
         rm.setStyleSheet(f"QPushButton{{background:transparent;border:none;color:{TEXT3};font-size:16px;border-radius:14px;}}QPushButton:hover{{background:{CRIMSON};color:white;}}")
         rm.clicked.connect(lambda: self.remove.emit(self))
         lay.addWidget(rm)
+
+    def set_display_name(self, text: str):
+        """Update just the title label's text (Immersive Spells optional
+        rule) -- leaves self.spell["name"] and everything else about the
+        row (tooltip, context menu, cast/prep logic) untouched."""
+        self._name_lbl.setText(text)
 
     def set_pinned(self, pinned: bool):
         self._pinned = pinned

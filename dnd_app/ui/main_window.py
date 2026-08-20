@@ -8,7 +8,7 @@ Date: 2026-08-20
 """
 import os, sys
 from PySide6.QtWidgets import *
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QEvent, QTimer
 from PySide6.QtGui import QFont, QAction
 from .theme import *
 from .shared import *
@@ -174,11 +174,16 @@ class SettingsDialog(QDialog):
         acl.addLayout(font_row)
         root.addWidget(app_card)
 
-        # ── Optional Rules ───────────────────────────────────────────────
+        # ── Character Rules, Tasha's Cauldron Options, and DM Secrets are
+        # three separate cards (previously one long "OPTIONAL RULES" card
+        # of 10 checkboxes, which had gotten too crowded to scan) — split
+        # by what kind of toggle each one is: core enforcement rules,
+        # Tasha's Cauldron of Everything's "swap something at an ASI
+        # level" class options, and purely cosmetic flavor toggles.
         rules_card = QFrame(); rules_card.setStyleSheet(
             f"QFrame{{background:{SURF};border:1px solid {BORDER};border-radius:10px;}}")
         rcl = QVBoxLayout(rules_card); rcl.setContentsMargins(14,12,14,14); rcl.setSpacing(8)
-        rcl.addWidget(_lbl("OPTIONAL RULES", TEAL2, FS_SMALL, bold=True))
+        rcl.addWidget(_lbl("CHARACTER RULES", TEAL2, FS_SMALL, bold=True))
 
         opt_rules = {}
         if char:
@@ -188,7 +193,8 @@ class SettingsDialog(QDialog):
                 "eldritch_versatility": False, "harness_divine_power": False,
                 "martial_versatility": False,
                 "cantrip_versatility": False, "bardic_versatility": False,
-                "sorcerous_versatility": False,
+                "sorcerous_versatility": False, "max_hp_per_level": False,
+                "immersive_spells": False, "critical_flavor": False,
             })
 
         self._feat_prereq_cb = QCheckBox("Enforce feat prerequisites (race, ability scores, etc.)")
@@ -213,6 +219,26 @@ class SettingsDialog(QDialog):
             "useful for tables that stick to core PHB rules only.")
         rcl.addWidget(self._dmg_xge_cb)
 
+        self._max_hp_per_level_cb = QCheckBox(
+            "Maximum hit points per level — use each class's maximum hit die "
+            "value instead of the average/rolled result")
+        self._max_hp_per_level_cb.setChecked(opt_rules.get("max_hp_per_level", False))
+        self._max_hp_per_level_cb.setToolTip(
+            "When on, every level (not just 1st) uses the hit die's maximum "
+            "value + CON modifier instead of the PHB average formula "
+            "(floor(hd/2)+1 + CON) — e.g. a Barbarian gains 12 + CON at "
+            "every level instead of 12 + CON at 1st and 7 + CON afterward. "
+            "A common table variant, not an official rule.")
+        rcl.addWidget(self._max_hp_per_level_cb)
+        root.addWidget(rules_card)
+
+        # ── Tasha's Cauldron of Everything: "swap something at an ASI
+        # level" class options, all the same shape, grouped together ──────
+        tasha_card = QFrame(); tasha_card.setStyleSheet(
+            f"QFrame{{background:{SURF};border:1px solid {BORDER};border-radius:10px;}}")
+        tcl = QVBoxLayout(tasha_card); tcl.setContentsMargins(14,12,14,14); tcl.setSpacing(8)
+        tcl.addWidget(_lbl("TASHA'S CAULDRON OPTIONS", TEAL2, FS_SMALL, bold=True))
+
         self._eldritch_versatility_cb = QCheckBox(
             "Eldritch Versatility (Warlock, TCoE) — swap a cantrip/Pact Boon/"
             "Mystic Arcanum at each ASI level")
@@ -221,7 +247,7 @@ class SettingsDialog(QDialog):
             "When on, adds the option to change your Pact Magic cantrips, Pact "
             "Boon, or Mystic Arcanum spells whenever you'd gain an Ability Score "
             "Improvement — an optional Tasha's Cauldron of Everything rule.")
-        rcl.addWidget(self._eldritch_versatility_cb)
+        tcl.addWidget(self._eldritch_versatility_cb)
 
         self._harness_divine_power_cb = QCheckBox(
             "Harness Divine Power (TCE) — Cleric/Paladin: bonus action, expend Channel "
@@ -232,7 +258,7 @@ class SettingsDialog(QDialog):
             "Tasha's Cauldron of Everything class feature: touch your holy symbol as a "
             "bonus action to regain one expended spell slot of level ≤ half your "
             "proficiency bonus (rounded up), a limited number of times per long rest.")
-        rcl.addWidget(self._harness_divine_power_cb)
+        tcl.addWidget(self._harness_divine_power_cb)
 
         self._martial_versatility_cb = QCheckBox(
             "Martial Versatility (TCE) — Fighter/Paladin/Ranger: swap a Fighting Style at any "
@@ -242,7 +268,7 @@ class SettingsDialog(QDialog):
             "When on, Fighter, Paladin, and Ranger characters can replace one Fighting Style "
             "they know with another available to their class, at each level that grants an "
             "Ability Score Improvement — a Tasha's Cauldron of Everything optional rule.")
-        rcl.addWidget(self._martial_versatility_cb)
+        tcl.addWidget(self._martial_versatility_cb)
 
         self._cantrip_versatility_cb = QCheckBox(
             "Cantrip Versatility (TCE) — Cleric/Druid: swap a cantrip at any level that grants "
@@ -252,7 +278,7 @@ class SettingsDialog(QDialog):
             "When on, Cleric and Druid characters can replace one cantrip they know with "
             "another from their class's spell list, at each level that grants an Ability "
             "Score Improvement — a Tasha's Cauldron of Everything optional rule.")
-        rcl.addWidget(self._cantrip_versatility_cb)
+        tcl.addWidget(self._cantrip_versatility_cb)
 
         self._bardic_versatility_cb = QCheckBox(
             "Bardic Versatility (TCE) — Bard: swap an Expertise skill or a cantrip at any level "
@@ -262,7 +288,7 @@ class SettingsDialog(QDialog):
             "When on, Bard characters can replace one Expertise skill or one cantrip they know, "
             "at each level that grants an Ability Score Improvement — a Tasha's Cauldron of "
             "Everything optional rule.")
-        rcl.addWidget(self._bardic_versatility_cb)
+        tcl.addWidget(self._bardic_versatility_cb)
 
         self._sorcerous_versatility_cb = QCheckBox(
             "Sorcerous Versatility (TCE) — Sorcerer: swap a Metamagic option or a cantrip at "
@@ -272,8 +298,38 @@ class SettingsDialog(QDialog):
             "When on, Sorcerer characters can replace one Metamagic option or one cantrip they "
             "know, at each level that grants an Ability Score Improvement — a Tasha's Cauldron "
             "of Everything optional rule.")
-        rcl.addWidget(self._sorcerous_versatility_cb)
-        root.addWidget(rules_card)
+        tcl.addWidget(self._sorcerous_versatility_cb)
+        root.addWidget(tasha_card)
+
+        # ── DM Secrets: purely cosmetic flavor toggles, grouped separately
+        # at the bottom since they have no effect on actual gameplay ──────
+        secrets_card = QFrame(); secrets_card.setStyleSheet(
+            f"QFrame{{background:{SURF};border:1px solid {BORDER};border-radius:10px;}}")
+        scl = QVBoxLayout(secrets_card); scl.setContentsMargins(14,12,14,14); scl.setSpacing(8)
+        scl.addWidget(_lbl("DM SECRETS", GOLD2, FS_SMALL, bold=True))
+
+        self._immersive_spells_cb = QCheckBox(
+            "Immersive Spells — spell names in the list change to reflect what "
+            "your character can actually say")
+        self._immersive_spells_cb.setChecked(opt_rules.get("immersive_spells", False))
+        self._immersive_spells_cb.setToolTip(
+            "Purely cosmetic — only the spell list's title text changes, never "
+            "the underlying spell, tooltip, or casting. Wild Shaped without "
+            "Beast Spells: titles become your beast form's noise, stretched to "
+            "roughly the original word's length. Raging: titles collapse to a "
+            "shout (\"SMASH!\" for most, a few iconic spells get their own "
+            "line). A Paladin with an Oath: titles are prefixed with a short "
+            "phrase themed to that Oath.")
+        scl.addWidget(self._immersive_spells_cb)
+
+        self._critical_flavor_cb = QCheckBox(
+            "Critical Flavor — a random quip at the bottom of the screen when your character dies")
+        self._critical_flavor_cb.setChecked(opt_rules.get("critical_flavor", False))
+        self._critical_flavor_cb.setToolTip(
+            "Purely cosmetic — a small toast under the death screen, picked at random "
+            "from a pool of gallows-humor one-liners. No gameplay effect.")
+        scl.addWidget(self._critical_flavor_cb)
+        root.addWidget(secrets_card)
 
         root.addStretch()
         btn_row = QHBoxLayout(); btn_row.addStretch()
@@ -290,10 +346,18 @@ class SettingsDialog(QDialog):
         self.app_window._set_theme(name)
 
     def _on_font_scale_changed(self, scale_text):
+        from . import theme
+        theme.set_font_scale(scale_text)
         sheet = getattr(self.app_window, "_sheet", None)
         if sheet:
             sheet.char["ui_font_scale"] = scale_text
             sheet._mark_dirty()
+        # Re-run the same rebuild path theme switching uses: it re-applies
+        # build_qss() (now reading the new _font_scale) and reconstructs
+        # CharacterSheet, whose __init__ calls sync_globals() to pick up
+        # the freshly recomputed FS_* values -- without this, the saved
+        # scale had nowhere to actually take effect.
+        self.app_window._set_theme(self.app_window._current_theme_name)
 
     def _on_done(self):
         sheet = getattr(self.app_window, "_sheet", None)
@@ -308,6 +372,9 @@ class SettingsDialog(QDialog):
             sheet.char["optional_rules"]["cantrip_versatility"] = self._cantrip_versatility_cb.isChecked()
             sheet.char["optional_rules"]["bardic_versatility"] = self._bardic_versatility_cb.isChecked()
             sheet.char["optional_rules"]["sorcerous_versatility"] = self._sorcerous_versatility_cb.isChecked()
+            sheet.char["optional_rules"]["max_hp_per_level"] = self._max_hp_per_level_cb.isChecked()
+            sheet.char["optional_rules"]["immersive_spells"] = self._immersive_spells_cb.isChecked()
+            sheet.char["optional_rules"]["critical_flavor"] = self._critical_flavor_cb.isChecked()
             # Saving here alone doesn't recompute char["resources"]
             # (only a full rebuild does), so a newly-toggled optional
             # feature's resource needs this explicit refresh rather
@@ -319,6 +386,60 @@ class SettingsDialog(QDialog):
                 sheet._refresh_action_tabs()
             sheet._mark_dirty()
         self.accept()
+
+
+def _find_readme_text() -> str:
+    """Locate and read README.md, whether running from source (repo
+    root, two levels up from this file) or from a frozen PyInstaller
+    build (bundled next to the executable via sys._MEIPASS)."""
+    candidates = []
+    if getattr(sys, "frozen", False):
+        candidates.append(os.path.join(getattr(sys, "_MEIPASS", ""), "README.md"))
+        candidates.append(os.path.join(os.path.dirname(sys.executable), "README.md"))
+    candidates.append(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "README.md"))
+    for path in candidates:
+        if path and os.path.isfile(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    return f.read()
+            except OSError:
+                continue
+    return ("# MIMIC\n\nA Complete D&D 5e Character Creator & Management Tool.\n\n"
+            "Created by Ethan O'Brien.\n\nThank you for downloading MIMIC, and for "
+            "supporting the project.\n\n(The full README.md could not be found "
+            "alongside this build.)")
+
+
+class CreditsDialog(QDialog):
+    """Shows the project README — what the app is, what it covers, and
+    its credits — in a scrollable, read-only view."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Credits")
+        self.setMinimumSize(640, 560)
+        self.setStyleSheet(parent.styleSheet() if parent else "")
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(18, 16, 18, 16); lay.setSpacing(12)
+
+        viewer = QTextBrowser()
+        viewer.setOpenExternalLinks(True)
+        viewer.setStyleSheet(
+            f"QTextBrowser{{background:{SURF};border:1px solid {BORDER};"
+            f"border-radius:8px;padding:10px;color:{TEXT};font-size:{FS_BODY}px;}}")
+        viewer.setMarkdown(_find_readme_text())
+        lay.addWidget(viewer, 1)
+
+        btn_row = QHBoxLayout(); btn_row.addStretch()
+        close_btn = QPushButton("Close"); close_btn.setFixedHeight(34)
+        close_btn.setStyleSheet(
+            f"QPushButton{{background:{qa(GOLD,0x33)};border:2px solid {GOLD};border-radius:6px;"
+            f"color:{GOLD2};font-weight:700;padding:4px 24px;}}"
+            f"QPushButton:hover{{background:{GOLD};color:{BG};}}")
+        close_btn.clicked.connect(self.accept)
+        btn_row.addWidget(close_btn)
+        lay.addLayout(btn_row)
 
 
 class CharacterCreatorApp(QMainWindow):
@@ -349,6 +470,59 @@ class CharacterCreatorApp(QMainWindow):
 
         self._build_menu()
 
+        # Easter egg: typing "cheese" anywhere in the app pops a tiny
+        # cheese icon in the corner for a few seconds -- no purpose,
+        # just for fun. An application-wide event filter is the only
+        # way to catch it regardless of which widget currently has
+        # focus (a text field, a spell search box, the sheet itself).
+        self._cheese_buffer = ""
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.KeyPress:
+            text = event.text()
+            if text:
+                self._cheese_buffer = (self._cheese_buffer + text.lower())[-6:]
+                if self._cheese_buffer == "cheese":
+                    self._show_cheese_easter_egg()
+                    self._cheese_buffer = ""
+        return super().eventFilter(obj, event)
+
+    def _show_cheese_easter_egg(self):
+        if not hasattr(self, "_cheese_lbl"):
+            self._cheese_lbl = QLabel("\U0001f9c0", self)
+            self._cheese_lbl.setStyleSheet("font-size:32px;background:transparent;")
+            self._cheese_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+            self._cheese_timer = QTimer(self)
+            self._cheese_timer.setSingleShot(True)
+            self._cheese_timer.timeout.connect(self._cheese_lbl.hide)
+        self._cheese_lbl.adjustSize()
+        self._cheese_lbl.move(self.width() - self._cheese_lbl.width() - 18, 46)
+        self._cheese_lbl.raise_()
+        self._cheese_lbl.show()
+        self._cheese_timer.start(5000)
+
+    _GOLDEN_MENU_QSS = (
+        "QMenuBar{background:#3a2e05;color:#f5cc50;}"
+        "QMenuBar::item{background:transparent;color:#f5cc50;padding:4px 10px;}"
+        "QMenuBar::item:selected{background:#f5cc50;color:#3a2e05;}"
+        "QMenu{background:#3a2e05;color:#f5cc50;border:2px solid #f5cc50;}"
+        "QMenu::item{padding:6px 20px;}"
+        "QMenu::item:selected{background:#f5cc50;color:#3a2e05;}"
+    )
+
+    def _apply_name_easter_egg(self, char):
+        """If the loaded character is named after this app's creator,
+        the menu bar goes gold -- regardless of the active theme. A
+        widget's own setStyleSheet() takes precedence over the window's,
+        so this override survives later theme switches without needing
+        to be re-applied from _set_theme()."""
+        name = (char.get("name") or "").strip().lower()
+        self.menuBar().setStyleSheet(
+            self._GOLDEN_MENU_QSS if name == "ethan o'brien" else "")
+
     def _build_menu(self):
         mb = self.menuBar()
         fm = mb.addMenu("&File")
@@ -368,9 +542,17 @@ class CharacterCreatorApp(QMainWindow):
         sm = mb.addMenu("&Settings")
         a = QAction("⚙  Settings…", self); a.setShortcut("Ctrl+,"); a.triggered.connect(self._open_settings); sm.addAction(a)
 
+        cm = mb.addMenu("&Credits")
+        a = QAction("View Credits…", self); a.triggered.connect(self._open_credits); cm.addAction(a)
+
     def _open_settings(self):
         from dnd_app.ui.main_window import SettingsDialog
         dlg = SettingsDialog(self, self)
+        dlg.exec()
+
+    def _open_credits(self):
+        from dnd_app.ui.main_window import CreditsDialog
+        dlg = CreditsDialog(self)
         dlg.exec()
 
     def _set_theme(self, name):
@@ -404,6 +586,9 @@ class CharacterCreatorApp(QMainWindow):
             QMessageBox.warning(self, "Load Error", str(e))
 
     def _show_sheet(self, char: dict):
+        from . import theme
+        theme.set_font_scale(char.get("ui_font_scale", "Medium (default)"))
+        self._apply_name_easter_egg(char)
         self._stack.setUpdatesEnabled(False)
         try:
             if self._sheet:
@@ -513,7 +698,7 @@ class CharacterCreatorApp(QMainWindow):
             self._dice_roller = DiceRollerPanel(char, parent=self)
         if self._dice_roller.isHidden():
             geo = self.geometry()
-            self._dice_roller.move(geo.right()-340, geo.top()+80)
+            self._dice_roller.move(geo.right()-400, geo.top()+80)
             self._dice_roller.show()
         else:
             self._dice_roller.raise_(); self._dice_roller.activateWindow()
