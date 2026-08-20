@@ -1,4 +1,8 @@
-"""Shared helper widgets used across wizard and sheet."""
+"""Shared helper widgets used across wizard and sheet.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
+"""
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QColor

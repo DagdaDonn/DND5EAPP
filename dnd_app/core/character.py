@@ -1,9 +1,17 @@
-import math
 """
-Character model — the single source of truth for all character state.
-A Character is a plain dataclass-style dict that can be serialized to JSON.
+Character module.
+
+Defines the character model — the single source of truth for all
+character state. A character is a plain dataclass-style dict that can
+be serialized to JSON, plus accessor/mutator helpers (ability_score,
+ability_mod, class_levels, subclasses, add_equipment, spend_spell_slot,
+etc.) used throughout the rest of the app.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
+import math
 import copy
 from dataclasses import dataclass, field
 from typing import Optional
@@ -346,10 +354,8 @@ def long_rest(char: dict) -> None:
     char["spell_slots_used"] = [0] * 9
     char["pact_slots_used"] = 0
     char["death_saves"] = default_death_saves()
-    # Wild Shape uses a separate counter (not the "resources" list system),
-    # so it needs its own explicit reset here — confirmed this was
-    # previously missing entirely, meaning Wild Shape never actually
-    # recovered on any rest.
+    # Wild Shape uses a separate counter (not the "resources" list
+    # system), so it needs its own explicit reset here.
     char["_wildshape_uses_spent"] = 0
     # Companions that died mid-adventure (Steel Defender, Beast of the
     # Land/Sea/Sky) become available to recreate again at the end of a

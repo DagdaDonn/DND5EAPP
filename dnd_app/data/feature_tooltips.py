@@ -1,4 +1,8 @@
-"""PHB feature descriptions for tooltip display in the Features tab."""
+"""PHB feature descriptions for tooltip display in the Features tab.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
+"""
 
 FEATURE_DESCS = {
     'Ability Score Improvement': 'Increase one ability score by 2, or two ability scores by 1 each. Alternatively, take a feat.',
@@ -1652,9 +1656,8 @@ FEATURE_DESCS.update({'Darkvision 60 ft': "You can see in dim light within 60 fe
 
 })
 
-# ── Discovered while building the new class_feature_index.py: bundled
-# feature names present in the old SUBCLASS_FEATURES data that had no
-# matching tooltip at all (blank description in the Features tab).
+# ── Bundled feature names present in the old SUBCLASS_FEATURES data
+# that had no matching tooltip (blank description in the Features tab) ──
 FEATURE_DESCS.update({
     'Bonus Proficiencies + Cutting Words': "Bonus Proficiencies: gain proficiency with three skills of your choice. Cutting Words: as a reaction when a creature you can see within 60 ft makes an attack roll, ability check, or damage roll, expend one Bardic Inspiration die and subtract the number rolled from that creature's roll.",
     'Bonus Proficiencies (Swords)': "Gain proficiency with medium armor and the scimitar. A simple or martial weapon you're proficient with can serve as a spellcasting focus for your bard spells.",
@@ -1664,8 +1667,7 @@ FEATURE_DESCS.update({
     'Instinctive Pounce': "As part of the bonus action you take to enter your rage, you can move up to half your speed.",
 })
 
-# ── Discovered while building out class_feature_index.py's new
-# subclasses (Cleric domains, Monk Four Elements) ──────────────────────────
+# ── Cleric domains, Monk Four Elements ──────────────────────────────
 FEATURE_DESCS.update({
     'Bonus Proficiency (Heavy Armor)': "When you choose this domain at 1st level, you gain proficiency with heavy armor.",
     'Bonus Proficiency (Death)': "When you choose this domain at 1st level, you gain proficiency with martial weapons.",
@@ -1677,9 +1679,8 @@ FEATURE_DESCS.update({
 
 
 
-# ── Discovered while building out class_feature_index.py's remaining
-# subclasses (final batch — Fighter, Cleric, Monk, Paladin, Ranger, Rogue,
-# Sorcerer, Warlock, Wizard, Druid subclasses added this session) ────────
+# ── Fighter, Cleric, Monk, Paladin, Ranger, Rogue, Sorcerer, Warlock,
+# Wizard, Druid subclasses ────────────────────────────────────────────
 FEATURE_DESCS.update({
     'Arcane Shot (10th)': "You gain an additional Arcane Shot option of your choice.",
     'Arcane Shot (18th)': "You gain an additional Arcane Shot option of your choice, and each of your known options improves.",
@@ -1717,17 +1718,17 @@ FEATURE_DESCS.update({
     'Twinkling Constellations': "Prerequisite: 10th level. Starry Form's benefits improve: Archer's damage increases, Chalice's healing increases, and Dragon grants a 20 ft flying speed. You can also change which constellation is active as a bonus action at the start of each of your turns, with no action required.",
 })
 
-# ── Discovered while auditing Bard subclasses ───────────────────────────────
+# ── Bard subclasses ───────────────────────────────────────────────────
 FEATURE_DESCS.update({
     'Infectious Inspiration': "Prerequisite: 14th level. When a creature within 60 feet of you succeeds on an ability check, attack roll, or saving throw using one of your Bardic Inspiration dice, you can use your reaction to give a Bardic Inspiration die (without expending a use) to a different creature within 60 feet, other than yourself.",
 })
 
-# ── Discovered while auditing Paladin ────────────────────────────────────────
+# ── Paladin ────────────────────────────────────────────────────────────
 FEATURE_DESCS.update({
     'Improved Divine Smite': "Prerequisite: 11th level. Whenever you hit a creature with a melee weapon, the attack deals an extra 1d8 radiant damage, whether or not you also expend a spell slot for Divine Smite.",
 })
 
-# ── Discovered while auditing Cleric ─────────────────────────────────────────
+# ── Cleric ─────────────────────────────────────────────────────────────
 FEATURE_DESCS.update({
     'Charm Animals and Plants': "Channel Divinity: each beast or plant creature within 30 feet must succeed on a WIS save or be charmed by you for 1 minute.",
     # The following 7 are unofficial, third-party content (Plane Shift:
@@ -1744,7 +1745,7 @@ FEATURE_DESCS.update({
     'Bonus Proficiencies (Martial Weapons, Heavy Armor)': "Gain proficiency with martial weapons and heavy armor.",
 })
 
-# ── Discovered while auditing Paladin's Oath of the Ancients and Oathbreaker ─
+# ── Paladin's Oath of the Ancients and Oathbreaker ─────────────────────
 FEATURE_DESCS.update({
     "Nature's Wrath": "Channel Divinity: spectral vines spring up and reach for a creature within 15 feet you can see. It must succeed on a STR save or be restrained, repeating the save at the end of each of its turns to escape.",
     'Turn the Faithless': "Channel Divinity: each fey or fiend within 30 feet that can hear you must succeed on a WIS save or be turned for 1 minute or until it takes damage.",

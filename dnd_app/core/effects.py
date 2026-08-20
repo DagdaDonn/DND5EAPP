@@ -13,6 +13,9 @@ Hooks:
   extra_action  True → grants one extra Action per turn (Haste)
   conc       effect requires the *caster's* concentration (display hint)
   note       one-line mechanical summary shown in the Effects tab
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 EFFECT_TABLE: dict[str, dict] = {
@@ -693,6 +696,54 @@ for _prot_type in ("Aberrations", "Beasts", "Celestials", "Elementals", "Fey", "
     }
 
 
+EFFECT_TABLE["Scroll of Protection"] = {
+    "duration_category": "short",
+    "note": "Generic placeholder -- the real item is always one of the 8 creature-type-specific "
+            "variants above (Aberrations/Beasts/Celestials/Elementals/Fey/Fiends/Plants/Undead), "
+            "each with its own full barrier effect.",
+}
+
+EFFECT_TABLE["Nether Scroll of Azumar"] = {
+    "duration_category": "long",
+    "note": "Not consumable. Takes 30 days of 8-hr/day study, then a DC 25 Intelligence (Arcana) "
+            "check (16d10 psychic damage and another 30 days to study on a failure). On success: "
+            "Intelligence +2 (once, max 22) and permanent advantage on saving throws vs. spells and "
+            "magical effects, plus a stone golem ally appears (turns to dust if you die). Its one-time "
+            "ability-score boost parallels the DMG ability-score Manuals, but the summoned-ally "
+            "component isn't tracked anywhere in this app -- clear this from the Effects tab once "
+            "resolved, and apply the INT increase by hand via the Abilities tab.",
+}
+
+EFFECT_TABLE["Scroll of Tarrasque Summoning"] = {
+    "duration_category": "short",
+    "note": "Reading the scroll (action) summons the tarrasque in an unoccupied space you can see "
+            "within 1 mile, hostile to all creatures but itself; it disappears at 0 hit points. This "
+            "app has no monster/summon-tracking engine, so the tarrasque itself isn't modeled -- "
+            "clear this from the Effects tab once resolved.",
+}
+
+for _lvl, _dc in ((1, 11), (2, 12), (3, 13), (4, 14), (5, 15), (6, 16), (7, 17), (8, 18), (9, 19)):
+    _ord = {1: "1st", 2: "2nd", 3: "3rd"}.get(_lvl, f"{_lvl}th")
+    EFFECT_TABLE[f"Spell Scroll ({_ord} level)"] = {
+        "duration_category": "short",
+        "note": f"Reading the scroll (action) casts the {_ord}-level spell it bears for free if it's "
+                f"on your class's spell list; otherwise make an Intelligence (Arcana) check, DC {_dc} "
+                f"-- a failure loses the spell with no other effect. Either way the scroll is destroyed "
+                f"after use, and a spell cast this way uses the scroll's own save DC/attack bonus, not "
+                f"yours. The specific spell is chosen per physical copy, which this app doesn't track "
+                f"separately -- cast the actual spell from your own known/prepared list to model it, "
+                f"then clear this from the Effects tab.",
+    }
+EFFECT_TABLE["Spell Scroll (Cantrip)"] = {
+    "duration_category": "short",
+    "note": "Reading the scroll (its own casting time) casts the cantrip it bears for free if it's on "
+            "your class's spell list; otherwise the scroll is unintelligible. The scroll crumbles to "
+            "dust once cast. The specific cantrip is chosen per physical copy, which this app doesn't "
+            "track separately -- cast the actual cantrip from your own known list to model it, then "
+            "clear this from the Effects tab.",
+}
+
+
 # Potions/oils with an instant, one-shot effect rather than a lingering
 # active_effect -- healing, curing, or (for Potion of Poison) harming the
 # drinker immediately. Applied directly to current_hp/conditions by
@@ -724,6 +775,11 @@ INSTANT_POTION_EFFECTS: dict[str, dict] = {
         "cure_conditions": ["Poisoned"],
         "cure_note": "Neutralizes thessaltoxin poison.",
     },
+    "Potion of Longevity": {
+        "cure_note": "Physical age reduced by 1d6+6 years (minimum age 13). Each subsequent drink "
+                      "has a cumulative 10% chance of instead aging you by 1d6+6 years. A roleplay/"
+                      "narrative effect this app doesn't track a character age field for -- adjust by hand.",
+    },
 }
 
 
@@ -747,10 +803,9 @@ def effect_ac_bonus(char: dict) -> int:
             from dnd_app.core.calculator import ability_mod
             total += max(0, ability_mod(char, "INT"))
     # Dual Wielder: +1 AC while wielding a separate melee weapon in each
-    # hand. Confirmed via direct testing this was entirely unwired — checks
-    # the character's actual equipped weapons (not just "has the feat") for
-    # 2+ distinct melee weapons, neither Two-handed, since a Two-handed
-    # weapon can't be one of a pair held one in each hand.
+    # hand. Checks the character's actual equipped weapons (not just
+    # "has the feat") for 2+ distinct melee weapons, neither Two-handed,
+    # since a Two-handed weapon can't be one of a pair held one in each hand.
     if "Dual Wielder" in char.get("feats", []):
         from dnd_app.data.items import WEAPON_DICT
         melee_one_handed = []
@@ -761,8 +816,7 @@ def effect_ac_bonus(char: dict) -> int:
                 melee_one_handed.append(wname)
         if len(set(melee_one_handed)) >= 2:
             total += 1
-    # Revenant Blade: +1 AC while holding a double-bladed scimitar with
-    # two hands. Confirmed missing entirely.
+    # Revenant Blade: +1 AC while holding a double-bladed scimitar with two hands.
     if "Revenant Blade" in char.get("feats", []):
         equipped = {w.split(" +")[0].strip() for w in char.get("equipped_weapons", [])}
         if "Double-Bladed Scimitar" in equipped:

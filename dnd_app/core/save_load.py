@@ -1,5 +1,8 @@
 """
 Save/Load — JSON serialization for character dicts with validation and migration.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 import json

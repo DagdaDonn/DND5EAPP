@@ -1,7 +1,17 @@
 """
-Calculator — derives all computed stats from a character dict.
-All functions are pure (no side effects); call update_all() to push
-computed values back into the character dict.
+Calculator module.
+
+For a given character dict, derive every computed stat the sheet
+displays: ability modifiers, proficiency bonus, AC, initiative, speed
+(walk/fly/swim/climb, including condition and exhaustion locks),
+senses, saving throws, skill checks, spell save DC/attack bonus,
+resistances/immunities, and class/racial/feat/magic-item resource
+pools. Reads only from the character dict and static game data;
+individual getter functions are pure, while update_all() writes the
+aggregated results back onto the character dict for the UI to render.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 from .character import (
@@ -204,9 +214,7 @@ def can_ritual_cast(char: dict, spell: dict) -> bool:
 
 
 def get_prof_bonus(char: dict) -> int:
-    # magic_prof_bonus: Ioun Stone (Mastery) — confirmed via grep this
-    # effect type existed in MAGIC_ITEM_EFFECTS but had no handler anywhere,
-    # so attuning to the stone silently did nothing.
+    # magic_prof_bonus holds additive proficiency-bonus sources, e.g. Ioun Stone of Mastery.
     return prof_bonus(total_level(char)) + char.get("magic_prof_bonus", 0)
 
 
@@ -272,10 +280,8 @@ def get_initiative(char: dict) -> int:
 
 def get_skill_bonus(char: dict, skill: str) -> int:
     ability = SKILL_ABILITY.get(skill, "STR")
-    # Forest Sage: substitutes the player's chosen INT/WIS for Animal
-    # Handling/Arcana/Nature/Survival checks specifically. Confirmed a
-    # real gap: the feat's own text names these 4 skills explicitly,
-    # but nothing read the stored ability choice at all.
+    # Forest Sage: substitutes the player's chosen INT/WIS ability for
+    # Animal Handling/Arcana/Nature/Survival checks.
     if skill in ("Animal Handling", "Arcana", "Nature", "Survival") and "Forest Sage" in char.get("feats", []):
         fs_ability = char.get("_choices", {}).get("forest_sage_ability")
         if fs_ability:
@@ -456,11 +462,8 @@ def get_save_advantage_status(char: dict, ability: str) -> dict:
             if char_race != entry["race"]:
                 continue
         sources.append(entry)
-    # Magic items (Ring of Protection, Mindguard Crown, etc.) — see
-    # advantage_save effect type in core/magic_items.py. Confirmed via
-    # direct grep that this list was populated by _apply_single_effect but
-    # never read anywhere, so any item using "advantage_save" silently did
-    # nothing; wiring it in here is what actually makes it work.
+    # Magic items (Ring of Protection, Mindguard Crown, etc.) populate this
+    # list via the advantage_save effect type in core/magic_items.py.
     for item_ability, item_name in char.get("advantage_saves_magic", []):
         if item_ability in ("all", ability):
             sources.append({"ability": ability, "source": item_name})
@@ -657,7 +660,7 @@ def _get_ac_base(char: dict) -> int:
             base_ac = armor["ac"] + armor_magic_bonus
             dex_cap = armor.get("dex_cap")
             # Medium Armor Master: with DEX 16+ (mod +3), medium armor's
-            # Dexterity cap rises from +2 to +3. Confirmed missing entirely.
+            # Dexterity cap rises from +2 to +3.
             if (dex_cap == 2 and dex_mod >= 3
                     and "Medium Armor Master" in char.get("feats", [])):
                 dex_cap = 3
@@ -706,6 +709,12 @@ def get_speed_breakdown(char: dict) -> list[tuple[str, str]]:
         parts.append(("Exhaustion (5+)", "speed = 0"))
     elif exh >= 2:
         parts.append(("Exhaustion (2+)", "\u00d70.5 (rounded down)"))
+    active_conditions = set(char.get("conditions", []))
+    lock_sources = active_conditions & {
+        "Grappled", "Restrained", "Paralyzed", "Petrified", "Stunned", "Unconscious",
+    }
+    for cond in lock_sources:
+        parts.append((cond, "speed = 0"))
     return parts
 
 
@@ -735,8 +744,8 @@ def get_spell_attack_breakdown(char: dict, ability: str) -> list[tuple[str, int]
 def get_condition_save_status(char: dict, ability: str) -> dict:
     """Whether a saving throw of the given ability currently auto-fails
     or has disadvantage from active conditions/exhaustion. Distinguishes
-    auto-fail (Paralyzed/Stunned/Unconscious force a failed STR/DEX save
-    outright, not just disadvantage on it) from disadvantage (Restrained
+    auto-fail (Paralyzed/Stunned/Unconscious/Petrified force a failed
+    STR/DEX save outright, not just disadvantage on it) from disadvantage (Restrained
     imposes disadvantage specifically on DEX saves; exhaustion 3+ affects
     all saves) since the real rule text for each is genuinely different,
     not just "some generic penalty."
@@ -745,7 +754,7 @@ def get_condition_save_status(char: dict, ability: str) -> dict:
     auto_fail_sources = []
     dis_sources = []
     if ability in ("STR", "DEX"):
-        for cond in ("Paralyzed", "Stunned", "Unconscious"):
+        for cond in ("Paralyzed", "Stunned", "Unconscious", "Petrified"):
             if cond in active:
                 auto_fail_sources.append(cond)
     if ability == "DEX" and "Restrained" in active:
@@ -1144,14 +1153,11 @@ def get_innate_resistance_grants(char: dict) -> list[dict]:
     for feat_name in known_feats:
         out.extend(FEAT_RESISTANCES.get(feat_name, []))
 
-    # DM-Granted Bonus Features: confirmed real, direct mechanical
-    # content (resistances/immunities) previously never resolved at
-    # all — dm_rewards.py had zero mechanical wiring of any kind.
+    # DM-Granted Bonus Features: resistance/immunity grants from dm_rewards.py.
     for reward_name in char.get("dm_rewards", []):
         out.extend(DM_REWARD_RESISTANCES.get(reward_name, []))
 
-    # Spells (spells.py): confirmed 454 of 508 spells in this app had
-    # zero mechanical wiring of any kind before this pass began.
+    # Spells: resistance/immunity grants from active spell effects (spells.py).
     for effect_name in char.get("active_effects", []):
         out.extend(SPELL_EFFECT_RESISTANCES.get(effect_name, []))
 
@@ -1163,9 +1169,7 @@ def get_innate_resistance_grants(char: dict) -> list[dict]:
         out.append({"kind": "resistance", "target": "lightning", "source": "Maelstrom Aura"})
         out.append({"kind": "resistance", "target": "thunder", "source": "Maelstrom Aura"})
 
-    # Scion of the Outer Planes: resistance depends on the chosen plane
-    # type (Planar Infusion table). Confirmed missing entirely, alongside
-    # the missing choice mechanism for the plane type itself.
+    # Scion of the Outer Planes: resistance depends on the player's chosen plane type.
     if "Scion of the Outer Planes" in known_feats:
         plane_choice = char.get("_choices", {}).get("feat_scion_plane_type", [])
         plane = plane_choice[0] if plane_choice else None
@@ -1178,16 +1182,23 @@ def get_innate_resistance_grants(char: dict) -> list[dict]:
             out.append({"kind": "resistance", "target": SCION_PLANE_RESISTANCE[plane],
                         "source": "Scion of the Outer Planes"})
 
-    # Resistant Armor (Artificer infusion): confirmed a genuinely
-    # missing choice mechanism and mechanical effect — only had a
-    # generic passive note before. Only applies while the infusion is
-    # actually active (checked against active_infusions), not just
-    # known, matching how every other infusion effect in this app is
-    # gated.
+    # Resistant Armor (Artificer infusion): applies only while the infusion
+    # is actually active, not merely known — matching how every other
+    # infusion effect in this app is gated.
     if any(inf.get("infusion") == "Resistant Armor" for inf in char.get("active_infusions", [])):
         ra_type = char.get("_choices", {}).get("resistant_armor_type", "")
         if ra_type:
             out.append({"kind": "resistance", "target": ra_type.lower(), "source": "Resistant Armor"})
+
+    # Petrified (PHB p.291): resistance to all damage, immunity to poison
+    # damage and the poisoned condition, and immunity to disease. Its
+    # auto-fail STR/DEX saves are handled separately in
+    # get_condition_save_status.
+    if "Petrified" in char.get("conditions", []):
+        out.append({"kind": "resistance", "target": "all", "source": "Petrified"})
+        out.append({"kind": "immunity", "target": "poison", "source": "Petrified"})
+        out.append({"kind": "condition", "condition": "poisoned", "source": "Petrified"})
+        out.append({"kind": "condition", "condition": "disease", "source": "Petrified"})
 
     cl = class_levels(char)
     subs = subclasses(char)
@@ -1399,9 +1410,7 @@ def get_innate_movement_grants(char: dict) -> dict:
         for grant in rule["grants"]:
             _consider(grant["kind"], grant["speed"])
 
-    # Investiture of Wind (spell): real 60 ft. flying speed while active.
-    # Confirmed zero mechanical presence existed for this before — 454
-    # of 508 spells in this app had no mechanical wiring of any kind.
+    # Investiture of Wind (spell): 60 ft. flying speed while active.
     if "Investiture of Wind" in active_fx:
         _consider("fly", 60)
 
@@ -1410,9 +1419,7 @@ def get_innate_movement_grants(char: dict) -> dict:
     if any(fx.startswith("Tasha's Otherworldly Guise") for fx in active_fx):
         _consider("fly", 40)
 
-    # Draconic Transformation (spell): real 60 ft. flying speed
-    # ("Wings" clause) — confirmed from the full source text, missed
-    # in an earlier truncated view of this same spell.
+    # Draconic Transformation (spell): grants a 60 ft. flying speed ("Wings" clause).
     if "Draconic Transformation" in active_fx:
         _consider("fly", 60)
 
@@ -1661,11 +1668,10 @@ def get_available_wildshape_beasts(char: dict) -> list[str]:
             continue
         out.append(name)
 
-    # Circle of the Moon's Elemental Wild Shape: confirmed via research
-    # this is a distinct feature granted at exactly 10th level, not
-    # something the generic CR formula above would correctly grant on
-    # its own (a level-10 Moon Druid's generic max CR is only 3, not
-    # the 5 these elementals require) — needs its own explicit gate.
+    # Circle of the Moon's Elemental Wild Shape is a distinct 10th-level
+    # feature, not reachable via the generic max-CR formula above (a
+    # level-10 Moon Druid's generic max CR is only 3, not the 5 these
+    # elementals require), so it needs its own explicit gate.
     if is_moon and druid_lvl >= 10:
         for elem in ("Air Elemental", "Water Elemental", "Earth Elemental", "Fire Elemental"):
             if elem in WILDSHAPE_BEASTS and elem not in out:
@@ -1836,21 +1842,15 @@ def get_effective_speed(char: dict) -> dict:
     from .magic_items import parse_magic_suffix
     base = char.get("speed", 30) + char.get("monk_speed_bonus", 0) + char.get("magic_speed_bonus", 0)
 
-    # Subrace walking speed bonuses (Wood Elf, Half-Elf Wood Descent,
-    # Shifter Swiftstride all grant +5 ft base walking speed per their
-    # actual trait text) — confirmed none of this was mechanically
-    # wired, only present as descriptive subrace text.
+    # Subrace walking speed bonuses: Wood Elf, Half-Elf Wood Descent, and
+    # Shifter Swiftstride each grant +5 ft base walking speed.
     subrace_speed = (char.get("subrace") or "").lower()
     if "wood" in subrace_speed or "swiftstride" in subrace_speed:
         base += 5
 
-    # Race-granted swim/climb speeds: confirmed via a systematic search
-    # this was a genuinely broad gap — char["swim_speed"]/["climb_speed"]
-    # had no source at all beyond one specific Barbarian subclass
-    # feature (below), despite being real, named traits on several
-    # races. Each race's real, specific value is used rather than a
-    # generic guess (some are a flat number, others scale to match
-    # walking speed).
+    # Race-granted swim/climb speeds. Each race's specific value is used
+    # rather than a generic guess — some are a flat number, others scale
+    # to match walking speed.
     race_name_sp = (char.get("species") or char.get("race", "")).strip()
     race_swim_bonus = 0
     race_climb_bonus = 0
@@ -1871,8 +1871,7 @@ def get_effective_speed(char: dict) -> dict:
         "Spider Climb" in char.get("active_effects", [])
     # Roving (Ranger's Deft Explorer, TCE optional, 6th level): climb
     # and swim speed equal to walking speed, plus a flat +5 ft walking
-    # speed bonus. Confirmed zero mechanical wiring anywhere despite
-    # being correctly gated as a displayable optional feature.
+    # speed bonus.
     ranger_lvl_rv = class_levels(char).get("Ranger", 0)
     roving_on = ranger_lvl_rv >= 6 and (
         char.get("_choices", {}).get("optional_features", {}).get("Deft Explorer", False)
@@ -1884,10 +1883,7 @@ def get_effective_speed(char: dict) -> dict:
     else:
         char["_speed_bonus_sources"] = []
 
-    # Storm Soul (Barbarian, Storm Herald, 6th level, Sea environment):
-    # 30 ft. swim speed. Confirmed only the resistance half of this
-    # feature was wired elsewhere (resistance_sources.py) — this swim
-    # speed component was completely missing.
+    # Storm Soul (Barbarian, Storm Herald, 6th level, Sea environment): 30 ft. swim speed.
     swim_bonus = 0
     barb_lvl_storm = class_levels(char).get("Barbarian", 0)
     if barb_lvl_storm >= 6 and "storm herald" in subclasses(char).get("Barbarian", "").lower():
@@ -1910,10 +1906,9 @@ def get_effective_speed(char: dict) -> dict:
             base += 10
 
     # Elk Totem Spirit (Barbarian Path of the Totem Warrior, 3rd level):
-    # +15 ft. while not wearing heavy armor. Confirmed zero
-    # implementation existed for this at all — computed independently
-    # since Fast Movement's is_heavy above is gated behind level 5 and
-    # wouldn't exist yet for an Elk Totem Warrior at 3rd-4th level.
+    # +15 ft. while not wearing heavy armor. Computed independently of
+    # Fast Movement's is_heavy above, since that's gated behind level 5
+    # and wouldn't exist yet for an Elk Totem Warrior at 3rd-4th level.
     if barb_lvl >= 3 and "totem warrior" in subclasses(char).get("Barbarian", "").lower():
         elk_picks = char.get("_choices", {}).get("totem_spirit_3", [])
         if any("elk" in p.lower() for p in elk_picks):
@@ -1951,13 +1946,11 @@ def get_effective_speed(char: dict) -> dict:
     if bh_lvl_speed >= 10:
         base += 5
 
-    # Mobile (feat): always-on +10 ft. Confirmed via direct testing this
-    # was entirely unwired despite being one of the feat's core benefits.
+    # Mobile (feat): always-on +10 ft.
     if "Mobile" in char.get("feats", []):
         base += 10
 
-    # Squat Nimbleness (feat, Dwarf/Small race): always-on +5 ft. Same gap
-    # as Mobile above.
+    # Squat Nimbleness (feat, Dwarf/Small race): always-on +5 ft.
     if "Squat Nimbleness" in char.get("feats", []):
         base += 5
 
@@ -1967,22 +1960,22 @@ def get_effective_speed(char: dict) -> dict:
         walk = 0
     elif exh >= 2:
         walk = walk // 2
-    # Grappled/Restrained: "speed becomes 0" per their real condition
-    # text — applies to every movement speed a creature has, not just
-    # walking. Confirmed this was never checked anywhere despite
-    # exhaustion's speed penalties (just above) already being wired
-    # correctly in this same function — conditions were purely visual
-    # before this fix, with no effect on any actual calculation.
+    # Grappled/Restrained ("speed becomes 0") and Paralyzed/Petrified/
+    # Stunned/Unconscious ("can't move") each zero every movement speed a
+    # creature has, not just walking. Incapacitated alone does not stop
+    # movement, and Prone only restricts movement to crawling, so neither
+    # is included here.
     active_conditions = set(char.get("conditions", []))
-    speed_locked = "Grappled" in active_conditions or "Restrained" in active_conditions
+    speed_locked = bool(active_conditions & {
+        "Grappled", "Restrained", "Paralyzed", "Petrified", "Stunned", "Unconscious",
+    })
     if speed_locked:
         walk = 0
     if race_swim_matches_walk:
         race_swim_bonus = walk
     if race_climb_matches_walk:
         race_climb_bonus = walk
-    # Investiture of Wind (spell): flying speed 60 ft. Confirmed 454 of
-    # 508 spells in this app had zero mechanical wiring before this pass.
+    # Investiture of Wind (spell): flying speed 60 ft.
     race_fly_bonus = 60 if "Investiture of Wind" in char.get("active_effects", []) else 0
     return {
         "walk": max(0, walk),
@@ -2060,24 +2053,18 @@ def get_character_senses(char: dict) -> dict:
         senses["darkvision"] = max(senses["darkvision"], 120)
 
     # Keenness of the Stone Giant (feat): darkvision 60 ft., or +60 ft.
-    # range if you already have darkvision from another source. Confirmed
-    # missing entirely — the removed FEAT_RESISTANCES entry had wrongly
-    # fabricated a poison resistance for this feat instead of its actual
-    # benefit.
+    # range if you already have darkvision from another source.
     if "Keenness of the Stone Giant" in char.get("feats", []):
         if senses["darkvision"] > 0:
             senses["darkvision"] += 60
         else:
             senses["darkvision"] = 60
 
-    # Doppelganger (DM Reward): darkvision 60 ft. Confirmed real, concrete
-    # text with zero mechanical presence anywhere before this.
+    # Doppelganger (DM Reward): darkvision 60 ft.
     if "Doppelganger" in char.get("dm_rewards", []):
         senses["darkvision"] = max(senses["darkvision"], 60)
 
-    # Darkvision (spell): confirmed zero mechanical presence anywhere
-    # before this — 508 spells in this app, 454 with no mechanical
-    # wiring at all.
+    # Darkvision (spell): darkvision 60 ft.
     if "Darkvision" in char.get("active_effects", []):
         senses["darkvision"] = max(senses["darkvision"], 60)
 
@@ -2163,13 +2150,22 @@ def update_all(char: dict) -> dict:
     # Saving throws are set by rebuild(); do not overwrite here.
 
     # ── Magic items ───────────────────────────────────────────────────────────
-    from .magic_items import apply_all_magic_item_effects
+    from .magic_items import apply_all_magic_item_effects, _active_item_names
     apply_all_magic_item_effects(char)
 
-    # Exhaustion level 1+: disadvantage on ability checks (PHB p.291).
-    # Confirmed this was never applied anywhere — added on top of whatever
-    # magic items already contributed to skill_disadvantages, using the
-    # same list/source-tracking mechanism.
+    # Armor of Vulnerability: speed -10 ft while worn, but only if the
+    # wearer's STR is below 15 -- a per-character conditional the generic
+    # data-driven magic-item-effect system has no way to express, so
+    # checked directly here (same pattern as Heavy Armor Master below).
+    # Its Stealth disadvantage is the ordinary, unconditional part of the
+    # same item and is wired normally via MAGIC_ITEM_EFFECTS.
+    if "Armor of Vulnerability" in _active_item_names(char) and ability_score(char, "STR") < 15:
+        char["magic_speed_bonus"] = char.get("magic_speed_bonus", 0) - 10
+        char.setdefault("_speed_bonus_sources", []).append(("Armor of Vulnerability", -10))
+
+    # Exhaustion level 1+: disadvantage on ability checks (PHB p.291),
+    # layered on top of whatever magic items already contributed to
+    # skill_disadvantages via the same list/source-tracking mechanism.
     if char.get("exhaustion", 0) >= 1:
         from dnd_app.data.classes import SKILLS as _ALL_SKILLS
         dis = char.setdefault("skill_disadvantages", [])
@@ -2179,14 +2175,13 @@ def update_all(char: dict) -> dict:
                 dis.append(sk)
             src.setdefault(sk, []).append("Exhaustion (level 1+)")
 
-    # Frightened/Poisoned: disadvantage on ability checks (PHB p.290-291).
-    # Confirmed conditions previously had zero mechanical effect anywhere
-    # — added using the same list/source-tracking mechanism as
-    # exhaustion just above. Frightened's real text ties this to the
-    # fear source being in sight, which this app has no way to know, so
-    # — matching the same simplification already used for its attack-
-    # roll disadvantage in get_condition_attack_status — it applies
-    # unconditionally whenever the condition is checked.
+    # Frightened/Poisoned: disadvantage on ability checks (PHB p.290-291),
+    # via the same list/source-tracking mechanism as exhaustion above.
+    # Frightened's real text ties this to the fear source being in
+    # sight, which this app has no way to know, so — matching the same
+    # simplification used for its attack-roll disadvantage in
+    # get_condition_attack_status — it applies unconditionally whenever
+    # the condition is checked.
     _active_conds_for_checks = set(char.get("conditions", []))
     for _cond_name in ("Frightened", "Poisoned"):
         if _cond_name in _active_conds_for_checks:
@@ -2198,10 +2193,7 @@ def update_all(char: dict) -> dict:
                     dis.append(sk)
                 src.setdefault(sk, []).append(_cond_name)
 
-    # Actor: advantage on Deception/Performance checks to pass as a
-    # different person. Confirmed the skill-advantage display system
-    # itself was real and working, but had never been populated by any
-    # feat before — only ever by magic items.
+    # Actor: advantage on Deception/Performance checks to pass as a different person.
     if "Actor" in char.get("feats", []):
         adv = char.setdefault("skill_advantages", [])
         src2 = char.setdefault("_skill_advantage_sources", {})
@@ -2210,9 +2202,7 @@ def update_all(char: dict) -> dict:
                 adv.append(sk)
             src2.setdefault(sk, []).append("Actor (passing as a different person)")
 
-    # Spirit Medium (DM Reward): advantage on Arcana/Religion checks
-    # related to spirits/the afterlife. Confirmed real, concrete
-    # mechanical text with zero presence anywhere before this.
+    # Spirit Medium (DM Reward): advantage on Arcana/Religion checks related to spirits/the afterlife.
     if "Spirit Medium" in char.get("dm_rewards", []):
         adv2 = char.setdefault("skill_advantages", [])
         src3 = char.setdefault("_skill_advantage_sources", {})
@@ -2291,11 +2281,11 @@ def update_all(char: dict) -> dict:
     char["fly_speed"] = _moves["fly"]
 
     # Magic items granting a swim/climb/fly speed (Ring of Swimming, Cloak
-    # of the Manta Ray, Wings of Flying, etc.) — a real gap: these speeds
-    # are computed here, after apply_all_magic_item_effects() already ran
-    # earlier in this function, so a magic item has no other way to reach
-    # them. "walking" as a value means "equal to your walking speed",
-    # matching how most of these items are actually worded.
+    # of the Manta Ray, Wings of Flying, etc.) are computed here, after
+    # apply_all_magic_item_effects() already ran earlier in this
+    # function, since that's the only point a magic item can reach them.
+    # "walking" as a value means "equal to your walking speed", matching
+    # how most of these items are actually worded.
     from .magic_items import _active_item_names as _active_magic_item_names
     from dnd_app.data.magic_items import get_item_effect as _get_item_effect
     walk_speed = char.get("speed", 30) + char.get("magic_speed_bonus", 0)
@@ -2392,11 +2382,9 @@ def update_all(char: dict) -> dict:
                         "once/turn extra radiant damage equal to your level on a hit.",
                 "source_class": "", "subclass": "",
             })
-    # Aasimar (MPMM) Celestial Revelation: confirmed genuinely missing —
-    # no resource existed at all, unlike the working VGM version above.
-    # Correctly scales by proficiency bonus, not character level,
-    # matching the real MPMM text precisely (a real, deliberate
-    # difference from the VGM version's level-based scaling).
+    # Aasimar (MPMM) Celestial Revelation scales by proficiency bonus,
+    # not character level — a deliberate difference from the VGM
+    # version's level-based scaling above.
     if char_race_res == "Aasimar (MPMM)" and total_lvl_res >= 3:
         revelation = char.get("_choices", {}).get("aasimar_revelation", [])
         rev_name = revelation[0] if revelation else ""
@@ -2443,12 +2431,8 @@ def update_all(char: dict) -> dict:
             "source_class": "", "subclass": "",
         })
 
-    # ── Feats with a limited-use ability — previously had zero resource
-    # tracking anywhere at all (not just missing a toggle, as the earlier
-    # transformation audit found for class/racial features — feats were
-    # never covered by that pass in the first place). All confirmed via
-    # the rebuilt, verified feat text to use "uses = proficiency bonus per
-    # long rest".
+    # ── Feats whose limited-use ability scales as "proficiency bonus uses
+    # per long rest" ─────────────────────────────────────────────────────
     known_feats_res = set(char.get("feats", []))
     pb_res = prof_bonus(total_lvl_res) if total_lvl_res > 0 else 1
     FEAT_PB_USES_RESOURCES = {
@@ -2499,7 +2483,6 @@ def update_all(char: dict) -> dict:
             })
 
     # ── Feats with a fixed (not proficiency-bonus-scaled) number of uses ─────
-    # All confirmed to have zero resource tracking previously.
     FEAT_FIXED_USES_RESOURCES = {
         "Fade Away": ("Fade Away", 1, "SR/LR",
             "Reaction immediately after taking damage: become invisible until the end of your next "
@@ -2559,9 +2542,8 @@ def update_all(char: dict) -> dict:
                 "note": note, "source_class": "", "subclass": "",
             })
 
-    # Field Medic: confirmed a genuine gap with a scaling that fits
-    # neither dict above — half proficiency bonus (rounded down, min 1),
-    # not the full proficiency bonus the other feats use.
+    # Field Medic scales at half proficiency bonus (rounded down, min 1),
+    # unlike the full-proficiency-bonus feats above.
     if "Field Medic" in known_feats_res:
         new_resources.append({
             "name": "Field Medic (Cure Wounds)", "key": "field_medic",
@@ -2570,13 +2552,10 @@ def update_all(char: dict) -> dict:
             "source_class": "", "subclass": "",
         })
 
-    # Iconoclast (dm_rewards.py): a real, level-gated tier system using
-    # actual character level — Enlightened Protection is unconditional,
-    # then 3 more tiers unlock at levels 5/11/17. Note: Oracle's own
-    # Piety-gated tiers (Augur/Seer/Sibyl/Divine Oracle) are deliberately
-    # NOT attempted here — this app has no Piety-tracking mechanic at
-    # all to gate them on, a real, distinct limitation from Iconoclast's
-    # ordinary character-level gating.
+    # Iconoclast (dm_rewards.py): level-gated tier system. Enlightened
+    # Protection is unconditional; 3 more tiers unlock at levels 5/11/17.
+    # Oracle's own Piety-gated tiers (Augur/Seer/Sibyl/Divine Oracle) are
+    # not modeled — this app has no Piety-tracking mechanic to gate them on.
     if "Iconoclast" in char.get("dm_rewards", []):
         char_lvl_ic = total_level(char)
         new_resources.append({
@@ -2611,9 +2590,7 @@ def update_all(char: dict) -> dict:
                 "source_class": "", "subclass": "",
             })
 
-    # Yuan-ti Pureblood: Suggestion, once per long rest. Confirmed a
-    # real, previously-untracked mechanic — no racial 1/long-rest
-    # innate spell had any resource tracking anywhere in this app.
+    # Yuan-ti Pureblood: Suggestion, once per long rest.
     race_sp = char.get("species") or char.get("race", "")
     if race_sp == "Yuan-ti Pureblood" and total_level(char) >= 3:
         new_resources.append({
@@ -2624,10 +2601,8 @@ def update_all(char: dict) -> dict:
             "source_class": "", "subclass": "",
         })
 
-    # Earth Genasi (MPMM) Merge with Stone: confirmed real, zero
-    # mechanical presence anywhere — the spell grant (Blade Ward at 1,
-    # Pass Without Trace at 5) was already correct, but neither
-    # resource existed.
+    # Earth Genasi (MPMM) Merge with Stone: grants Blade Ward at level 1
+    # and Pass Without Trace at level 5.
     if race_sp == "Genasi (MPMM)" and "earth" in (char.get("subrace") or "").lower():
         new_resources.append({
             "name": "Blade Ward (Bonus Action)", "key": "earth_genasi_blade_ward",
@@ -2645,11 +2620,10 @@ def update_all(char: dict) -> dict:
                 "source_class": "", "subclass": "",
             })
 
-    # 2 more Artificer Infusions confirmed to have zero mechanical
-    # wiring, same gap pattern as Resistant Armor above — gated on
-    # active_infusions, not just known. (Boots of the Winding Path has
-    # no limited uses, so it belongs in the Actions tab, not here as a
-    # resource.)
+    # Mind Sharpener and Spell-Refueling Ring (Artificer Infusions) are
+    # gated on active_infusions, not just known, same as Resistant Armor
+    # above. (Boots of the Winding Path has no limited uses, so it
+    # belongs in the Actions tab, not here as a resource.)
     _active_inf_names = {inf.get("infusion") for inf in char.get("active_infusions", [])}
     if "Mind Sharpener" in _active_inf_names:
         new_resources.append({
@@ -2668,7 +2642,6 @@ def update_all(char: dict) -> dict:
             "source_class": "", "subclass": "",
         })
 
-    # 4 newly-added Eldritch Invocations needing a real resource.
     _known_inv = [inv.split(" (")[0].strip() for inv in char.get("eldritch_invocations", [])]
     _pb_res = get_prof_bonus(char)
     if "Cloak of Flies" in _known_inv:
@@ -2704,11 +2677,8 @@ def update_all(char: dict) -> dict:
             "source_class": "", "subclass": "",
         })
 
-    # DM-Granted Bonus Features (dm_rewards.py): confirmed zero mechanical
-    # wiring of any kind existed anywhere for these 44 entries — granting
-    # one only added a name to a list and showed descriptive text. These
-    # 4 have a real, directly-stated flat 1-use resource in their source
-    # text.
+    # DM-Granted Bonus Features (dm_rewards.py): these 4 have a real,
+    # directly-stated flat 1-use resource in their source text.
     known_rewards_res = set(char.get("dm_rewards", []))
     DM_REWARD_FIXED_USES_RESOURCES = {
         "Mist Walker": ("Misty Step (Mist Walker)", 1, "LR",
@@ -2757,13 +2727,8 @@ def update_all(char: dict) -> dict:
             })
 
     known_invocations = set(inv.split(" (")[0].strip() for inv in char.get("eldritch_invocations", []))
-    # Eldritch Invocations: confirmed the largest, most incomplete
-    # category audited this session — 12 of 54 invocations had zero
-    # mechanical presence anywhere in the entire codebase (verified by
-    # direct grep, not just the runtime action-bucket check, since
-    # several other invocations turned out to modify an existing
-    # cantrip/spell's own description text rather than appear as a
-    # separately-named entry).
+    # Eldritch Invocations: some modify an existing cantrip/spell's own
+    # description text rather than appearing as a separately-named entry.
     INVOCATION_FIXED_USES_RESOURCES = {
         "Bewitching Whispers": ("Compulsion (Bewitching Whispers)", 1, "LR",
             "Cast compulsion using a warlock spell slot."),
@@ -2801,9 +2766,7 @@ def update_all(char: dict) -> dict:
                 "note": note, "source_class": "", "subclass": "",
             })
 
-    # Empty Body (Monk, 18th level): confirmed a genuine, significant
-    # gap — this core, non-optional feature existed only as display
-    # text and a tooltip, with zero mechanical presence anywhere.
+    # Empty Body (Monk, 18th level).
     monk_lvl_eb = class_levels(char).get("Monk", 0)
     if monk_lvl_eb >= 18:
         new_resources.append({
@@ -2815,13 +2778,11 @@ def update_all(char: dict) -> dict:
             "source_class": "", "subclass": "",
         })
 
-    # Favored Foe and Nature's Veil (Ranger, TCE optional features):
-    # confirmed zero mechanical wiring despite being correctly gated
-    # as displayable optional features — both are real resources that
-    # were never actually granted anywhere. Both replace a base
-    # feature (Favored Enemy / Hide in Plain Sight respectively), so
-    # gated on the toggle being on, matching the same dual-mechanism
-    # check already used elsewhere for these optional features.
+    # Favored Foe and Nature's Veil (Ranger, TCE optional features) each
+    # replace a base feature (Favored Enemy / Hide in Plain Sight
+    # respectively), so they're gated on the optional-feature toggle
+    # being on, matching the dual-mechanism check used elsewhere for
+    # optional features.
     def _tce_opt_on(name):
         enabled = char.get("_choices", {}).get("optional_features", {})
         if enabled.get(name, False):
@@ -2848,9 +2809,7 @@ def update_all(char: dict) -> dict:
                     "start of your next turn.",
             "source_class": "", "subclass": "",
         })
-    # Tireless (Deft Explorer's real 10th-level addition, not a
-    # separate feature) — confirmed zero mechanical wiring despite the
-    # description text already existing elsewhere.
+    # Tireless is Deft Explorer's 10th-level addition, not a separate feature.
     if ranger_lvl_opt >= 10 and _tce_opt_on("Deft Explorer"):
         new_resources.append({
             "name": "Tireless", "key": "tireless",
@@ -2859,11 +2818,10 @@ def update_all(char: dict) -> dict:
             "source_class": "", "subclass": "",
         })
 
-    # Dedicated Weapon (Monk, TCE optional): confirmed this app has no
-    # deeper weapon-eligibility system to hook a real mechanical
-    # outcome into (same situation found for Ki-Empowered Strikes), so
-    # this is a real, visible tracker of the choice rather than a fake
-    # mechanical connection this app's architecture can't back up.
+    # Dedicated Weapon (Monk, TCE optional): this app has no deeper
+    # weapon-eligibility system to hook a mechanical outcome into (same
+    # situation as Ki-Empowered Strikes), so this just tracks the choice
+    # visibly rather than fabricate a mechanical connection.
     monk_lvl_dw = class_levels(char).get("Monk", 0)
     if monk_lvl_dw >= 2 and _tce_opt_on("Dedicated Weapon"):
         new_resources.append({
@@ -2961,9 +2919,7 @@ def update_all(char: dict) -> dict:
                 "note": note, "source_class": "", "subclass": "",
             })
 
-    # Pact of the Talisman (Warlock): confirmed zero mechanical
-    # implementation existed for this — the Pact Boon choice was purely
-    # cosmetic. Uses = proficiency bonus, per the actual rule text.
+    # Pact of the Talisman (Warlock): uses = proficiency bonus, per the actual rule text.
     pact_choice = char.get("_choices", {}).get("warlock_pact_boon", [])
     if pact_choice and "talisman" in pact_choice[0].lower():
         new_resources.append({
@@ -2974,14 +2930,10 @@ def update_all(char: dict) -> dict:
             "source_class": "Warlock", "subclass": "",
         })
 
-    # Firbolg Magic and Relentless Endurance: confirmed via a systematic
-    # tooltip-to-mechanics audit that zero resource tracking existed for
-    # either, despite both being concrete "once per rest" racial features.
+    # Firbolg Magic and Relentless Endurance are both concrete "once per rest" racial features.
     race_res = (char.get("species") or char.get("race", "")).lower()
     if race_res == "firbolg":
-        # Firbolg Magic resets on a short OR long rest per the real
-        # rule; confirmed via the same app-wide "SR" vs "SR/LR" sweep
-        # that caught the Warlock/Paladin/Sorcerer instances of this bug.
+        # Firbolg Magic resets on a short OR long rest per the real rule.
         new_resources.append({
             "name": "Detect Magic (Firbolg Magic)", "key": "firbolg_detect_magic",
             "reset": "SR/LR", "current_max": 1, "track": "uses",
@@ -2994,10 +2946,7 @@ def update_all(char: dict) -> dict:
             "note": "Cast Disguise Self, using WIS as your spellcasting ability.",
             "source_class": "", "subclass": "",
         })
-        # Hidden Step: confirmed a genuine gap — zero resource tracking
-        # existed at all for this concrete "once per short or long
-        # rest" ability, the exact same pattern already found and
-        # fixed for Firbolg Magic just above.
+        # Hidden Step: a concrete "once per short or long rest" ability, same pattern as Firbolg Magic above.
         new_resources.append({
             "name": "Hidden Step", "key": "firbolg_hidden_step",
             "reset": "SR/LR", "current_max": 1, "track": "uses",
@@ -3005,10 +2954,7 @@ def update_all(char: dict) -> dict:
                     "you attack, deal damage, or force a saving throw.",
             "source_class": "", "subclass": "",
         })
-    # Orc's Adrenaline Rush: confirmed zero resource tracking existed
-    # for this concrete, proficiency-bonus-scaled "times per long rest"
-    # ability — the same gap pattern already found for Firbolg's
-    # Hidden Step just above.
+    # Orc's Adrenaline Rush: a proficiency-bonus-scaled "times per long rest" ability.
     if race_res == "orc":
         new_resources.append({
             "name": "Adrenaline Rush", "key": "orc_adrenaline_rush",
@@ -3024,11 +2970,7 @@ def update_all(char: dict) -> dict:
             "source_class": "", "subclass": "",
         })
 
-    # Harengon's Rabbit Hop: confirmed zero resource tracking existed —
-    # the same gap pattern already found for Firbolg's Hidden Step and
-    # Orc's Adrenaline Rush just above, despite this trait's own text
-    # already correctly describing a proficiency-bonus-scaled,
-    # long-rest-only ability.
+    # Harengon's Rabbit Hop: a proficiency-bonus-scaled, long-rest-only ability.
     if race_res == "harengon":
         new_resources.append({
             "name": "Rabbit Hop", "key": "harengon_rabbit_hop",
@@ -3038,11 +2980,8 @@ def update_all(char: dict) -> dict:
             "source_class": "", "subclass": "",
         })
 
-    # Dhampir's Vampiric Bite and Reborn's Knowledge from a Past Life:
-    # confirmed the same gap pattern again — both traits' own text
-    # already correctly describes a proficiency-bonus-scaled,
-    # long-rest-only ability, but zero resource tracking existed for
-    # either.
+    # Dhampir's Vampiric Bite and Reborn's Knowledge from a Past Life are
+    # both proficiency-bonus-scaled, long-rest-only abilities.
     if race_res == "dhampir":
         new_resources.append({
             "name": "Vampiric Bite (empower)", "key": "dhampir_vampiric_bite",
@@ -3094,8 +3033,7 @@ def update_all(char: dict) -> dict:
             "source_class": "", "subclass": "",
         })
 
-    # Lunar Sorcery (Sorcerer): confirmed zero mechanical implementation
-    # existed for any of these despite accurate tooltip text.
+    # Lunar Sorcery (Sorcerer).
     if "lunar" in subclasses(char).get("Sorcerer", "").lower():
         sorc_lvl = class_levels(char).get("Sorcerer", 0)
         if sorc_lvl >= 6:

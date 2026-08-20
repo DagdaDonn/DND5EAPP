@@ -1,3 +1,16 @@
+"""
+Refactor Pass module.
+
+One-off, already-executed maintenance script: split ui/action_abilities.py
+out of ui/sheet.py and deduplicated data/feature_tooltips.py's
+FEATURE_DESCS dict. Not part of the application and not imported by
+it; the hardcoded source path is specific to the machine it originally
+ran on. Kept for historical reference only.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
+"""
+
 from pathlib import Path
 import re, ast, collections
 

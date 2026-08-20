@@ -3,6 +3,9 @@ Safe arithmetic evaluation for data-driven formulas.
 
 Replaces bare eval() for companion/statblock/resource formulas that only
 need + - * / // % parentheses and integers/floats.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 from __future__ import annotations

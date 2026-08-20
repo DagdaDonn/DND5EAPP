@@ -1,13 +1,19 @@
 """
-Character Builder — auto-applies grants from race, background, class selections.
-Call rebuild(char) whenever race/background/class changes to re-derive all
-automatically-granted proficiencies, ASIs, and skill profs.
+Builder module.
+
+Auto-applies grants from race, background, and class selections. Call
+rebuild(char) whenever race/background/class changes to re-derive all
+automatically-granted proficiencies, ASIs, skill profs, and bonus
+spells.
 
 Separates:
-  - GRANTED (automatic, from race/bg/class)  → stored in char['_grants']
-  - CHOSEN   (player decision, skill picks etc) → stored in char['_choices']
-  
-The calculator then uses both when computing totals.
+  - GRANTED (automatic, from race/bg/class)  -> stored in char['_grants']
+  - CHOSEN   (player decision, skill picks etc) -> stored in char['_choices']
+
+dnd_app.core.calculator then uses both when computing totals.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 from .character import ability_mod, total_level
 from dnd_app.data.backgrounds import get_background
@@ -82,15 +88,13 @@ def get_class_weapon_profs(class_name: str, edition: str = "2014") -> str:
     cls = D.get(class_name, {})
     return cls.get("weapons", "") or ""
 
-# Confirmed a real, significant gap: unlike armor and weapon
-# proficiencies, which have a working getter function wired into
-# rebuild() below, tool proficiencies were pure, unused display data
-# — a Rogue's "Thieves' tools" entry existed in the class dict but was
-# never read anywhere in the actual character-building pipeline.
-# Fixed part only; the "of your choice" portions (Bard's 3 musical
-# instruments, Monk's and Artificer's one remaining artisan's-tool-or-
-# instrument pick) are handled as a real player choice card instead,
-# via CLASS_TOOL_CHOICES in levelup_panel.py.
+# Unlike armor and weapon proficiencies, which have a working getter
+# function wired into rebuild() below, tool proficiencies are applied
+# here — e.g. a Rogue's "Thieves' tools" entry in the class dict.
+# The "of your choice" portions (Bard's 3 musical instruments,
+# Monk's and Artificer's one remaining artisan's-tool-or-instrument
+# pick) are handled as a real player choice card instead, via
+# CLASS_TOOL_CHOICES in levelup_panel.py.
 _CLASS_FIXED_TOOL_PROFS = {
     "Rogue": ["Thieves' tools"],
     "Druid": ["Herbalism kit"],
@@ -267,9 +271,7 @@ def rebuild(char: dict) -> None:
             if wp: grants["weapon_profs"].append(wp)
 
         # Class-granted fixed tool proficiencies (Rogue's Thieves' tools,
-        # Druid's Herbalism kit, Artificer's Thieves'/Tinker's tools) —
-        # confirmed a real gap: unlike armor/weapon, this had no getter
-        # function at all, so the data existed but was never applied.
+        # Druid's Herbalism kit, Artificer's Thieves'/Tinker's tools).
         # Per the real multiclassing proficiencies table, Rogue and
         # Artificer grant their tools even as a secondary/multiclass
         # entry, but Druid's Herbalism kit is only part of Druid's
@@ -286,11 +288,9 @@ def rebuild(char: dict) -> None:
             grants["armor_profs"].append("Medium armor, shields")
             grants["weapon_profs"].append("Martial weapons")
 
-        # Cleric Divine Domain 1st-level armor/weapon proficiency grants —
-        # confirmed via direct testing this was a real mechanical gap, not
-        # just a missing reminder: a Life Domain Cleric had no heavy armor
-        # proficiency at all despite the domain's own listed text saying
-        # "heavy armor". Covers every domain that actually grants this.
+        # Cleric Divine Domain 1st-level armor/weapon proficiency
+        # grants — covers every domain that grants one (e.g. Life
+        # Domain's heavy armor proficiency).
         if cname == "Cleric":
             cleric_sub = cls_entry.get("subclass", "").lower()
             heavy_armor_domains = ("life domain", "nature domain", "tempest domain", "war domain",
@@ -304,12 +304,9 @@ def rebuild(char: dict) -> None:
                 grants["weapon_profs"].append("Martial weapons")
 
     # ── Feats with a FIXED (non-player-chosen) proficiency grant ─────────────
-    # Confirmed via direct testing that these were previously not wired in at
-    # all — e.g. a Wizard taking Heavily Armored had zero armor proficiency
-    # afterward, despite the feat's text explicitly granting heavy armor.
     # Feats granting a player-CHOSEN proficiency (Weapon Master, Skilled,
     # Skill Expert, Prodigy, Artificer Initiate) need UI selection support
-    # and aren't covered by this fixed table — separate, larger follow-up.
+    # and aren't covered by this fixed table.
     FEAT_FIXED_ARMOR_PROFS = {
         "Heavily Armored": "Heavy armor",
         "Lightly Armored": "Light armor",
@@ -332,8 +329,6 @@ def rebuild(char: dict) -> None:
 
     # Spirit Medium (DM Reward): proficiency bonus to checks with a
     # custom divining tool — functionally identical to tool proficiency.
-    # Confirmed real, concrete mechanical text with zero presence
-    # anywhere before this.
     if "Spirit Medium" in char.get("dm_rewards", []):
         grants["tool_profs"].append("Divining Tool (Spirit Medium)")
 
@@ -438,8 +433,7 @@ def rebuild(char: dict) -> None:
     char["languages"] = list(set(grants["languages"] + choices.get("extra_languages", ["Common"])
                                   + choices.get("knowledge_domain_languages", [])))
     # Littlest Yeti (DM reward): fixed, automatic "speak Yeti" grant —
-    # confirmed real, not a player choice like most other language
-    # grants in this app.
+    # not a player choice like most other language grants in this app.
     if "Littlest Yeti" in char.get("dm_rewards", []) and "Yeti" not in char["languages"]:
         char["languages"].append("Yeti")
 
@@ -447,12 +441,10 @@ def rebuild(char: dict) -> None:
     _apply_class_feature_mechanics(char, classes, edition)
 
     # ── Bonus spells (domain spells, circle spells, etc.) ──────────────────
-    # These are always known/prepared once you reach the required level —
-    # previously nothing granted them at all, so picking e.g. Knowledge
-    # Domain never actually gave you Command/Identify. Tracked separately
-    # in char["bonus_spells"] so the UI can badge them distinctly and so
-    # they're never mistaken for (or overwritten by) the player's own
-    # chosen known/prepared spells.
+    # These are always known/prepared once you reach the required
+    # level. Tracked separately in char["bonus_spells"] so the UI can
+    # badge them distinctly and so they're never mistaken for (or
+    # overwritten by) the player's own chosen known/prepared spells.
     from dnd_app.data.spells import get_bonus_spells
     old_bonus = set(char.get("bonus_spells", []))
     bonus = get_bonus_spells(char)
@@ -542,25 +534,18 @@ def rebuild(char: dict) -> None:
                 known_caster_spell_names.update(sp["name"] for sp in spells_for_class(cname))
         if ek_at_present:
             known_caster_spell_names.update(sp["name"] for sp in spells_for_class("Wizard"))
-        # Confirmed a real, significant bug: spells_known also contains
-        # every spell from the full-list prepared-caster dump just
-        # above (Cleric/Druid/Paladin/Artificer) — and separately,
-        # Wizard's own spellbook entries — and any spell shared between
-        # those and a known-caster class's theoretical full list (e.g.
-        # "Bane" is on both Cleric's and Bard's lists; "Fireball" is on
-        # both Wizard's and Sorcerer's) was being auto-marked prepared
-        # for free here, completely bypassing the prepared caster's
-        # cap — confirmed both a Cleric 3/Bard 3 character (13 extra
-        # free prepared Cleric spells) and a Sorcerer 5/Wizard 5
-        # character (a genuine, deliberately-unprepared Wizard
-        # spellbook entry auto-prepared just because Sorcerer's
-        # theoretical list happens to include the same name, even
-        # though this character's Sorcerer side never actually learned
-        # it). Exclude anything also on ANY of the character's own
-        # prepared-caster class lists (all five: Wizard included, not
-        # just the four that get a full-list dump), since those always
-        # require explicit preparation regardless of what else happens
-        # to share the name.
+        # spells_known also contains every spell from the full-list
+        # prepared-caster dump just above (Cleric/Druid/Paladin/
+        # Artificer) and separately, Wizard's own spellbook entries.
+        # Any spell shared between those and a known-caster class's
+        # theoretical full list (e.g. "Bane" is on both Cleric's and
+        # Bard's lists; "Fireball" is on both Wizard's and Sorcerer's)
+        # must not be auto-marked prepared for free here, since that
+        # would bypass the prepared caster's cap. Exclude anything also
+        # on ANY of the character's own prepared-caster class lists
+        # (all five: Wizard included, not just the four that get a
+        # full-list dump), since those always require explicit
+        # preparation regardless of what else happens to share the name.
         PREPARED_CASTER_CLASSES = ("Wizard", "Cleric", "Druid", "Paladin", "Artificer")
         prepared_caster_spell_names = set()
         for cname in PREPARED_CASTER_CLASSES:
@@ -699,12 +684,8 @@ def get_choices_needed(char: dict) -> list:
     # Note: race-specific skill/tool proficiency choices (Half-Elf,
     # Kenku, and many others) are handled by RACE_SKILL_CHOICES in
     # levelup_panel.py's _get_race_choices(), which is combined with
-    # this function's output everywhere it's called. A hardcoded
-    # Half-Elf case used to live here too — confirmed via direct
-    # testing this produced two duplicate "choose 2 skill
-    # proficiencies" cards for the same character, since both this
-    # function and _get_race_choices() ran independently with no
-    # deduplication between them.
+    # this function's output everywhere it's called — this function
+    # deliberately does not duplicate that handling for any race.
 
     # ── Background choices ────────────────────────────────────────────────────
     # Check if background gives a language choice

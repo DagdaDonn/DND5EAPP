@@ -17,6 +17,9 @@ merged home for what used to be three separate files:
     replacing Natural Explorer) — a genuinely separate system (replaces
     rather than adds), kept as its own clearly-labeled section rather
     than blended into either of the above.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -51,11 +54,10 @@ SUBCLASS_FEATURES: dict[tuple[str,str], list[str]] = {
     ('Cleric', 'War Domain'): ['War Priest', 'Guided Strike', "War God's Blessing", 'Divine Strike', 'Avatar of Battle'],
     ('Cleric', 'Knowledge Domain'): ['Blessings of Knowledge', 'Channel Divinity: Knowledge of the Ages', 'Channel Divinity: Read Thoughts', 'Potent Spellcasting', 'Visions of the Past'],
     ('Cleric', 'Ambition Domain (Amonkhet)'): ['Warding Flare (Ambition)', 'Channel Divinity: Invoke Duplicity', 'Channel Divinity: Cloak of Shadows', 'Potent Spellcasting', 'Improved Duplicity'],
-    # These three previously had 6 raw items each (1st level split into two
-    # separate entries), which doesn't fit the 5 level-slots Cleric domain
-    # features actually use (1st/2nd/6th/8th/17th) — the 1st-level pair is
-    # combined into one entry here, matching every other multi-feature Cleric
-    # domain in this file (Life, Light, Trickery, etc.).
+    # These three are combined into one 1st-level entry, matching every
+    # other multi-feature Cleric domain in this file (Life, Light,
+    # Trickery, etc.), fitting the 5 level-slots Cleric domain features
+    # actually use (1st/2nd/6th/8th/17th).
     ('Cleric', 'Solidarity Domain (Amonkhet)'): ["Bonus Proficiency (Solidarity) + Solidarity's Action", 'Channel Divinity: Preserve Life', "Channel Divinity: Oketra's Blessing", 'Divine Strike', 'Supreme Healing'],
     ('Cleric', 'Strength Domain (Amonkhet)'): ['Bonus Proficiency (Strength) + Acolyte of Strength', 'Channel Divinity: Feat of Strength', "Channel Divinity: Rhonas' Blessing", 'Divine Strike', 'Avatar of Battle'],
     ('Cleric', 'Zeal Domain (Amonkhet)'): ['Bonus Proficiencies (Zeal) + Priest of Zeal', 'Channel Divinity: Consuming Fervor', 'Resounding Strike', 'Divine Strike', 'Blaze of Glory'],
@@ -259,13 +261,10 @@ CLASS_FEATURE_INDEX: dict[str, dict] = {
             18: ["Magic Item Master"],
             20: ["Soul of Artifice"],
         },
-        # Subclass levels VERIFIED via web search: Artificer subclasses
-        # grant features at 3rd, 5th, 9th, and 15th level (confirmed
-        # against multiple independent sources). Grouped below by that
-        # 4-slot pattern where the grouping was confirmable; Armorer and
-        # Artillerist's exact within-slot grouping is less certain (kept
-        # flat, unverified) since only Alchemist was directly confirmed
-        # feature-by-feature.
+        # Artificer subclasses grant features at 3rd, 5th, 9th, and 15th
+        # level. Grouped below by that 4-slot pattern where the grouping
+        # is confirmable; Armorer and Artillerist's exact within-slot
+        # grouping is less certain (kept flat, unverified).
         "Alchemist": {
             3: ["Tool Proficiency", "Alchemist Spells", "Experimental Elixir"],
             5: ["Alchemical Savant"],
@@ -395,12 +394,12 @@ CLASS_FEATURE_INDEX: dict[str, dict] = {
             10: ["Magical Secrets"],
             20: ["Superior Inspiration"],
         },
-        # Font of Inspiration's actual level (5th, per classes.py) wasn't
-        # captured above because that level entry lists it alongside the
-        # Bardic Inspiration die upgrade rather than as a distinct line —
-        # added explicitly since it IS a real, separate named feature.
-        # Subclass levels NOT YET VERIFIED — standard pattern is 3/6/14
-        # (Bard colleges use 3 slots, not 4), unconfirmed feature-by-feature.
+        # Font of Inspiration's actual level (5th, per classes.py) is
+        # added explicitly, since the shared level table lists it
+        # alongside the Bardic Inspiration die upgrade rather than as a
+        # distinct line, even though it IS a real, separate named
+        # feature. Subclass levels below follow the standard 3/6/14
+        # pattern (Bard colleges use 3 slots, not 4), unconfirmed feature-by-feature.
         "College of Creation": {
             3: ["Mote of Potential", "Performance of Creation"],
             6: ["Animating Performance"],
@@ -810,10 +809,10 @@ CLASS_FEATURE_INDEX: dict[str, dict] = {
     },
 
     "Ranger": {
-        # VERIFIED: PHB Ranger archetype features are at 3rd/7th/11th/15th
-        # — confirmed directly from SUBCLASS_FEATURES' own level-labeled
-        # names for Hunter ("Hunter's Prey (Lv3)", etc.). The 14th and 17th
-        # slots in classes.py's shared table don't apply to these two.
+        # PHB Ranger archetype features are at 3rd/7th/11th/15th, per
+        # SUBCLASS_FEATURES' own level-labeled names for Hunter
+        # ("Hunter's Prey (Lv3)", etc.). The 14th and 17th slots in
+        # classes.py's shared table don't apply to these two.
         "Beast Master": {
             3: ["Ranger's Companion"],
             7: ["Exceptional Training"],

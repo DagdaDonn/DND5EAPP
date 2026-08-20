@@ -1,10 +1,18 @@
 """
-Character Creation Wizard — 5 steps:
+Character Creation Wizard module.
+
+PySide6 multi-step wizard that builds a new character from scratch:
   1. Race
   2. Ability Scores
   3. Background + Class (with scrollable level timeline + subclass + choices)
   4. Spells  (only if caster)
   5. Equipment
+Each step collects its choices into the character dict and calls
+dnd_app.core.builder.rebuild() before advancing, so later steps (e.g.
+starting spells, which depend on class) always see up-to-date state.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt, Signal, QTimer, QSize
@@ -111,14 +119,10 @@ class CharacterWizard(QWidget):
             else:
                 pill.setStyleSheet(f"background:{SURF3};color:{TEXT3};border-radius:15px;font-size:{FS_SMALL}px;padding:0 12px;")
         self._back_btn.setVisible(self._step > 0)
-        # Last step label changes to "Create Character" — build the
-        # stylesheet fresh each time rather than string-replacing whatever
-        # was already set (the previous .replace(INDIGO, TEAL) approach
-        # mutated prior state instead of generating a correct stylesheet
-        # from scratch, which could leave stale/inconsistent colors in
-        # states like :hover depending on what stylesheet was already
-        # applied — confirmed by a direct report of the button flashing
-        # indigo on hover instead of the intended teal).
+        # Last step label changes to "Create Character" — the stylesheet
+        # is built fresh each time rather than string-replacing whatever
+        # was already set, so :hover and other states stay consistent
+        # regardless of which stylesheet was previously applied.
         if self._step == 4:  # Equipment (step 3 skipped, so 4 is last)
             self._next_btn.setText("Create Character ✓")
             self._next_btn.setStyleSheet(pill_btn("", TEAL, hover=TEAL2).styleSheet())
@@ -359,9 +363,6 @@ class Step1Race(QWidget):
         # Single handler for subrace changes — updates the Dragonborn
         # ancestry list AND refreshes the ASI/traits detail panel to show
         # the chosen subrace's own bonuses, not just the base race's.
-        # These used to be two separate connections where the Dragonborn
-        # one would disconnect-and-replace anything connected earlier,
-        # silently dropping the detail-panel refresh for that one race.
         def _on_subrace_changed(idx):
             if is_dragonborn and hasattr(self, "_anc_widget"):
                 from dnd_app.data.races import DRACONIC_ANCESTRY, ANCESTRY_BY_SUBRACE
@@ -571,14 +572,12 @@ class Step2Abilities(QWidget):
         root.addWidget(self._flex_card)
 
         # ── Distribute ASI picker (2024/MPMM style: +2/+1 split OR three +1s) ──
-        # Confirmed a real, severe bug this replaces: the checkbox-only
-        # picker above could only ever represent "choose N different
-        # abilities, each gets a flat +1" (the genuinely different,
-        # older Half-Elf-style rule). For every 2024/MPMM-style race —
-        # the vast majority of races using asi_flex=2 in this app —
-        # neither valid option (a "+2/+1 split", or "three different
-        # +1s") could actually be selected; the picker silently forced
-        # a third, incorrect distribution instead.
+        # The checkbox-only picker above can only represent "choose N
+        # different abilities, each gets a flat +1" (the older,
+        # Half-Elf-style rule). For 2024/MPMM-style races — asi_flex=2,
+        # the majority of races in this app — the player needs to pick
+        # between a "+2/+1 split" or "three different +1s" distribution,
+        # which this picker provides.
         self._dist_card = QFrame()
         self._dist_card.setStyleSheet(f"QFrame{{background:{SURF};border:1px solid {qa(PURP2,0x55)};border-radius:10px;}}")
         self._dist_card.setMinimumHeight(190)
@@ -1308,10 +1307,9 @@ class Step4Spells(QWidget):
         has_spells = any(CLASS_DICT.get(c["class"],{}).get("has_spells",False) for c in classes)
         race = char.get("race","")
         # bonus_spells is computed fresh by rebuild() (called after every
-        # wizard step, including the one just before this) and already
-        # correctly level-gates racial spells — Tiefling doesn't get
-        # Hellish Rebuke until 3rd character level, for instance, unlike
-        # the old flat RACE_BONUS_SPELLS list this replaced.
+        # wizard step, including the one just before this) and correctly
+        # level-gates racial spells — Tiefling doesn't get Hellish
+        # Rebuke until 3rd character level, for instance.
         bonus_spells = char.get("bonus_spells", [])
 
         if has_spells:
@@ -1489,15 +1487,12 @@ class Step5Equipment(QWidget):
         root = QVBoxLayout(self); root.setContentsMargins(24,24,24,24); root.setSpacing(12)
         root.addWidget(_lbl("Starting Equipment", GOLD2, FS_HEAD, bold=True))
 
-        # Confirmed a severe, real bug: this whole widget is constructed
-        # once, upfront, before the player has ever picked a class in
-        # Step 3 — so this section built with an empty class name and
-        # zero equipment groups. The existing populate() (called on
-        # every navigation into this step) only ever refreshed the
-        # background-gear note below, never rebuilt this section, so a
-        # real user going through the wizard normally would see a
-        # completely empty equipment step. This section now lives in
-        # its own container so _rebuild_equipment_groups() can clear
+        # This whole widget is constructed once, upfront, before the
+        # player has picked a class in Step 3, so it starts with an
+        # empty class name and zero equipment groups. populate() (called
+        # on every navigation into this step) only refreshes the
+        # background-gear note below by default, so this section lives
+        # in its own container: _rebuild_equipment_groups() can clear
         # and rebuild just this part on every populate() call, without
         # touching the background-gear card or notes field that follow.
         self._equip_container = QWidget()
@@ -1561,11 +1556,11 @@ class Step5Equipment(QWidget):
                     cl.addWidget(_lbl(items_text, TEXT, FS_BODY, bold=True))
                     self._group_widgets.append((None, options, [[]]))
                 else:
-                    # Fixed grant that still needs a concrete weapon picked
-                    # for one or more "Any X" slots (e.g. Warlock's "Any
-                    # simple weapon") — confirmed a real bug where this
-                    # showed no dropdown at all, silently adding the raw
-                    # placeholder text as a fake equipment item.
+                    # Fixed grant that still needs a concrete weapon
+                    # picked for one or more "Any X" slots (e.g.
+                    # Warlock's "Any simple weapon") gets a dropdown
+                    # here, rather than adding the raw placeholder text
+                    # as a fake equipment item.
                     fixed_parts = [it for it in opt if not it.lower().startswith("any ")]
                     if fixed_parts:
                         cl.addWidget(_lbl(", ".join(fixed_parts), TEXT, FS_BODY, bold=True))
@@ -1595,23 +1590,20 @@ class Step5Equipment(QWidget):
                     if oi == 0:
                         rb.setChecked(True)
                     row.addWidget(rb)
-                    # One independent combo per "Any X" placeholder in this
-                    # option — confirmed a real bug where an option with two
-                    # such placeholders (e.g. Fighter's "two martial
-                    # weapons") only ever got a single shared dropdown,
-                    # making it impossible to actually pick two different
-                    # weapons for a choice that calls for exactly that.
+                    # One independent combo per "Any X" placeholder in
+                    # this option, so an option with two such
+                    # placeholders (e.g. Fighter's "two martial weapons")
+                    # can pick two different weapons rather than sharing
+                    # a single dropdown.
                     option_combos = []
                     for item in opt:
                         if item.lower().startswith("any "):
                             combo = QComboBox()
                             combo.setMinimumWidth(220)
                             combo.addItems(_weapon_category_pool(item))
-                            # Confirmed a real UX bug: combos for every
-                            # option stayed enabled/interactive at once
-                            # regardless of which radio was actually
-                            # selected, with no indication which ones
-                            # actually mattered for the result.
+                            # Combos are enabled only for the currently
+                            # selected radio option, so it's clear which
+                            # ones actually matter for the result.
                             combo.setEnabled(oi == 0)
                             rb.toggled.connect(lambda checked, c=combo: c.setEnabled(checked))
                             row.addWidget(combo)
@@ -1627,10 +1619,9 @@ class Step5Equipment(QWidget):
         self._equip_container_lay.addWidget(scroll, 1)
 
     def populate(self, char):
-        # Confirmed real bug fix: rebuild the class-specific equipment
-        # groups every time the player navigates into this step, since
-        # the class selection may have just been made for the first
-        # time, or changed since the last visit.
+        # Rebuild the class-specific equipment groups every time the
+        # player navigates into this step, since the class selection may
+        # have just been made for the first time, or changed since the last visit.
         self._rebuild_equipment_groups(char)
         bg = get_background(char.get("background",""))
         if bg:
@@ -1671,14 +1662,13 @@ class Step5Equipment(QWidget):
         armor_dict = {a[0]: a for a in ARMOR}
         char["armor_worn"] = "No Armor"
         char["shield"] = False
-        # Confirmed a real bug found by verification: setdefault only
-        # initializes an empty list, it never clears one that's already
-        # there — so navigating back and changing class (re-triggering
-        # populate() -> collect()) silently accumulated the previous
-        # class's starting equipment on top of the new class's, rather
-        # than replacing it. Safe to reset here since this method only
-        # ever runs during the wizard flow, before any real gameplay
-        # additions could exist.
+        # setdefault only initializes an empty list, it never clears one
+        # that's already there — so navigating back and changing class
+        # (re-triggering populate() -> collect()) would otherwise
+        # accumulate the previous class's starting equipment on top of
+        # the new class's, rather than replacing it. Safe to reset here
+        # since this method only runs during the wizard flow, before any
+        # real gameplay additions could exist.
         char["equipped_weapons"] = []
         char["equipment"] = []
         from dnd_app.data.items import WEAPON_DICT, EQUIPMENT_PACKS
@@ -1687,11 +1677,9 @@ class Step5Equipment(QWidget):
             if base == "Shield":
                 char["shield"] = True
                 a = armor_dict.get("Shield")
-                # Confirmed a real, reported bug: this only ever set the
-                # mechanical flag for AC math, never adding a
-                # corresponding entry to the actual inventory list — a
-                # player's Gear tab would show none of their starting
-                # armor/weapons as owned items at all.
+                # Adds a corresponding entry to the actual inventory
+                # list, not just the mechanical flag used for AC math, so
+                # the Gear tab shows starting armor/weapons as owned items.
                 char["equipment"].append({"name": "Shield", "qty": 1,
                                           "weight": a[6] if a else 6, "cost": a[7] if a else 10})
             elif base in armor_names:
@@ -1700,27 +1688,23 @@ class Step5Equipment(QWidget):
                 char["equipment"].append({"name": base, "qty": 1,
                                           "weight": a[6] if a else 0, "cost": a[7] if a else 0})
             elif base in weapon_names:
-                # Confirmed a real bug: this used to skip adding a weapon
-                # if its name was already present, silently dropping
-                # legitimate duplicate grants like "two Handaxes." Real
+                # Each weapon copy is added as its own row rather than
+                # skipped when a name is already present, so real
                 # multi-weapon starting equipment (e.g. a Rogue's two
-                # daggers) needs each copy added as its own row.
+                # daggers, "two Handaxes") is fully represented.
                 char["equipped_weapons"].append(base)
                 w = WEAPON_DICT.get(base, {})
                 char["equipment"].append({"name": base, "qty": 1,
                                           "weight": w.get("weight", 0), "cost": w.get("cost", 0)})
             elif base in EQUIPMENT_PACKS:
-                # Confirmed a real, reported gap: a chosen pack added
-                # itself as a single, opaque item rather than its real,
-                # individual contents.
+                # A chosen pack adds its real, individual contents rather than a single, opaque item.
                 for pack_item, qty in EQUIPMENT_PACKS[base]:
                     char["equipment"].append({"name": pack_item, "qty": qty, "weight": 0, "cost": 0})
             else:
                 char["equipment"].append({"name": item, "qty": 1, "weight": 0, "cost": 0})
 
-        # Background equipment: confirmed a real, previously-undiscovered
-        # bug — this was only ever shown as display text, never actually
-        # parsed or added to the character's real inventory/currency.
+        # Background equipment is parsed and added to the character's
+        # real inventory/currency, not just shown as display text.
         bg = get_background(char.get("background", ""))
         bg_eq_text = (bg or {}).get("equipment", "")
         if bg_eq_text and char.get("background") != "Custom Background":

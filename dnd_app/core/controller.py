@@ -1,6 +1,9 @@
 """
 CharacterController — single entry point for all character mutations.
 UI reads from char; all writes go through controller.update() / apply().
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 from __future__ import annotations

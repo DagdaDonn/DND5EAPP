@@ -1,4 +1,8 @@
-"""Reusable custom widgets for the character creator."""
+"""Reusable custom widgets for the character creator.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
+"""
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt, Signal, QRect, QPoint, QSize
 from PySide6.QtGui import QFont

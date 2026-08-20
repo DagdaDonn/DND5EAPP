@@ -1,11 +1,9 @@
 """
+Starting Equipment data module.
+
 Class starting equipment — the real "(a) or (b)" choice tables from
 the PHB (plus Artificer/TCE and Blood Hunter), not just a flat gear
-list. Confirmed via direct inspection that this data didn't exist
-anywhere in the app at all before this file — the equipment step of
-the character wizard was a fully generic "pick any weapon, any
-armor" dropdown with no connection to what a class actually starts
-with.
+list. Feeds the equipment step of the character creation wizard.
 
 Each class maps to a list of "choice groups". Each group is a dict:
   {"options": [...], "gold_alt": int or None}
@@ -18,6 +16,9 @@ most PHB classes don't offer this per-group, it's usually an
 overall alternative; see NOTES below for classes where the "or take
 starting wealth instead" alternative applies at the whole-class
 level rather than per-group).
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 STARTING_EQUIPMENT = {

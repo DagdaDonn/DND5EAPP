@@ -1,8 +1,17 @@
 """
-Action-economy helpers and KNOWN_ACTIONS catalog.
+Action Abilities module.
 
-Extracted from ui/sheet.py so combat action cards stay maintainable
-outside the CharacterSheet monolith.
+Builds the Combat tab's Action/Bonus Action/Reaction/Passive cards for
+a character: the KNOWN_ACTIONS reference catalog of class/subclass/
+feat/race/magic-item abilities, plus build_action_abilities(), which
+filters that catalog against a character's actual class levels,
+subclass, known feats, race, and equipped/attuned items and returns
+only the entries that genuinely apply. Extracted from ui/sheet.py so
+combat action cards stay maintainable outside the CharacterSheet
+monolith.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 from __future__ import annotations
 
@@ -106,10 +115,8 @@ def _append_cantrip_scaling_note(sp_name: str, desc: str, char: dict) -> str:
         beams = get_eldritch_blast_beams(char)
         word = "beam" if beams == 1 else "beams"
         has_agonizing = any("agonizing blast" in i.lower() for i in char.get("eldritch_invocations", []))
-        # Repelling Blast: confirmed a real, previously-missing gap —
-        # zero mechanical wiring anywhere despite being a real, common
-        # invocation choice. Follows the same "only note it when the
-        # character actually has it" pattern as Agonizing Blast above.
+        # Repelling Blast: shown only when the character actually has
+        # it, same pattern as Agonizing Blast above.
         has_repelling = any("repelling blast" in i.lower() for i in char.get("eldritch_invocations", []))
         repel_note = " Each beam that hits can push the target 10 ft. away (Repelling Blast)." if has_repelling else ""
         if has_agonizing:
@@ -1500,10 +1507,8 @@ def build_action_abilities(char):
             ('Blood Hunter', 'Fighting Style'): 2,
             ('Monk', 'Ki-Empowered Strikes'): 6,
             # Paladin's Channel Divinity (and every subclass option that
-            # uses it) doesn't unlock until 3rd level — confirmed a real,
-            # directly-reported bug: these had no gate at all (defaulting
-            # to 1), or for Guided Strike specifically, incorrectly
-            # shared Cleric's real level-2 gate.
+            # uses it) doesn't unlock until 3rd level. Guided Strike uses
+            # its own level-3 gate rather than Cleric's level-2 gate.
             ('Paladin', 'Sacred Weapon'): 3, ('Paladin', 'Turn the Unholy'): 3,
             ('Paladin', 'Abjure Enemy'): 3, ('Paladin', 'Vow of Enmity'): 3,
             ('Paladin', 'Conquering Presence'): 3, ('Paladin', 'Guided Strike'): 3,
@@ -1515,18 +1520,13 @@ def build_action_abilities(char):
         }
         gate = CLASS_SPECIFIC_GATE_OVERRIDES.get((cls_name, feat_fragment))
         min_level = gate if gate is not None else min_level.get(feat_fragment, 1)
-        # Confirmed a real, significant bug: Artificer infusion abilities
-        # (Boots of the Winding Path, Resistant Armor, Spell-Refueling
-        # Ring, Enhanced Weapon, etc.) were showing on the Combat page
-        # purely from class/level/subclass, with no check for whether
-        # the character actually knows that specific infusion — a
-        # level 6 Artificer with zero infusions known would still see
-        # most of them. This made "infusing an item" feel like it did
-        # nothing, since the reminder was already visible either way.
         # Only applies to genuine infusion choices (checked against the
-        # real ARTIFICER_INFUSIONS list); automatic class features like
-        # Infuse Item itself or Flash of Genius aren't in that list and
-        # are unaffected.
+        # real ARTIFICER_INFUSIONS list), not just class/level/subclass
+        # — an Artificer who hasn't learned a given infusion (Boots of
+        # the Winding Path, Resistant Armor, Spell-Refueling Ring,
+        # Enhanced Weapon, etc.) shouldn't see its Combat page entry.
+        # Automatic class features like Infuse Item itself or Flash of
+        # Genius aren't in that list and are unaffected.
         if cls_name == 'Artificer' and feat_fragment in _ARTIFICER_INFUSION_BASE_NAMES:
             known_infusion_bases = {inf.split(" \u2013 ")[0].strip()
                                      for inf in char.get('artificer_infusions', [])}
@@ -1574,14 +1574,12 @@ def build_action_abilities(char):
                 desc = (f"When you use Action Surge, {ally_word} within 60 ft. who can see or hear "
                         f"you can each use their reaction to make one weapon attack.")
             elif feat_fragment == 'Hybrid Transformation' and cls_name == 'Blood Hunter':
-                # Confirmed several real omissions in the previous static
-                # text: melee damage bonus scales +1/+2/+3 at 3rd/11th/
-                # 18th, the resistance has a silvered-weapon exception,
-                # the AC bonus applies while not wearing HEAVY armor
-                # (not just "unarmored/light" as previously written,
-                # which wrongly excluded medium), unarmed strike damage
-                # scales 1d6->1d8 at 11th, and Bloodlust's save DC is a
-                # fixed 8 — none of this was in the original text.
+                # Melee damage bonus scales +1/+2/+3 at 3rd/11th/18th,
+                # the resistance has a silvered-weapon exception, the AC
+                # bonus applies while not wearing HEAVY armor (not just
+                # "unarmored/light", which would wrongly exclude
+                # medium), unarmed strike damage scales 1d6->1d8 at
+                # 11th, and Bloodlust's save DC is a fixed 8.
                 dmg_bonus = "+3" if char_lvl >= 18 else "+2" if char_lvl >= 11 else "+1"
                 unarmed_die = "1d8" if char_lvl >= 11 else "1d6"
                 desc = (f"Transform into a hybrid form for up to 1 hour: Feral Might (advantage on "
@@ -1594,8 +1592,7 @@ def build_action_abilities(char):
                         f"move to and Attack the nearest creature).")
             elif feat_fragment == "Stalkers Prowess" and cls_name == 'Blood Hunter':
                 # Same +1/+2/+3 scaling pattern as Hybrid Transformation's
-                # damage bonus, and confirmed the previous text omitted
-                # the "counts as magical" detail on the unarmed strikes.
+                # damage bonus; the unarmed strikes also count as magical.
                 atk_bonus = "+3" if char_lvl >= 18 else "+2" if char_lvl >= 11 else "+1"
                 desc = (f"+10 ft speed, +10 ft long jump, +3 ft high jump. Hybrid form also "
                         f"gains {atk_bonus} to unarmed strike attack rolls, and with an active "
@@ -1605,22 +1602,21 @@ def build_action_abilities(char):
                 # PHB p.59: 1 use at 2nd level, 2 at 6th, 3 at 18th.
                 uses = 1 if char_lvl < 6 else 2 if char_lvl < 18 else 3
                 display = f"Channel Divinity ({uses}/SR)"
-                # Confirmed a real gap directly flagged: this previously
-                # only said "use one option," with no listing of what
-                # the character's actual options are. Scan KNOWN_ACTIONS
-                # for every real Channel Divinity entry and filter to
-                # just this character's subclass, the same way the rest
-                # of this file already avoids leaking other subclasses'
-                # features.
+                # Scan KNOWN_ACTIONS for every real Channel Divinity
+                # entry and filter to just this character's subclass,
+                # the same way the rest of this file avoids leaking
+                # other subclasses' features, so the listed options
+                # match what the character actually has rather than a
+                # generic "use one option" placeholder.
                 from dnd_app.core.character import subclasses as _subclasses_cd
                 char_sub = _subclasses_cd(char).get('Cleric', '')
                 cd_options = ['Turn Undead']
-                # Confirmed exceptions: real Channel Divinity options whose
-                # KNOWN_ACTIONS text mentions "Channel Divinity" in neither
-                # the display name nor the description, so no text-match
-                # can find them — named directly rather than chasing a
-                # fully generic pattern that's already proven unreliable
-                # for this inconsistently-labeled data.
+                # Exceptions: real Channel Divinity options whose
+                # KNOWN_ACTIONS text mentions "Channel Divinity" in
+                # neither the display name nor the description, so no
+                # text-match can find them — named directly rather than
+                # chasing a fully generic pattern for this
+                # inconsistently-labeled data.
                 CD_TEXT_EXCEPTIONS = {'Blessing of the Forge', 'Balm of Peace'}
                 for (k_cls, k_frag), (k_bucket, k_disp, k_desc) in KNOWN_ACTIONS.items():
                     if k_cls != 'Cleric' or k_frag == 'Channel Divinity':
@@ -1671,12 +1667,9 @@ def build_action_abilities(char):
                         f"your next short or long rest.")
             buckets[bucket].append((display, desc, cls_name))
 
-    # TCE optional class features: confirmed all 10 already-present
-    # entries in OPTIONAL_CLASS_FEATURES had zero real mechanical
-    # wiring, only correctly-gated descriptive text. These 5 use
-    # existing resources (ki, sorcery points, wild shape uses) rather
-    # than needing a new resource pool, so building real Actions tab
-    # entries for them closes a genuine, confirmed gap.
+    # TCE optional class features: these 5 use existing resources (ki,
+    # sorcery points, wild shape uses) rather than needing a new
+    # resource pool, so they get real Actions tab entries here.
     if _optional_feature_enabled(char, "Steady Aim") and char_classes.get("Rogue", 0) >= 3:
         buckets["Bonus Action"].append((
             "Steady Aim", "Give yourself advantage on your next attack roll this turn. You "
@@ -1854,13 +1847,13 @@ def build_action_abilities(char):
 
     # ── Passive numeric/stat effects (AC, saves, spell DC/attack, resistance,
     # ability score bonuses, initiative/skill advantage, etc.) ────────────────
-    # Confirmed via direct testing that get_item_effect() results for these
-    # types were fully applied to char state (AC, spell DC, resistances...)
-    # but never summarized anywhere in the Known Actions / Passive tab — a
-    # player attuning to, say, a +2 AC/spell-attack staff saw their numbers
-    # change with no on-sheet explanation of which item did it. This block
-    # doesn't duplicate the grant_action/grant_spell entries above; it only
-    # describes the effect types nothing else already narrates.
+    # get_item_effect() results for these types are fully applied to
+    # char state (AC, spell DC, resistances...) but aren't otherwise
+    # summarized anywhere in the Known Actions / Passive tab, so a
+    # player attuning to, say, a +2 AC/spell-attack staff can see which
+    # item is responsible. This block doesn't duplicate the
+    # grant_action/grant_spell entries above; it only describes the
+    # effect types nothing else already narrates.
     from dnd_app.data.magic_items import get_item_effect as _get_item_effect
 
     def _describe_passive_effect(sub, char, item_name):
@@ -1968,8 +1961,7 @@ def build_action_abilities(char):
         'Soul of the Storm Giant': ('Bonus Action','Storm Giant Strike (1/SR)','On hit: deal extra lightning damage and teleport the target.'),
         'Vigor of the Hill Giant': ('Bonus Action','Hill Giant Strike (1/SR)','On hit: push the target up to 10 ft away.'),
         'Knight of the Crown': ('Bonus Action','Knight of the Crown','On hit with Attack action: one additional weapon attack.'),
-        # Confirmed a genuine gap: these 5 feats had zero mechanical
-        # presence anywhere in the app despite accurate descriptions.
+        # These 5 feats have accurate descriptions but no other mechanical presence in the app.
         'Vital Sacrifice': ('Bonus Action','Vital Sacrifice',
             "Take 1d6 necrotic damage (can't be reduced) for a blood boon lasting 1 hour or until "
             "spent. Spend it: +1d6 on an attack roll; +2d6 necrotic damage on a hit with an attack "
@@ -1996,8 +1988,7 @@ def build_action_abilities(char):
             "1st-level+ spell with your action that turn. If casting two or more spells in one "
             "turn this way, at most one can be 3rd level or higher."),
 
-        # ── Passive combat-modifier feats (confirmed zero reference
-        # existed anywhere in the app for any of these 14) ─────────────
+        # ── Passive combat-modifier feats ─────────────────────────────
         'Crossbow Expert':    ('Passive','Crossbow Expert',
             "Ignore the loading property of crossbows you're proficient with. Being within 5 ft. "
             "of a hostile creature doesn't impose disadvantage on your ranged attack rolls. When "
@@ -2107,11 +2098,9 @@ def build_action_abilities(char):
     if "bladesing" in _wiz_sub.lower() and _wiz_lvl >= 6:
         _atk_desc += " Bladesong: you can replace one of these attacks with a cantrip."
     buckets['Action'].insert(0, ('Attack', _atk_desc, 'Universal'))
-    # Confirmed a real bug: "Cast a Spell" and "End Concentration" were
-    # unconditionally added to every character's action list, even
-    # non-casters with zero spells known or prepared. Check the
-    # character's actual known/prepared spells rather than guessing
-    # from class alone, since that correctly covers multiclass and
+    # "Cast a Spell" and "End Concentration" are only added for
+    # characters with actual known/prepared spells, not unconditionally
+    # for every character — this correctly covers multiclass and
     # partial-caster edge cases without needing a hardcoded class list.
     from dnd_app.data.spells import get_spell as _gs_action
     _known_spell_names = set(char.get("spells_known", [])) | set(char.get("spells_prepared", []))
@@ -2277,9 +2266,7 @@ def build_action_abilities(char):
             f"Telekinetically shove a creature within 30 ft.: STR save vs. DC {_tk_dc} or move "
             f"5 ft. toward or away from you (it can willingly fail).", 'Telekinetic'))
 
-    # Polearm Master: confirmed zero mechanical presence anywhere despite
-    # being a very commonly-used combat feat. Gated on actually wielding
-    # a qualifying polearm, not just knowing the feat.
+    # Polearm Master: gated on actually wielding a qualifying polearm, not just knowing the feat.
     if "Polearm Master" in char.get("feats", []):
         _pm_weapons = {"Glaive", "Halberd", "Quarterstaff", "Pike", "Spear"}
         _pm_equipped = _pm_weapons & set(w.split(" +")[0].strip() for w in char.get("equipped_weapons", []))
@@ -2293,7 +2280,7 @@ def build_action_abilities(char):
             "an opportunity attack from you on entering your reach (not just leaving it).",
             'Polearm Master'))
 
-    # Sentinel: confirmed zero mechanical presence anywhere.
+    # Sentinel.
     if "Sentinel" in char.get("feats", []):
         buckets['Passive'].append(('Sentinel',
             "Hitting with an opportunity attack reduces the target's speed to 0 for the rest "
@@ -2303,9 +2290,7 @@ def build_action_abilities(char):
             "When a creature within 5 ft. attacks a target other than you (who doesn't have "
             "this feat), melee attack the attacker.", 'Sentinel'))
 
-    # Crossbow Expert: confirmed zero mechanical presence anywhere despite
-    # being a very commonly-used combat feat. The bonus-action attack is
-    # gated on actually wielding a hand crossbow.
+    # Crossbow Expert: the bonus-action attack is gated on actually wielding a hand crossbow.
     if "Crossbow Expert" in char.get("feats", []):
         buckets['Passive'].append(('Crossbow Expert',
             "Ignore the Loading property on crossbows you're proficient with. Being within "
@@ -2318,7 +2303,7 @@ def build_action_abilities(char):
                 f"crossbow: 1d6{f'+{_ce_mod}' if _ce_mod>=0 else _ce_mod} piercing.",
                 'Crossbow Expert'))
 
-    # War Caster: confirmed zero mechanical presence anywhere.
+    # War Caster.
     if "War Caster" in char.get("feats", []):
         buckets['Passive'].append(('War Caster',
             "Advantage on CON saves to maintain concentration when damaged. Perform somatic "
@@ -2327,8 +2312,7 @@ def build_action_abilities(char):
             "Cast a spell (1-action casting time, targeting only the provoking creature) "
             "instead of making an opportunity attack.", 'War Caster'))
 
-    # Shield Master: confirmed zero mechanical presence anywhere. All
-    # three benefits are gated on actually wielding a shield.
+    # Shield Master: all three benefits are gated on actually wielding a shield.
     if "Shield Master" in char.get("feats", []) and char.get("shield", False):
         _sm_bonus = 2 + char.get("shield_magic_bonus", 0)
         buckets['Bonus Action'].append(('Shield Shove',
@@ -2342,7 +2326,7 @@ def build_action_abilities(char):
             "On a successful DEX save against an effect that would normally deal half damage "
             "on a success, take no damage instead, interposing your shield.", 'Shield Master'))
 
-    # Mage Slayer: confirmed zero mechanical presence anywhere.
+    # Mage Slayer.
     if "Mage Slayer" in char.get("feats", []):
         buckets['Reaction'].append(('Mage Slayer',
             "Melee attack a creature within 5 ft. that casts a spell.", 'Mage Slayer'))
@@ -2352,12 +2336,10 @@ def build_action_abilities(char):
             'Mage Slayer'))
 
     # Harness Divine Power (TCE optional class feature, Cleric and
-    # Paladin): confirmed a real gap directly flagged — fully defined
-    # in class_features.py with a real resource, but zero presence in
-    # the Actions tab. This is an OPTIONAL feature (DM-approved
-    # opt-in, not automatic) — gated by the real Settings-popup
-    # "Optional Rules" toggle, the same established mechanism already
-    # used for Eldritch Versatility.
+    # Paladin): fully defined in class_features.py with a real
+    # resource. This is an OPTIONAL feature (DM-approved opt-in, not
+    # automatic) — gated by the Settings-popup "Optional Rules" toggle,
+    # the same mechanism used for Eldritch Versatility.
     if char.get("optional_rules", {}).get("harness_divine_power", False):
         if class_levels(char).get("Cleric", 0) >= 2 or class_levels(char).get("Paladin", 0) >= 3:
             buckets['Bonus Action'].append(('Harness Divine Power (Channel Divinity)',
@@ -2365,36 +2347,33 @@ def build_action_abilities(char):
                 "level is no higher than half your proficiency bonus (rounded up).",
                 'Harness Divine Power'))
 
-    # Actor: confirmed zero mechanical presence anywhere.
+    # Actor.
     if "Actor" in char.get("feats", []):
         buckets['Passive'].append(('Actor',
             "Advantage on CHA (Deception) and CHA (Performance) checks when trying to pass "
             "yourself off as a different person. Can mimic another person's speech or a "
             "creature's sounds you've heard for 1+ minute.", 'Actor'))
 
-    # Elven Accuracy: confirmed zero mechanical presence anywhere. This
-    # app doesn't roll dice for attacks (it shows modifiers, not rolls),
-    # so the reroll itself has no numeric hook to attach to — shown as
-    # a passive reminder instead.
+    # Elven Accuracy: this app doesn't roll dice for attacks (it shows
+    # modifiers, not rolls), so the reroll itself has no numeric hook
+    # to attach to — shown as a passive reminder instead.
     if "Elven Accuracy" in char.get("feats", []):
         buckets['Passive'].append(('Elven Accuracy',
             "Whenever you have advantage on an attack roll using DEX, INT, WIS, or CHA, "
             "reroll one of the two dice once.", 'Elven Accuracy'))
 
-    # Elemental Adept: confirmed zero mechanical presence anywhere.
-    # Shown once the player has made their damage-type choice via the
-    # feat-selection dialog; falls back to a generic note if not yet
-    # chosen (e.g. an older save from before this was wired).
+    # Elemental Adept: shown once the player has made their damage-type
+    # choice via the feat-selection dialog; falls back to a generic
+    # note if not yet chosen.
     if "Elemental Adept" in char.get("feats", []):
         _ea_type = char.get("_choices", {}).get("elemental_adept_type", "your chosen")
         buckets['Passive'].append(('Elemental Adept',
             f"Your {_ea_type} spells ignore resistance to {_ea_type} damage, and you can treat "
             f"any 1 rolled on a {_ea_type} damage die as a 2.", 'Elemental Adept'))
 
-    # Dragon Fear: confirmed zero mechanical presence anywhere. Real
-    # rule: used "in place of your Breath Weapon" (same resource, an
-    # alternative choice each time), so shown as an additional action
-    # alongside it rather than trying to replace that entry outright.
+    # Dragon Fear: used "in place of your Breath Weapon" (same
+    # resource, an alternative choice each time), so shown as an
+    # additional action alongside it rather than replacing that entry outright.
     if "Dragon Fear" in char.get("feats", []):
         from dnd_app.core.calculator import get_prof_bonus, ability_mod
         _df_dc = 8 + get_prof_bonus(char) + ability_mod(char, "CHA")
@@ -2434,9 +2413,7 @@ def build_action_abilities(char):
         buckets['Passive'].append(('Boon Aura',
             "Allies within 5 ft. of you have advantage on saving throws against being "
             "frightened or charmed, provided you aren't incapacitated.", 'Lifelong Companion'))
-    # Doppelganger (DM Reward): confirmed zero mechanical presence
-    # anywhere before this pass — darkvision is wired separately in
-    # calculator.py's get_character_senses().
+    # Doppelganger (DM Reward): darkvision is wired separately in calculator.py's get_character_senses().
     if "Doppelganger" in char.get("dm_rewards", []):
         from dnd_app.core.calculator import get_prof_bonus, ability_mod
         _dg_dc = 8 + get_prof_bonus(char) + ability_mod(char, "INT")
@@ -2448,16 +2425,14 @@ def build_action_abilities(char):
             "statistics (other than size) don't change; equipment isn't transformed. You "
             "revert to your true form when you die.", 'Doppelganger'))
 
-    # Owlbear Whisperer (DM Reward): confirmed zero mechanical presence
-    # anywhere. A fixed, stated DC — not player-scaled.
+    # Owlbear Whisperer (DM Reward): a fixed, stated DC — not player-scaled.
     if "Owlbear Whisperer" in char.get("dm_rewards", []):
         buckets['Action'].append(('Owlbear Whisperer',
             "If within 10 ft. of an owlbear: DC 10 CHA (Animal Handling) check. On a success, "
             "shift its attitude toward you (hostile→indifferent, or indifferent→friendly).",
             'Owlbear Whisperer'))
 
-    # Littlest Yeti (DM Reward): confirmed zero mechanical presence
-    # anywhere.
+    # Littlest Yeti (DM Reward).
     if "Littlest Yeti" in char.get("dm_rewards", []):
         buckets['Passive'].append(('Littlest Yeti',
             "Speak Yeti. Advantage on CHA checks made to influence yeti or improve their "
@@ -2472,21 +2447,17 @@ def build_action_abilities(char):
             "Create a melee weapon of your choice in your empty hand (proficient with it, "
             "counts as magical). Disappears if more than 5 ft. away for 1 min.+, if you create "
             "it again, if dismissed (no action), or if you die.", 'Warlock'))
-    # Pact of the Chain (Warlock): confirmed zero implementation existed
-    # for this half of the Pact Boon either (the find familiar grant
-    # itself is handled separately, via bonus_spells).
+    # Pact of the Chain (Warlock): the find familiar grant itself is handled separately, via bonus_spells.
     if _pact_choice and "chain" in _pact_choice[0].lower():
         buckets['Action'].append(('Forgo Attack for Familiar',
             "When you take the Attack action, forgo one of your own attacks to let your "
             "familiar make one attack with its reaction.", 'Warlock'))
-    # Waxing and Waning (Lunar Sorcery, 6th level): confirmed zero
-    # implementation existed despite accurate tooltip text.
+    # Waxing and Waning (Lunar Sorcery, 6th level).
     if class_levels(char).get("Sorcerer", 0) >= 6 and "lunar" in subclasses(char).get("Sorcerer", "").lower():
         buckets['Bonus Action'].append(('Waxing and Waning',
             "Spend 1 sorcery point to change your current Lunar Embodiment phase for a "
             "different one.", 'Sorcerer'))
-    # Pyromancer's Fury (Pyromancer, PSK, 14th level): confirmed zero
-    # implementation existed despite accurate tooltip text. Unofficial
+    # Pyromancer's Fury (Pyromancer, PSK, 14th level): unofficial
     # (Plane Shift: Kaladesh), noted in the description itself.
     sorc_lvl_pf = class_levels(char).get("Sorcerer", 0)
     if sorc_lvl_pf >= 14 and "pyromancer" in subclasses(char).get("Sorcerer", "").lower():
@@ -2494,9 +2465,9 @@ def build_action_abilities(char):
             f"Unofficial (Plane Shift: Kaladesh). When hit by a melee attack, deal fire "
             f"damage equal to your sorcerer level ({sorc_lvl_pf}) to the attacker, ignoring "
             f"resistance to fire damage.", 'Sorcerer'))
-    # Heart of Fire (Pyromancer, PSK, 1st level): confirmed this app has
-    # no "which spells deal fire damage" flag to hook a real mechanical
-    # trigger into — real, visible Passive note instead.
+    # Heart of Fire (Pyromancer, PSK, 1st level): this app has no
+    # "which spells deal fire damage" flag to hook a mechanical trigger
+    # into — a visible Passive note instead.
     if sorc_lvl_pf >= 1 and "pyromancer" in subclasses(char).get("Sorcerer", "").lower():
         buckets['Passive'].append(("Heart of Fire (passive)",
             f"Unofficial (Plane Shift: Kaladesh). Whenever you start casting a spell of 1st "
@@ -2568,11 +2539,10 @@ def build_action_abilities(char):
                     # real DC — not the generic level-progression text.
                     desc = _breath_weapon_desc(char)
                 elif frag == "Mimicry":
-                    # Confirmed the base and MPMM Kenku versions have
-                    # genuinely different real mechanics (opposed
-                    # Deception check vs. flat DC) — resolved separately
-                    # rather than shown as one, potentially-wrong
-                    # generic description.
+                    # The base and MPMM Kenku versions have genuinely
+                    # different mechanics (opposed Deception check vs.
+                    # flat DC), resolved separately rather than shown as
+                    # one, potentially-wrong generic description.
                     if race_name == "Kenku (MPMM)":
                         from dnd_app.core.calculator import get_prof_bonus
                         from dnd_app.core.character import ability_mod
@@ -2638,12 +2608,11 @@ def build_action_abilities(char):
     except Exception:
         pass
 
-    # Way of the Four Elements: chosen Elemental Disciplines — confirmed
-    # a real, significant gap. Disciplines are player-chosen (not fixed
-    # by CLASS_FEATURE_INDEX like most subclass features), so a static
-    # KNOWN_ACTIONS entry can't cover them; even with disciplines
-    # explicitly chosen, previously none appeared on the Combat page at
-    # all, only the free, unconditional Elemental Attunement.
+    # Way of the Four Elements: chosen Elemental Disciplines are
+    # player-chosen (not fixed by CLASS_FEATURE_INDEX like most
+    # subclass features), so a static KNOWN_ACTIONS entry can't cover
+    # them — only the free, unconditional Elemental Attunement would
+    # otherwise appear on the Combat page.
     try:
         chosen_disciplines = char.get("_choices", {}).get("four_elements_disciplines", [])
         for disc in chosen_disciplines:
@@ -2653,12 +2622,10 @@ def build_action_abilities(char):
     except Exception:
         pass
 
-    # Arcane Archer: chosen Arcane Shot options — confirmed the exact
-    # same gap pattern as Elemental Discipline just above: player-chosen,
-    # so no static KNOWN_ACTIONS entry can cover them, and previously
-    # none appeared on the Combat page at all despite being explicitly
-    # chosen. Arcane Shot replaces one of the Extra Attacks with a
-    # special shot, so it's a Reaction-free Action use.
+    # Arcane Archer: chosen Arcane Shot options are player-chosen, so no
+    # static KNOWN_ACTIONS entry can cover them. Arcane Shot replaces
+    # one of the Extra Attacks with a special shot, so it's a
+    # Reaction-free Action use.
     try:
         chosen_shots = char.get("_choices", {}).get("arcane_shot_options", [])
         for shot in chosen_shots:
@@ -2668,12 +2635,11 @@ def build_action_abilities(char):
     except Exception:
         pass
 
-    # Rune Knight: chosen Runes — confirmed the same gap pattern again.
-    # Each rune grants both a passive skill benefit and an active,
-    # limited-use effect (bonus action or reaction depending on the
-    # rune) — shown together here as one entry per rune rather than
-    # splitting the passive/active halves apart, since the reference
-    # text itself describes them as a single package per rune.
+    # Rune Knight: chosen Runes. Each rune grants both a passive skill
+    # benefit and an active, limited-use effect (bonus action or
+    # reaction depending on the rune) — shown together here as one
+    # entry per rune rather than splitting the passive/active halves
+    # apart, since the reference text describes them as a single package per rune.
     try:
         chosen_runes = char.get("_choices", {}).get("rune_knight_runes", [])
         for rune in chosen_runes:
@@ -2683,12 +2649,11 @@ def build_action_abilities(char):
     except Exception:
         pass
 
-    # Battle Master: chosen Maneuvers — confirmed the same gap pattern
-    # as Arcane Shot/Rune Knight: chosen maneuvers were only ever shown
-    # in the Features tab's passive list, never as real, usable Actions
-    # tab entries with their actual effect text. Maneuvers are triggered
-    # on a weapon hit as part of an attack, so they land in Action
-    # alongside the attack itself rather than as a separate bonus action.
+    # Battle Master: chosen Maneuvers are shown here as real, usable
+    # Actions tab entries with their actual effect text, not just in
+    # the Features tab's passive list. Maneuvers are triggered on a
+    # weapon hit as part of an attack, so they land in Action alongside
+    # the attack itself rather than as a separate bonus action.
     try:
         chosen_maneuvers = char.get("battle_master_maneuvers", [])
         for man in chosen_maneuvers:
@@ -2698,12 +2663,12 @@ def build_action_abilities(char):
     except Exception:
         pass
 
-    # Final 3 of the 12 confirmed-missing Eldritch Invocations. One with
-    # Shadows and Relentless Hex are unlimited-use but conditional
-    # (light level, or an active cursed target), so they don't fit the
-    # resource-cap pattern used for the other 9. Far Scribe's spell-
-    # storing book mechanic is complex enough that a full simulation
-    # isn't practical here, so it gets an accurate note-only entry.
+    # One with Shadows and Relentless Hex are unlimited-use but
+    # conditional (light level, or an active cursed target), so they
+    # don't fit the resource-cap pattern used for the other Eldritch
+    # Invocations. Far Scribe's spell-storing book mechanic is complex
+    # enough that a full simulation isn't practical here, so it gets an
+    # accurate note-only entry.
     _known_inv3 = [inv.split(" (")[0].strip() for inv in char.get("eldritch_invocations", [])]
     if "One with Shadows" in _known_inv3:
         buckets['Action'].append(('One with Shadows',
@@ -2723,10 +2688,9 @@ def build_action_abilities(char):
             "slot or material components by writing the message on the page.",
             'Far Scribe'))
 
-    # 10 "at-will" spell-like Eldritch Invocations — per the user's
-    # explicit request, these go into Known Actions rather than being
-    # left as passive notes, since they're each a real, repeatable
-    # action a player takes in play.
+    # 10 "at-will" spell-like Eldritch Invocations go into Known
+    # Actions rather than being left as passive notes, since each is a
+    # real, repeatable action a player takes in play.
     AT_WILL_INVOCATIONS = {
         "Ascendant Step": "Cast levitate on yourself at will, without a spell slot or material components.",
         "Beast Speech": "Cast speak with animals at will, without expending a spell slot.",
@@ -2819,9 +2783,8 @@ def build_action_abilities(char):
             "turn; on later turns, use your action again to extend the connection. You're blinded "
             "and deafened to your own surroundings while doing so.", 'Gaze of Two Minds'))
 
-    # Boots of the Winding Path (Artificer Infusion): confirmed zero
-    # mechanical presence anywhere. Unlimited uses (no resource cap
-    # needed), so this is a plain Bonus Action entry.
+    # Boots of the Winding Path (Artificer Infusion): unlimited uses (no
+    # resource cap needed), so this is a plain Bonus Action entry.
     if any(inf.get("infusion") == "Boots of the Winding Path" for inf in char.get("active_infusions", [])):
         buckets['Bonus Action'].append(('Boots of the Winding Path',
             "Teleport up to 15 ft. to an unoccupied space you can see that you occupied at "
@@ -2847,13 +2810,13 @@ def build_action_abilities(char):
             "benefits of a long rest, spend all 8 hours doing light activity instead.",
             'Aspect of the Moon'))
 
-    # Rage "addon" summary — per the user's specific request, features
-    # that add onto an existing base mechanic (subclass/level bonuses
-    # "while raging") should be visible together rather than scattered
-    # as separate entries a player has to notice individually. Scans
-    # every other entry already computed above for a "while raging"
-    # mention and appends a short list of names to Rage's own
-    # description, so looking at Rage shows everything it currently does.
+    # Rage "addon" summary: features that add onto an existing base
+    # mechanic (subclass/level bonuses "while raging") are visible
+    # together rather than scattered as separate entries a player has
+    # to notice individually. Scans every other entry already computed
+    # above for a "while raging" mention and appends a short list of
+    # names to Rage's own description, so looking at Rage shows
+    # everything it currently does.
     try:
         rage_addons = []
         for bucket_items in buckets.values():
@@ -2872,11 +2835,9 @@ def build_action_abilities(char):
         pass
 
     # Throwable/usable consumable items (Alchemist's Fire, Acid, Holy
-    # Water, etc.): confirmed a real, reported gap — these already have
-    # correct, detailed mechanical text in the items data, but had zero
-    # presence in the Actions tab at all, regardless of whether the
-    # character actually owned one. Only surfaced for items the
-    # character actually has, not shown unconditionally.
+    # Water, etc.) use their correct, detailed mechanical text from the
+    # items data. Only surfaced for items the character actually owns,
+    # not shown unconditionally.
     CONSUMABLE_ITEM_ACTIONS = {
         "Acid (vial)": ("Action", "Acid (vial)"),
         "Alchemist's Fire (flask)": ("Action", "Alchemist's Fire (flask)"),
@@ -2899,11 +2860,10 @@ def build_action_abilities(char):
             if note:
                 buckets[bucket_name].append((item_name, note, item_name))
 
-    # Interception / Protection fighting styles: confirmed a real,
-    # reported gap — both are reaction-based (unlike the other 9
-    # fighting styles, which are passive combat-math modifiers already
-    # correctly handled elsewhere) and already correctly shown in the
-    # Features tab, but had zero Actions tab presence at all.
+    # Interception / Protection fighting styles are reaction-based
+    # (unlike the other 9 fighting styles, which are passive combat-math
+    # modifiers already handled elsewhere), so they get their own
+    # Actions tab entries alongside the Features tab display.
     _fighting_styles = char.get("fighting_styles", [])
     if any("interception" in fs.lower() for fs in _fighting_styles):
         buckets['Reaction'].append(('Interception (Fighting Style)',
@@ -2916,12 +2876,10 @@ def build_action_abilities(char):
             "of you, impose disadvantage on the attack roll (requires a shield).",
             'Protection'))
 
-    # Pact Boon (Warlock): confirmed real, reported gaps — Blade and
-    # Talisman had zero Actions tab presence at all (Talisman already
-    # has a real resource from earlier work, but no entry describing
-    # when/how to use it), and Chain's forgo-attack mechanic and special
-    # familiar forms were never noted anywhere despite the spell grant
-    # itself being correctly wired.
+    # Pact Boon (Warlock): Blade and Talisman each get an Actions tab
+    # entry describing when/how to use them (Talisman's own resource is
+    # wired elsewhere), and Chain's forgo-attack mechanic and special
+    # familiar forms are noted here alongside the spell grant.
     _pact = char.get("_choices", {}).get("warlock_pact_boon", [])
     _pact_name = _pact[0].lower() if _pact else ""
     if "blade" in _pact_name:
@@ -2929,11 +2887,9 @@ def build_action_abilities(char):
                       "You're proficient with it, and it counts as magical for overcoming resistance/"
                       "immunity to nonmagical attacks. Disappears if more than 5 ft. away for 1 min., or "
                       "if you use this again.")
-        # Lifedrinker: confirmed a real, previously-missing gap — zero
-        # mechanical wiring anywhere, only a name in the invocation
-        # pool. Computes the real, live CHA-mod bonus here, following
-        # the same pattern already used for Agonizing Blast's Eldritch
-        # Blast damage, rather than just noting the rule exists.
+        # Lifedrinker: computes the real, live CHA-mod bonus here,
+        # following the same pattern used for Agonizing Blast's
+        # Eldritch Blast damage, rather than just noting the rule exists.
         if any("lifedrinker" in i.lower() for i in char.get("eldritch_invocations", [])):
             from dnd_app.core.calculator import ability_mod
             cha_mod = ability_mod(char, "CHA")

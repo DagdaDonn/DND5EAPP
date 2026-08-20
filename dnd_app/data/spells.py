@@ -1,6 +1,15 @@
 """
-D&D 5e Spell Database — all SRD spells + major PHB/XGE/TCE additions.
-Each spell: name, level (0=cantrip), school, classes, ritual, concentration, source, description.
+Spells data module.
+
+D&D 5e spell database: all SRD spells plus major PHB/XGE/TCE
+additions. Each spell entry records name, level (0=cantrip), school,
+eligible classes, ritual/concentration flags, source, and description.
+Also defines BONUS_SPELLS/RACIAL_BONUS_SPELLS and get_bonus_spells(),
+the racial/subclass/feat/item spell grants merged into a character's
+known spell list at build time.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 # school abbreviations
@@ -988,20 +997,15 @@ def get_bonus_spells(char: dict) -> list[str]:
             if char_lvl >= req_lvl:
                 out.extend(spells)
 
-    # DM-Granted Bonus Features (dm_rewards.py): confirmed real,
-    # unconditional cantrip grants in the source text — Gathered
-    # Whispers' Spirit Whispers (Message) and Living Shadow's Grasping
-    # Shadow (Mage Hand). dm_rewards.py had zero mechanical wiring of
-    # any kind before this.
+    # DM-Granted Bonus Features (dm_rewards.py): unconditional cantrip
+    # grants — Gathered Whispers' Spirit Whispers (Message) and Living
+    # Shadow's Grasping Shadow (Mage Hand).
     DM_REWARD_CANTRIPS = {"Gathered Whispers": "Message", "Living Shadow": "Mage Hand"}
     for reward_name in char.get("dm_rewards", []):
         if reward_name in DM_REWARD_CANTRIPS:
             out.append(DM_REWARD_CANTRIPS[reward_name])
 
-    # Primal Awareness (Ranger, TCE optional, replaces Primeval
-    # Awareness): confirmed zero mechanical wiring anywhere despite
-    # existing as displayable text. Real table verified against the
-    # user's reference file.
+    # Primal Awareness (Ranger, TCE optional, replaces Primeval Awareness).
     ranger_lvl_pa = cl.get("Ranger", 0)
     pa_enabled = (char.get("_choices", {}).get("optional_features", {}).get("Primal Awareness", False)
                   or char.get("optional_rules", {}).get("primal_awareness", False))
@@ -1031,17 +1035,13 @@ def get_bonus_spells(char: dict) -> list[str]:
         if key.endswith("_cantrips") and ("_cleric_" in key or "_druid_" in key):
             out.extend(picked)
 
-    # Pact of the Tome's Book of Shadows cantrips (Warlock) — confirmed
-    # zero mechanical grant existed before; the Pact Boon choice was
-    # purely cosmetic. Correctly don't count against the normal cantrip
-    # limit, per the actual rule text.
+    # Pact of the Tome's Book of Shadows cantrips (Warlock) don't count
+    # against the normal cantrip limit, per the actual rule text.
     out.extend(choices.get("pact_of_the_tome_cantrips", []))
     out.extend(choices.get("book_of_ancient_secrets_rituals", []))
 
-    # Pact of the Chain (Warlock): confirmed genuinely missing, unlike
-    # Pact of the Tome above which was already correctly wired. Grants
-    # find familiar as a bonus spell that doesn't count against spells
-    # known, per the real rule text.
+    # Pact of the Chain (Warlock): grants find familiar as a bonus
+    # spell that doesn't count against spells known, per the real rule text.
     pact_choice_val = choices.get("warlock_pact_boon", [])
     if pact_choice_val and "chain" in pact_choice_val[0].lower():
         out.append("Find Familiar")
@@ -1060,18 +1060,14 @@ def get_bonus_spells(char: dict) -> list[str]:
     if "Thief of Five Fates" in inv_names:
         out.append("Bane")
 
-    # Ritual Caster (feat): 2 chosen 1st-level ritual spells, always
-    # prepared — confirmed zero implementation existed for this at all,
-    # despite the feat requiring 2 specific spell picks.
+    # Ritual Caster (feat): 2 chosen 1st-level ritual spells, always prepared.
     out.extend(choices.get("feat_ritual_caster_spells", []))
 
-    # Firbolg Magic: confirmed zero implementation existed for the
-    # actual spell grants, only tooltip text.
+    # Firbolg Magic.
     if (char.get("species") or char.get("race", "")).lower() == "firbolg":
         out.extend(["Detect Magic", "Disguise Self"])
 
-    # Lunar Sorcery (Sorcerer): confirmed zero mechanical implementation
-    # existed for either of these despite accurate tooltip text.
+    # Lunar Sorcery (Sorcerer).
     from dnd_app.core.calculator import class_levels, subclasses
     if "lunar" in subclasses(char).get("Sorcerer", "").lower():
         sorc_lvl = class_levels(char).get("Sorcerer", 0)
@@ -1094,16 +1090,14 @@ def get_bonus_spells(char: dict) -> list[str]:
             if sorc_lvl >= tier:
                 out.extend(tier_spells)
 
-    # Pact of the Chain's find familiar grant (Warlock) — confirmed zero
-    # mechanical grant existed before. Correctly doesn't count against
-    # normal spells known, per the actual rule text.
+    # Pact of the Chain's find familiar grant (Warlock) doesn't count
+    # against normal spells known, per the actual rule text.
     pact_choice = choices.get("warlock_pact_boon", [])
     if pact_choice and "chain" in pact_choice[0].lower():
         out.append("Find Familiar")
 
     # Guidance of the Spirits (Bard, College of Spirits) grants Guidance
-    # at will — confirmed zero mechanical grant existed before.
-    # Correctly doesn't count against normal cantrips known.
+    # at will; doesn't count against normal cantrips known.
     if choices.get("guidance_of_the_spirits_skill"):
         out.append("Guidance")
 

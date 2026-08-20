@@ -14,6 +14,9 @@ Key 2024 changes:
 - Barbarian: Primal Knowledge at 3 and 10, Instinctive Pounce merged
 - Sorcerer: Innate Sorcery at 1, Font of Magic at 2; Metamagic options +2 at 10 and 17
 - Epic Boon feats at 19th level (replaces old ASI/Feat slot)
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 # ── 2024 Spell slot tables (identical math to 2014) ───────────────────────────

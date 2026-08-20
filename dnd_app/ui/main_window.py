@@ -2,6 +2,9 @@
 Main application window.
 Shows:  StartMenu → CharacterWizard → CharacterSheet
         StartMenu → Load → CharacterSheet
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 import os, sys
 from PySide6.QtWidgets import *
@@ -305,11 +308,11 @@ class SettingsDialog(QDialog):
             sheet.char["optional_rules"]["cantrip_versatility"] = self._cantrip_versatility_cb.isChecked()
             sheet.char["optional_rules"]["bardic_versatility"] = self._bardic_versatility_cb.isChecked()
             sheet.char["optional_rules"]["sorcerous_versatility"] = self._sorcerous_versatility_cb.isChecked()
-            # Confirmed a real bug during testing: saving here alone
-            # didn't recompute char["resources"] (only a full rebuild
-            # does), so a newly-toggled optional feature's resource
-            # wouldn't appear until some unrelated character change
-            # happened to trigger a rebuild later.
+            # Saving here alone doesn't recompute char["resources"]
+            # (only a full rebuild does), so a newly-toggled optional
+            # feature's resource needs this explicit refresh rather
+            # than waiting for some unrelated character change to
+            # trigger a rebuild later.
             if hasattr(sheet, "ctrl"):
                 sheet.ctrl.refresh()
             if hasattr(sheet, "_refresh_action_tabs"):

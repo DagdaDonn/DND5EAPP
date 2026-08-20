@@ -5,6 +5,9 @@ Eberron, Wildemount, Spelljammer, Fizban's, Bigby's, Mythic Odysseys, GGR.
 Each race entry: name, speed, size, asi (fixed), asi_flex (# free +1s),
 traits (list of strings), languages, size_note, subraces (optional),
 source.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

@@ -1,5 +1,8 @@
 """
 D&D 5e Mundane Items — weapons, armor, adventuring gear, tools, mounts.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 # ── Armor ─────────────────────────────────────────────────────────────────────
@@ -150,10 +153,8 @@ def weapon_dict():
 WEAPON_DICT = weapon_dict()
 
 # ── Equipment Packs ────────────────────────────────────────────────────────────
-# Confirmed a real, reported gap: these were only ever referenced by
-# name in starting_equipment.py's choice options, with no actual
-# contents data anywhere — a chosen pack added one opaque item, not
-# its real components. Each entry: (item_name, qty).
+# Each entry: (item_name, qty). Referenced by name in
+# starting_equipment.py's choice options; a chosen pack adds its real component items.
 EQUIPMENT_PACKS = {
     "Burglar's Pack": [
         ("Backpack", 1), ("Ball bearings (bag of 1,000)", 1), ("String (10 feet)", 1),
@@ -373,7 +374,9 @@ VEHICLES_AIR = ["Cloud Galleon", "Hot-air Balloon", "Sky Skiff", "Wind Raider"]
 VEHICLES_BGDIA = ["Demon Grinder", "Devil's Ride", "Scavenger", "Tormentor", "Venatrix"]
 VEHICLES_MAGIC = ["Apparatus of Kwalish", "Tasha's Creeping Keelboat", "Lyrandar Air Cruiser",
     "Lyrandar Skyskiff", "Strider Airship", "Flying Chariot", "Ornithopter of Flying",
-    "Bobbing Lily Pad", "Quaal's Feather Token, Swan Boat"]
+    "Bobbing Lily Pad", "Quaal's Feather Token, Swan Boat",
+    "Carpet of Flying, 3 ft. × 5 ft.", "Carpet of Flying, 4 ft. × 6 ft.",
+    "Carpet of Flying, 5 ft. × 7 ft.", "Carpet of Flying, 6 ft. × 9 ft."]
 VEHICLES = (VEHICLES_LAND + VEHICLES_WATER + VEHICLES_SPELLJAMMING + VEHICLES_ASTRAL
             + VEHICLES_AIR + VEHICLES_BGDIA + VEHICLES_MAGIC)
 

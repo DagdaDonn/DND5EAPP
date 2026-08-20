@@ -1,7 +1,15 @@
 """
-Level-Up / Character Creation Panel — v2
-Handles all pending choices with enforce-count, confirm-on-done,
-and subclass-conditional choices (Battle Master, Wild Magic, etc.)
+Level-Up Panel module.
+
+PySide6 widget for both initial character creation and later level-
+ups. Presents every pending choice a level grants (ASI/feat, subclass
+picks, spells known/prepared, fighting styles, infusions, invocations,
+racial/subclass sub-choices such as Eladrin season or Lunar Sorcery
+phase) with enforce-count validation and confirm-on-done, then calls
+into dnd_app.core.builder to apply the results to the character dict.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt, Signal, QSize
@@ -184,13 +192,11 @@ class ChoiceWidget(QFrame):
         if mode == "expertise" and not explicit_pool:
             # Standard case (Rogue/Bard/feats): "choose from any skill
             # you're already proficient in" — expertise requires
-            # existing proficiency. Confirmed a real bug where this
-            # fell through to "any skill in the game" with the
-            # checkbox styling exactly backwards. Does NOT apply when
-            # a caller already provides an explicit, restricted pool
-            # (e.g. Knowledge Domain's 4-skill list, which grants
-            # proficiency AND expertise together regardless of prior
-            # proficiency — a genuinely different mechanic).
+            # existing proficiency. Does NOT apply when a caller already
+            # provides an explicit, restricted pool (e.g. Knowledge
+            # Domain's 4-skill list, which grants proficiency AND
+            # expertise together regardless of prior proficiency — a
+            # genuinely different mechanic).
             pool = [s for s, lvl in self.char.get("skills", {}).items() if lvl >= 2]
         else:
             raw_pool = explicit_pool or ALL_SKILLS
@@ -520,9 +526,7 @@ class ChoiceWidget(QFrame):
         # stored too, keyed by feat name — not just the two feats above
         # that already had dedicated storage for their own specific
         # mechanical use of the choice. This is what lets the Features
-        # tab show which ability a feat like Telekinetic actually keyed
-        # off, which was previously untrackable for every feat except
-        # those two.
+        # tab show which ability a feat like Telekinetic actually keyed off.
         if chosen_ability and len(flex_asi) > 1:
             self.char.setdefault("_choices", {})[f"feat_ability_{feat_name.lower().replace(' ','_')}"] = chosen_ability
 
@@ -794,11 +798,9 @@ class ChoiceWidget(QFrame):
         from dnd_app.data.classes import ARTIFICER_INFUSIONS
         from dnd_app.core.calculator import get_infusion_min_level, class_levels
         art_lvl = class_levels(self.char).get("Artificer", 0)
-        # Confirmed a real, significant bug: this chooser previously
-        # showed every infusion unconditionally regardless of level —
-        # a 1st-level Artificer could select "Arcane Propulsion Armor"
-        # despite its real 14th-level prerequisite. Now only shows
-        # infusions the character actually qualifies for.
+        # Only shows infusions the character actually qualifies for by
+        # level — e.g. Arcane Propulsion Armor requires 14th level and
+        # shouldn't be selectable at 1st.
         eligible_infusions = [inf for inf in ARTIFICER_INFUSIONS
                               if get_infusion_min_level(inf) <= art_lvl]
         search = QLineEdit()
@@ -815,10 +817,10 @@ class ChoiceWidget(QFrame):
             cb = QCheckBox(inf)
             cb.setStyleSheet(f"QCheckBox{{color:{TEXT};font-size:{FS_SMALL}px;}}QCheckBox::indicator{{width:14px;height:14px;}}")
             cb.setChecked(inf in self._selected)
-            # Full official description from the magic item catalog — the
-            # checkbox label itself is only this data file's own short
-            # summary, not the complete item text already available in
-            # the magic item browser. Confirmed no tooltip existed at all.
+            # Full official description from the magic item catalog —
+            # the checkbox label itself is only this data file's own
+            # short summary, not the complete item text already
+            # available in the magic item browser.
             base_name = inf.split(" – ")[0].strip()
             lookup_name = base_name.split(" (+")[0].strip()
             catalog_entry = get_magic_item(lookup_name) or get_magic_item(base_name)
@@ -1363,8 +1365,7 @@ class LevelUpPanel(QWidget):
             # Aggregate into "extra_languages" — the exact key builder.py's
             # rebuild() reads from (char["languages"] = grants["languages"]
             # + choices.get("extra_languages", [...])) — without this, any
-            # language chosen here was silently lost on the next rebuild,
-            # confirmed directly before this fix.
+            # language chosen here would be lost on the next rebuild.
             choices = self.char["_choices"]
             all_extra_langs = []
             for k, v in choices.items():
@@ -1373,7 +1374,6 @@ class LevelUpPanel(QWidget):
             choices["extra_languages"] = list(set(all_extra_langs))
 
         # ── ASI: store in _choices['asi_bonuses'] only, rebuild() applies ──
-        # In levelup_panel.py, around line 550, in _on_confirmed:
 
         elif choice_id.endswith("_asi_") or "asi_" in choice_id:
             # Store choice by its ID — rebuild() accumulates all ASI keys fresh
@@ -1433,16 +1433,16 @@ class LevelUpPanel(QWidget):
             prev_selected = set(self.char.get("artificer_infusions", []))
             self.char["artificer_infusions"] = selected
             self.char.setdefault("_choices", {})[choice_id] = selected
-            # Learning an infusion just adds it to your known repertoire —
-            # confirmed via research that "known" and "active" are
-            # genuinely different: you can know far more infusions than
-            # you can have active at once (active cap = half of known).
-            # Actually creating/enchanting an item happens separately, via
-            # the Infusions tab or right-clicking a weapon/armor/shield in
-            # the Equipment tab — not automatically here. If an infusion
-            # is un-learned (replaced at level-up) while still active on
-            # an item, that active assignment is removed too, since you
-            # can no longer maintain it.
+            # Learning an infusion just adds it to your known
+            # repertoire — "known" and "active" are different: you can
+            # know far more infusions than you can have active at once
+            # (active cap = half of known). Actually creating/enchanting
+            # an item happens separately, via the Infusions tab or
+            # right-clicking a weapon/armor/shield in the Equipment tab
+            # — not automatically here. If an infusion is un-learned
+            # (replaced at level-up) while still active on an item,
+            # that active assignment is removed too, since you can no
+            # longer maintain it.
             removed_names = {inf.split(" – ")[0].strip() for inf in (prev_selected - new_selected)}
             if removed_names:
                 self.char["active_infusions"] = [
@@ -1491,10 +1491,9 @@ def _get_subclass_choices(char):
         clvl  = c.get("level",0)
         sub   = c.get("subclass","").lower()
 
-        # Blood Hunter: Fighting Style (2nd level, core) — confirmed no
-        # choice UI existed at all for this class. Uses the exact
-        # class-specific wording (e.g. Great Weapon Fighting explicitly
-        # excludes rite damage dice, unlike other classes' version).
+        # Blood Hunter: Fighting Style (2nd level, core). Uses the
+        # exact class-specific wording (e.g. Great Weapon Fighting
+        # explicitly excludes rite damage dice, unlike other classes' version).
         if cname == "Blood Hunter" and clvl >= 2:
             key = "blood_hunter_fighting_style_2"
             already = made.get(key, [])
@@ -1511,11 +1510,10 @@ def _get_subclass_choices(char):
                     "already_chosen": already,
                 })
 
-        # Lunar Sorcery: Lunar Embodiment phase choice (1st level) —
-        # confirmed zero mechanical implementation existed despite
-        # accurate tooltip text. Re-chosen every long rest (handled via
-        # RestOptionsDialog) and, from 6th level, via a bonus action for
-        # 1 sorcery point (Waxing and Waning, handled as a combat action).
+        # Lunar Sorcery: Lunar Embodiment phase choice (1st level).
+        # Re-chosen every long rest (handled via RestOptionsDialog) and,
+        # from 6th level, via a bonus action for 1 sorcery point (Waxing
+        # and Waning, handled as a combat action).
         if cname == "Sorcerer" and clvl >= 1 and "lunar" in sub:
             key = "lunar_phase"
             already = made.get(key, [])
@@ -1530,8 +1528,7 @@ def _get_subclass_choices(char):
                 })
 
         # Guidance of the Spirits (Bard, College of Spirits, 3rd level):
-        # confirmed zero implementation existed. Skill choice, swappable
-        # on long rest via RestOptionsDialog.
+        # skill choice, swappable on long rest via RestOptionsDialog.
         if cname == "Bard" and clvl >= 3 and "spirits" in sub:
             key = "guidance_of_the_spirits_skill"
             already = made.get(key, [])
@@ -1543,9 +1540,8 @@ def _get_subclass_choices(char):
                     "already_chosen": already,
                 })
 
-        # Whispers of the Dead (Rogue, Phantom, 3rd level): confirmed
-        # zero implementation existed. Skill-or-tool choice, swappable
-        # on either rest type via RestOptionsDialog.
+        # Whispers of the Dead (Rogue, Phantom, 3rd level): skill-or-tool
+        # choice, swappable on either rest type via RestOptionsDialog.
         if cname == "Rogue" and clvl >= 3 and "phantom" in sub:
             key = "whispers_of_the_dead_prof"
             already = made.get(key, [])
@@ -1597,10 +1593,7 @@ def _get_subclass_choices(char):
                     "already_chosen": made.get(key, []),
                 })
 
-        # Pact of the Tome's 3 cantrips (from ANY class's spell list, per
-        # the actual rule text) — confirmed zero mechanical implementation
-        # existed for this at all; the Pact Boon choice above was purely
-        # cosmetic.
+        # Pact of the Tome's 3 cantrips, from ANY class's spell list per the actual rule text.
         pact_choice = made.get("warlock_pact_boon", [])
         if cname == "Warlock" and clvl >= 3 and pact_choice and "tome" in pact_choice[0].lower():
             key = "pact_of_the_tome_cantrips"
@@ -1617,12 +1610,11 @@ def _get_subclass_choices(char):
                 })
 
         # Book of Ancient Secrets (Eldritch Invocation, requires Pact of
-        # the Tome): confirmed genuinely missing — a separate invocation
-        # from Pact of the Tome itself, granting 2 additional 1st-level
-        # ritual spells from any class's list. Gated on the invocation
-        # actually being chosen, not just the pact, since a Pact of the
-        # Tome warlock who hasn't taken this specific invocation
-        # shouldn't get the ritual spells.
+        # the Tome): a separate invocation from Pact of the Tome itself,
+        # granting 2 additional 1st-level ritual spells from any class's
+        # list. Gated on the invocation actually being chosen, not just
+        # the pact, since a Pact of the Tome warlock who hasn't taken
+        # this specific invocation shouldn't get the ritual spells.
         known_invs_for_secrets = [i.split(" (")[0].strip() for i in char.get("eldritch_invocations", [])]
         if "Book of Ancient Secrets" in known_invs_for_secrets:
             key = "book_of_ancient_secrets_rituals"
@@ -1655,12 +1647,9 @@ def _get_subclass_choices(char):
                 has_eldritch_blast = any("eldritch blast" in c.lower() for c in known_cantrips)
                 pact_choice2 = made.get("warlock_pact_boon", [])
                 pact_lower = pact_choice2[0].lower() if pact_choice2 else ""
-                # Confirmed a real, reported bug: this pool was completely
-                # unfiltered — every invocation was offered regardless of
-                # the character's actual level or pact boon, including 4
-                # entries that are Pact Boons, not invocations at all,
-                # incorrectly mixed into this same list.
-                # Confirmed via research: "hex/curse feature" means
+                # This pool is filtered by the character's actual level
+                # and pact boon, and excludes the 4 entries that are
+                # Pact Boons, not invocations. "hex/curse feature" means
                 # knowing the Hex spell, OR having a cursing Warlock
                 # feature — Hexblade's Curse (an automatic level-1
                 # feature of the Hexblade patron, so checking the
@@ -2677,11 +2666,9 @@ def _get_race_choices(char):
                 "already_chosen": already,
             })
 
-    # Aasimar (MPMM) Celestial Revelation: confirmed genuinely missing —
-    # no choice mechanism existed at all for the player to select which
-    # revelation they get, despite the race data already correctly
-    # describing all 3 options. Gated to the correct level 3+, and
-    # locked in once chosen per the real rule (never re-offered after).
+    # Aasimar (MPMM) Celestial Revelation: lets the player select which
+    # revelation they get, from the race data's 3 options. Gated to
+    # level 3+, and locked in once chosen per the real rule (never re-offered after).
     if race == "Aasimar (MPMM)":
         clvl = sum(c.get("level", 0) for c in char.get("classes", []))
         already_rev = made.get("aasimar_revelation", [])
@@ -2750,11 +2737,9 @@ def _get_race_choices(char):
                 "already_chosen": already,
             })
 
-    # Eladrin: seasonal Fey Step effect — confirmed this had zero
-    # mechanical implementation, only descriptive subrace text. Player
-    # picks one season; RestOptionsDialog offers to re-pick after a long
-    # rest per the actual rule ("you can change your chosen season after
-    # a long rest").
+    # Eladrin: seasonal Fey Step effect. Player picks one season;
+    # RestOptionsDialog offers to re-pick after a long rest per the
+    # actual rule ("you can change your chosen season after a long rest").
     if "eladrin" in race.lower():
         already_season = made.get("eladrin_season", [])
         if not already_season:

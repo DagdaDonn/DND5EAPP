@@ -14,6 +14,9 @@ there's still something on screen immediately, rather than a blank frame.
 If a splash.gif is present, callers can wait for one full playback loop
 before revealing the main window (see loop_finished / loop_complete below),
 so the animation is never cut off mid-cycle even on a fast-loading machine.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 import os
 from PySide6.QtWidgets import QSplashScreen, QLabel, QVBoxLayout, QWidget

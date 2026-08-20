@@ -7797,3 +7797,429 @@ This closes the full extended fixes pass from the "keep going"
 sequence — Action Surge, the musical instrument bug, all 15 optional-
 feature gaps from the "optional" search, the per-bucket filter rework,
 Kenku Mimicry, and now Pyromancer.
+
+## Petrified was missing its own real mechanical grants
+
+Follow-up to the earlier "Conditions given real mechanical effects" pass
+in this same conversation. That pass correctly wired Speed/Attack/Saves/
+Ability-checks for the conditions with pure numeric modifiers, and
+correctly left Charmed/Deafened/Incapacitated as narrative-only since
+their real text has nothing numeric to automate — but it missed that
+Petrified, unlike those three, DOES have several genuine numeric grants
+in its own rule text: auto-fail STR/DEX saves (same mechanic as
+Paralyzed/Stunned/Unconscious, just never extended to Petrified),
+resistance to all damage, and immunity to poison damage/the poisoned
+condition/disease. All were completely unmodeled — checking "Petrified"
+changed nothing about saves or the resistances strip.
+
+Fixed:
+- `get_condition_save_status()`: added Petrified to the STR/DEX
+  auto-fail set alongside Paralyzed/Stunned/Unconscious.
+- `get_innate_resistance_grants()`: added a Petrified check (same
+  pattern as the existing Scion of the Outer Planes/Resistant Armor
+  conditional checks in the same function) granting resistance to
+  "all" damage — reusing the exact target string Emissary of
+  Redemption/Invincible Conqueror/Umbral Form already use, which the
+  resistance display already renders correctly — plus poison damage
+  immunity and condition-immunity to poisoned/disease, matching the
+  same {"kind": "condition", ...} shape Purity of Body/Divine Health
+  already use.
+
+Verified: all 14 conditions individually and all-at-once through
+`rebuild()`+`update_all()` with zero exceptions; confirmed Petrified
+specifically now produces `damage_resistances = [('all', 'Petrified')]`
+and `damage_immunities` containing poison/poisoned/disease entries, and
+that `get_condition_save_status` returns auto_fail=True for both STR
+and DEX. The resistances-strip UI and save badges both consume these
+generically (driven by the `sources` list), so no separate UI change
+was needed — `ctrl.refresh()` on condition toggle (already wired in
+the earlier pass) picks it up automatically.
+
+## Theme contrast pass: clearer without being jarring
+
+User reported the themes needed "better contrast that isn't too jarring
+but also readable." Measured every theme's actual WCAG contrast ratios
+(relative-luminance formula, not eyeballed) rather than guessing, and
+found two systematic, repeatable gaps across all 12 named themes plus
+the module-level default palette:
+
+- **TEXT3** (muted/tertiary text — captions, hint text, tiny badge
+  labels, including the RESISTANCES/MOVEMENT captions added earlier
+  this same conversation) sat at 3.0-4.9:1 against BG and dropped as
+  low as 2.5:1 against the raised SURF3 backdrop it's actually shown
+  on in cards — below the 4.5:1 AA text minimum in every single theme
+  when checked against where it's really used, not just flat BG.
+- **BORDER** (the subtle card/panel edge) sat at 1.4-2.0:1 against BG
+  in every theme — low enough that adjacent boxes with no other visual
+  separator (the exact resistances-vs-movement-strip confusion fixed
+  earlier this conversation) would read as blending together.
+
+Fixed both by mixing each color toward white (or black, for the one
+light theme, Arcane Scroll) via binary search until it cleared a
+target ratio, rather than raising HSL lightness directly — lightening
+in HSL keeps saturation fixed and produces a neon, jarring result once
+brightened (confirmed this firsthand: Feywild's border came out as a
+vivid saturated blue-purple, #3c43c2, before switching approaches);
+mixing toward a neutral desaturates naturally as it lightens, staying
+in the theme's original muted register. Targets: TEXT3 to ~4.8-6:1 on
+BG (and re-checked against SURF3, tightening further if that backdrop
+was still under 4.5:1), BORDER to ~2.6:1 on BG — a deliberate stop
+short of the full 3:1 UI-component threshold, since the user explicitly
+asked for "not too jarring," and 2.6:1 is already double-to-triple the
+original ~1.4-2.0:1 range and enough to read as a distinct edge.
+
+Also swept every base accent color (INDIGO/TEAL/AMBER/CRIMSON/PURPLE)
+actually used as literal text color anywhere in sheet.py — confirmed
+via grep which ones are literal `color:` text (INDIGO once, TEAL 4x,
+AMBER 6x, e.g. the DM-reward "Requires:" prerequisite text) versus
+background/border-only (CRIMSON, PURPLE — 0 direct text usages found),
+and nudged the handful that fell under 4.5:1 against their real SURF
+backdrop (Shadowfell/Blood Moon/Mossgrove/Gearworks/Hallowed Stone
+INDIGO, Tavern Hearth TEAL, Arcane Scroll AMBER) up to just clear it.
+Left CRIMSON/PURPLE's background/border-only usages against the
+correct 3:1 UI-component bar instead of the stricter text bar, only
+touching the handful that fell under 3:1 (Blood Moon/Cinderveil/
+Tavern Hearth/Gearworks PURPLE, Hallowed Stone CRIMSON).
+
+Verified: `apply_theme()`/`build_qss()` still run cleanly for all 12
+themes with no exceptions; recomputed contrast for every theme after
+the edits and confirmed TEXT3 now clears 4.5:1 against BG/SURF/SURF2/
+SURF3 everywhere, BORDER sits at ~2.6:1 everywhere (up from 1.4-2.0:1),
+and every accent color used as literal text clears 4.5:1 against its
+real backdrop.
+
+## Magic items: closed out Ring/Staff/Weapon/Armor unwired gaps
+
+Resumed magic-item wiring after the bug-fix pass. Re-surveyed unwired
+count via `has_item_effect()` (catches both the `MAGIC_ITEM_EFFECTS`
+table and items with an inline `effect=` on their own catalog entry,
+unlike a naive `MAGIC_ITEM_EFFECTS` membership check) and found 201
+items still unwired — Wondrous 93, Potion 60, Scroll 22, Weapon 12,
+Armor 11, Ring 2, Staff 1.
+
+**Discovered 5 of those 23 Weapon/Armor "unwired" items are false
+positives**: Enhanced Defense (+1)/(+2), Radiant Weapon (+1), Repeating
+Shot, and Resistant Armor are Artificer infusions already mechanically
+wired through a completely separate code path — `get_infusion_bonus()`
+(calculator.py) for the first four, and an inline `active_infusions`
+check inside `get_innate_resistance_grants()` for Resistant Armor —
+neither of which populates `MAGIC_ITEM_EFFECTS`, so a naive survey
+flags them as gaps when they already work correctly. Verified directly
+(applied each via `active_infusions` and confirmed the real bonus/
+resistance lands) rather than assuming; left alone.
+
+**Wired the real remaining 18** (Ring 2, Staff 1, Weapon 10, Armor 5):
+- **Genuinely narrative/cosmetic, given real note-only entries** (matches
+  the established "grant_action, action_type: Passive" pattern used
+  throughout this catalog for items with no numeric hook): Staff of
+  Adornment (floating decoration), Guild Signet (a 10-guild-variant
+  placeholder whose actual per-guild property isn't in this catalog's
+  text), Horned Ring (Undermountain-specific house rule), Armor of
+  Gleaming and Smoldering Armor (both purely cosmetic), Unbreakable
+  Arrow (durability isn't tracked), Mithral Armor (its real effect
+  — remove an underlying armor's Stealth disadvantage/Str requirement
+  — depends on which base armor piece it's forged as, which this
+  catalog entry doesn't pin down), Shield of Far Sight (its real
+  benefit is to the mind flayer creator, not the wearer), and 9
+  Vestige of Divergence items (Hide of the Feral Guardian, Blade of
+  Broken Mirrors, Grovelthrash, Lash of Shadows, Mace of the Black
+  Crown, Ruin's Wake, Silken Spite, The Bloody End, Will of the Talon)
+  whose real Dormant/Awakened/Exalted tier text lives entirely in a
+  separate Vestiges of Divergence sourcebook this catalog's desc field
+  never includes — confirmed by reading each one's actual desc text,
+  which turned out to be nothing but copy-pasted generic weapon-
+  property reminders (Finesse/Versatile/Reach/Thrown) with zero unique
+  mechanical content to hook.
+- **Real numeric grants wired normally**: Dragonbone Longsword
+  (Slumbering) given an accurate note (its 4-tier progression is
+  mechanically a different weapon at each stage, too complex for a
+  single hook, matching the same "too complex" precedent used
+  elsewhere this session); Armor of Vulnerability and Dragon Scale
+  Mail both get real `skill_disadvantage` (Stealth) — the only
+  concrete mechanical line actually present in either's catalog text,
+  which for both turned out to be missing the fuller DMG text (damage
+  vulnerability/dragon-breath resistance) entirely, so only what's
+  really in the data was wired, not invented; Mind Carapace Armor
+  given its full real grant (advantage on INT/WIS/CHA saves, immunity
+  to frightened) since attunement itself is the app's only reasonable
+  proxy for "this is the intended wearer," which the real item text
+  otherwise gates on DM-only narrative judgment.
+- **Armor of Vulnerability's STR-conditional speed penalty**: the
+  ‑10 ft speed penalty only applies below 15 STR, a per-character
+  conditional the generic data-driven effect system can't express —
+  added as a direct inline check in `update_all()` (calculator.py),
+  same pattern as the existing Heavy Armor Master check just below it.
+  Verified: STR 10 correctly gets -10 speed, STR 16 correctly doesn't.
+
+Verified: full 1283-item catalog regression (rebuild + update_all +
+attunement_prereq_met + build_action_abilities) — 0 exceptions.
+Coverage: 1082/1283 (84.3%) -> 1103/1283 (85.9%); Ring/Staff/Weapon/
+Armor categories now have zero real gaps (the 5 remaining "unwired"
+hits there are the infusion false-positives above, already working).
+Remaining: Wondrous 93, Potion 60, Scroll 22.
+
+## Magic items: Scroll category fully closed out
+
+Wired all 22 remaining Scroll-type items. None carry a persistent
+numeric character-sheet state to hook -- every one is either a
+one-time consumable action or needs a per-copy choice (which spell,
+which creature type) this app has no chooser UI for -- so each got an
+accurate `grant_action` reminder entry, same pattern used for every
+other reminder-only consumable in this catalog:
+
+- **10 generic Spell Scroll (Cantrip through 9th level) placeholders**:
+  real DMG text (cast free if on your class list; otherwise an
+  Intelligence (Arcana) check at DC = 10 + spell level, on a failure
+  the spell is lost) confirmed correct per-level DC computed directly
+  from that formula. The specific spell is chosen per physical copy,
+  which this catalog has no slot for, so each entry says as much
+  rather than pretending a spell was picked.
+- **Scroll of Protection (generic) + its real 8 creature-type variants**
+  (Aberrations/Beasts/Celestials/Elementals/Fey/Fiends/Plants/Undead):
+  the generic entry points at the 8 real ones; each real one gets its
+  actual 5-min/DC-15-Charisma barrier mechanic as an Action reminder.
+- **Nether Scroll of Azumar**: real permanent boon (INT +2, advantage
+  on saves vs. magic) mechanically parallels the DMG ability-score
+  Manuals' one-time-consumption pattern already built into this file
+  (`ABILITY_SCORE_MANUALS`), but adds a summoned-ally component with
+  no equivalent tracking anywhere in this app -- noted accurately
+  rather than half-applying just the ability-score part.
+- **Scroll of Tarrasque Summoning / Scroll of the Comet**: a monster
+  summon and a one-time 30d10 AoE blast respectively -- both real,
+  concrete rules text, but neither is a persistent bonus this app's
+  character sheet models; both given accurate reminder text instead.
+
+Verified: full 1283-item catalog regression (rebuild + update_all +
+attunement_prereq_met + build_action_abilities), 0 exceptions.
+Coverage: 1103/1283 (85.9%) -> 1125/1283 (87.7%). Scroll category: 0
+remaining gaps. Remaining: Wondrous 93, Potion 60 (plus the 5 already-
+confirmed infusion false-positives in Weapon/Armor from the prior
+pass, which are not real gaps).
+
+## Correction: Scroll items were wired to the wrong table; Potion category was already ~all done
+
+Caught a real mistake in the previous "Scroll category fully closed
+out" entry above before it could cause player-visible confusion.
+Scroll-type items aren't equip/attune gear — they're consumed via
+`_use_scroll()` (sheet.py), which looks the item up in `EFFECT_TABLE`
+(effects.py), not `MAGIC_ITEM_EFFECTS` (magic_items.py, the table that
+drives equipped/attuned Ring/Staff/Weapon/Armor items). My previous
+pass added all 22 Scroll entries to the wrong table — they'd never
+actually surface through the real "Read" action a player uses.
+
+Worse, while fixing this I found **9 of those 22 were already wired,
+correctly, in `EFFECT_TABLE`** before I touched anything this session
+(Scroll of the Comet and all 8 Scroll of Protection variants) — so my
+previous pass's entries for those 9 were pure duplicates with slightly
+different wording, not new coverage at all.
+
+Fixed by removing all 22 entries from `MAGIC_ITEM_EFFECTS` and adding
+the 13 genuinely-new ones (10 Spell Scroll level placeholders, the
+Scroll of Protection generic placeholder, Nether Scroll of Azumar,
+Scroll of Tarrasque Summoning) to `EFFECT_TABLE` instead, in the same
+`{duration_category, note}` shape as the pre-existing 9 — verified
+directly by simulating `_use_scroll()`'s own lookup (`EFFECT_TABLE.get
+(name, {})`) for a sample of the new entries and confirming each
+returns real note text.
+
+**Also discovered while investigating this**: the same wrong-table
+mistake didn't happen for Potions, because Potions were never touched
+via `MAGIC_ITEM_EFFECTS` in the first place — a proper survey combining
+`has_item_effect()` with `EFFECT_TABLE`/`INSTANT_POTION_EFFECTS`
+membership shows the Potion category was already 50/60 wired (via
+`EFFECT_TABLE`'s duration-based active-effects) and 9 more via
+`INSTANT_POTION_EFFECTS` (Healing tiers, Elixir of Health, Potion of
+Poison, 3 disease/curse antidotes) — both mechanisms already existed
+and were already correctly wired to their real "Drink" action before
+this session touched anything. Only **Potion of Longevity** was a
+genuine gap (a narrative age-reduction effect this app has no age
+field for); added to `INSTANT_POTION_EFFECTS` with its real text.
+
+Verified: full 1283-item catalog regression, 0 exceptions; simulated
+`_use_scroll()`/`_use_potion()`'s exact lookup for the new entries and
+confirmed real note text returns for each.
+
+**Corrected coverage** (now counting `has_item_effect()` OR
+`EFFECT_TABLE` OR `INSTANT_POTION_EFFECTS` membership, since a
+`has_item_effect()`-only survey misses two of the app's three real
+wiring mechanisms): 1185/1283 (92.4%) wired. Scroll and Potion
+categories both fully closed. Remaining: Wondrous 93 (plus the 5
+already-confirmed Artificer-infusion false positives in Weapon/Armor,
+which are separately already wired via `get_infusion_bonus()`/the
+`active_infusions` check in `get_innate_resistance_grants()`).
+
+## Magic items: Wondrous category closed out -- catalog effectively complete (1278/1283, 99.6%)
+
+Wired the last 87 unwired Wondrous items. Read every one's actual
+catalog description text before writing anything (no fabricated
+mechanics) and found they cluster into a handful of real, recurring
+reasons none has a persistent numeric character-sheet hook:
+
+- **Summon-a-companion items** (Figurines of Wondrous Power, Bag of
+  Tricks, Robe of Serpents, Pipes of the Sewers, Efreeti Bottle, Horn
+  of Beckoning Death, Homunculus Servant, Dimir Keyrune, Talarith,
+  Shield Guardian Amulet, Quaal's Feather Token Bird, Weird Tank,
+  Vox Seeker, Prehistoric Figurines): this app has no summoned-
+  creature/companion tracking anywhere, so none of these can attach a
+  stat block to the sheet.
+- **Vehicles** (all 4 Carpet of Flying sizes + its generic placeholder,
+  Flying Chariot, Bobbing Lily Pad, Ornithopter of Flying, Spelljamming
+  Helm, Flying Citadel Helm, Helm of the Scavenger, Mighty Servant of
+  Leuk-o, Tasha's Creeping Keelboat, Wheel of Wind and Water, Quaal's
+  Feather Token Swan Boat): no vehicle/mount model exists in this app.
+- **Random-table draw items** (Deck of Wonder/Oracles/Many Things/Many
+  More Things/Several Things, Dodecahedron of Doom, The Infernal
+  Machine of Lum the Mad): outcomes are DM-rolled per use, not a fixed
+  effect.
+- **Generic placeholders for real named sub-variants already covered
+  elsewhere** (Elemental Gem, Manual of Golems, Quaal's Feather Token,
+  Crystal Ball (Legendary Version), Devastation Orb): each just points
+  at its real variants.
+- **4 Vestige of Divergence items** (Danoth's Visor, Infiltrator's Key,
+  Jewel of Three Prayers, Verminshroud): same external-sourcebook gap
+  as the 9 Vestige weapons wired earlier this session.
+- **Sentient/NPC-flavor items** (Professor Orb/Skant, Murgaxor's Orb,
+  Harp of Gilded Plenty, Tome of the Stilled Tongue) and **campaign
+  plot-device artifacts** (Book of Exalted Deeds, both Book of Vile
+  Darkness entries, Iggwilv's Cauldron, Luba's Tarokka of Souls,
+  Ythryn Mythallar, Ruinstone, Amulet of the Planes): narrative/DM-
+  adjudicated by nature, no fixed numeric grant in the actual text.
+- **Objects with their own separate stat block** (Mirror of Life
+  Trapping, Mirror of Reflected Pasts, Iron Flask, Sphere of
+  Annihilation, Soul Bag, Hook of Fisher's Delight): battlefield/
+  utility objects, not wearer bonuses.
+- **A few real but too-conditional-for-this-vocabulary mechanics**:
+  Imbued Wood Focus (+1 damage conditional on an 8-way wood/damage-
+  type match), Mizzium Apparatus (a randomized cast-the-wrong-spell
+  table), Docent (randomized skill/language/spell properties plus a
+  sentient-item auto-stabilize check), Battle Standard of Infernal
+  Power (no "weapon attacks count as magical" effect type exists),
+  Necklace of Prayer Beads (6 randomized per-bead effects), Candle of
+  Invocation (alignment-branching summon/buff) -- each given an
+  accurate note pointing at exactly what's missing and why, rather
+  than a partial or invented hook.
+- **4 Golem Manuals and 4 Devastation Orb elements**: given their real
+  day-counts (30/60/120/90 for Clay/Flesh/Iron/Stone) and correct
+  "1-hour, 2,000 gp ritual" cost respectively, pulled directly from
+  each entry's own catalog text, not guessed.
+- **Feather Token / Replicate Magic Item**: Feather Token's fall-damage
+  negation has no hook (this app doesn't track fall damage);
+  Replicate Magic Item (an Artificer infusion) just points at using
+  the actual replicated item's own already-correct catalog entry.
+
+Every one of the 87 got a `grant_action` reminder entry (Action or
+Passive matched to whether it's an activated ability or an always-on
+trait) -- the same pattern used for every other note-only item in this
+catalog all session.
+
+Verified: full 1283-item catalog regression (rebuild + update_all +
+attunement_prereq_met + build_action_abilities), 0 exceptions; spot-
+checked several new entries (Sphere of Annihilation, Deck of Many
+Things, Homunculus Servant, Manual of Iron Golems) actually populate
+`char["item_actions"]` with their real text when equipped.
+
+**Final coverage**: 1278/1283 (99.6%) wired, counting all three real
+wiring mechanisms (`has_item_effect()`, `EFFECT_TABLE`,
+`INSTANT_POTION_EFFECTS`, `ABILITY_SCORE_MANUALS`). The remaining 5
+(Enhanced Defense +1/+2, Radiant Weapon +1, Repeating Shot, Resistant
+Armor) are the already-confirmed Artificer-infusion false positives
+from an earlier pass this session -- genuinely already wired through
+`get_infusion_bonus()`/the `active_infusions` check in
+`get_innate_resistance_grants()`, just invisible to a catalog-table
+membership check. The magic item catalog is, as far as this survey
+can tell, functionally complete.
+
+## Small follow-up: point Vehicles-system items at the Vehicles tab, fix a real duplicate-item near-miss
+
+While double-checking the 87-item Wondrous pass above, noticed the
+git log already had a real "Vehicles system" (`VEHICLES_MAGIC` in
+items.py, `VEHICLE_STATBLOCKS_MAGIC` in statblocks.py, a dedicated
+browsable Vehicles tab) that already covers 9 of the items I'd just
+given a generic "vehicle this app doesn't model" note: Flying Chariot,
+Bobbing Lily Pad, Ornithopter of Flying, Tasha's Creeping Keelboat,
+Quaal's Feather Token (Swan Boat), and all 4 Carpet of Flying sizes.
+Not broken (both mechanisms are independent and harmless together),
+but the note text was inaccurate for these 9 specifically. Fixed by
+pointing each at "Full stats in the Vehicles tab" instead of claiming
+no model exists.
+
+**Caught a real near-miss while doing this**: removed what looked
+like a stale, misspelled `'Tasha's Creeping Keepboat'` entry, assuming
+it was dead-code left over from a typo of Keelboat — but the catalog
+actually has two genuinely distinct items under those names (Keelboat
+= the classic version, Keepboat = a separate QIS-sourced version with
+its own AC 15/80 HP/reaction Magic Missile defense). Caught this
+before it became a real gap (removing it would have silently
+un-wired a real, distinct catalog item) by re-running the full survey
+immediately after the edit and seeing Wondrous coverage drop by one —
+restored it with a corrected, more complete description instead of
+leaving the original shorter text.
+
+Verified: full 1283-item catalog regression, 0 errors; final coverage
+still 1278/1283 (99.6%), confirmed unchanged from before this pass.
+
+## Movement lock gap: Paralyzed/Petrified/Stunned/Unconscious weren't zeroing speed; Prone correctly never did
+
+User asked about "Prone setting movement to 0" — direct testing showed
+this was never true in the current code (`get_effective_speed()` only
+zeroed speed for Grappled/Restrained, matching Prone's real text,
+which only restricts movement to crawling, never to 0). But the
+follow-up ("and other various conditions?") pointed at a real gap:
+Paralyzed, Petrified, Stunned, and Unconscious each separately state
+"can't move" in their own condition text (PHB p.291-292) — a stronger,
+more literal restriction than Grappled/Restrained's "speed becomes 0,"
+and NOT implied by Incapacitated alone (which only blocks actions/
+reactions, not movement). None of the four were included in the
+speed-lock check.
+
+Fixed `get_effective_speed()`'s `speed_locked` check to include all
+six real movement-locking conditions (Grappled, Restrained, Paralyzed,
+Petrified, Stunned, Unconscious), and added the same set to
+`get_speed_breakdown()` so the speed tooltip actually names which
+condition is responsible (previously only exhaustion showed up there,
+even though Grappled/Restrained already silently zeroed the real
+number).
+
+Verified: all 14 conditions individually through
+`get_effective_speed()`/`get_speed_breakdown()` — confirmed exactly
+the 6 real lockers zero walk speed and appear in the breakdown,
+Prone/Charmed/Incapacitated/etc. correctly don't. Full 1283-item magic
+item catalog regression: 0 errors (unaffected, but re-run since it
+shares `update_all()`).
+
+## UI cleanup: removed the duplicate flight/swim/climb badge strip and a dead "equip weapons" button
+
+Two follow-up requests in the same message:
+- The climb/swim/fly badge strip added under HP earlier this
+  conversation (to fix the Fairy flight-vs-resistance confusion) turns
+  out to duplicate information already shown in the top stat bar's
+  speed pill (which already appends "✈ N / 🌊 N / ↑ N" whenever any of
+  climb/swim/fly is non-zero) — the strip's own docstring's claim that
+  "walking speed already has its own pill, so it's not repeated here"
+  was only half true; climb/swim/fly were duplicated too, just less
+  obviously. Removed the whole strip (`_move_frame`/`_move_caption`/
+  `_move_lay`/`_refresh_movement_strip` and its call site) rather than
+  just the fly badge, since swim/climb had the identical redundancy —
+  the resistances strip's caption/color fix from earlier stands alone
+  now and still solves the original "looks like a resistance" report.
+- Removed the "⚙ Equip weapons & armor in Gear ▸" button that sat
+  above the Combat tab's weapon rows unconditionally, regardless of
+  whether the character already had weapons equipped — confirmed
+  there's always at least an unarmed-strike/natural-weapon row
+  present, so this was never a real empty-state prompt, just a
+  permanent redundant button when the Gear tab is already one click
+  away on the tab bar.
+
+Verified: `py_compile` clean, grep confirms zero remaining references
+to any removed identifier. No PySide6 available in this environment to
+launch the actual UI for a click-through smoke test -- relying on
+static verification (matching add/remove pairs, no dangling refs)
+same as the rest of this session's UI edits.
+
+## Final magic-item catalog re-check: no new gaps found
+
+Re-ran the full unwired survey (`has_item_effect()` OR `EFFECT_TABLE`
+OR `INSTANT_POTION_EFFECTS` OR `ABILITY_SCORE_MANUALS`) after all of
+the above. Still 1278/1283 (99.6%) -- the same 5 Artificer-infusion
+false positives as before, nothing new. The magic item catalog remains
+complete as far as this survey can tell.

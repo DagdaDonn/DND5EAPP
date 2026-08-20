@@ -1,3 +1,15 @@
+"""
+Data package.
+
+Static game-rules data: races/species, classes, backgrounds, feats,
+mundane and magic items, spells, conditions, movement/resistance
+sources, and feature tooltips. Re-exports the most commonly used
+lookups below.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
+"""
+
 from .races import ALL_RACES, RACE_NAMES, RACE_DICT, get_race
 from .classes import ALL_CLASSES, CLASS_NAMES, CLASS_DICT, get_class, prof_bonus, sneak_attack_dice
 from .classes_2024 import (ALL_CLASSES_2024, CLASS_NAMES_2024, CLASS_DICT_2024,

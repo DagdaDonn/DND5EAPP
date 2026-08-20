@@ -11,6 +11,9 @@ choice_type:
   "spell_choose"→ pick N spells from a filtered list
   "damage_type" → pick an elemental/damage type
   "info"        → read-only expanded description only
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 SKILLS = [

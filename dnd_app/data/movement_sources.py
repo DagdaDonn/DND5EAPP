@@ -5,6 +5,9 @@ speed beyond plain walking — racial traits (passive) and class features
 resistance_sources.py). Multiple sources of the SAME movement type don't
 add together (a character with two "swim 30" sources doesn't swim 60) —
 the resolver in calculator.py takes the highest value per type.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 # Fixed per race, no sub-choice, always active (some level-gated).
@@ -77,10 +80,9 @@ SUBCLASS_TOGGLE_MOVEMENT = [
     {"class_key": "Barbarian", "subclass_match": None, "min_level": 1,
      "toggle_key": "Rage",
      # Totem Warrior's Eagle Totemic Attunement (14th level) grants a
-     # flying speed equal to walking speed while raging. Confirmed
-     # working via direct test — totem_attune_14 IS collected during
-     # level-up (levelup_panel.py), and this override_check reads it
-     # correctly.
+     # flying speed equal to walking speed while raging. totem_attune_14
+     # is collected during level-up (levelup_panel.py) and read here via
+     # this override_check.
      "grants": [],
      "override_check": "eagle_totem_attunement",
      "override_grants": [{"kind": "fly", "speed": "walk", "source": "Totemic Attunement (Eagle)"}]},

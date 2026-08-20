@@ -1,12 +1,20 @@
 """
-Character Sheet — shown after creation / when loading a saved character.
-Tabs:
+Character Sheet module.
+
+Main PySide6 widget shown after character creation or when loading a
+saved character. Builds and refreshes every tab of the live sheet:
   1. Ability Scores & Saves
   2. Skills, Languages & Proficiencies
   3. Combat  (stats, HP, weapons, class abilities by recharge, favourited spells)
   4. Spells  (slots per class, DCs, spell list with modifiers)
   5. Features (by class + feats)
   6. Traits & Notes
+Reads/writes the character dict directly and calls into
+dnd_app.core.calculator/builder to recompute derived values whenever
+the underlying data changes.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 import os
 import re
@@ -585,8 +593,7 @@ class RestOptionsDialog(QDialog):
                         "detail": "Clears every non-bonus prepared spell so you can pick a "
                                   "different set from the Spells tab.",
                     })
-        # Armorer's Arcane Armor model — confirmed via the actual rule
-        # text, changeable on either rest type with smith's tools in hand.
+        # Armorer's Arcane Armor model is changeable on either rest type with smith's tools in hand.
         is_armorer = any(
             c.get("class") == "Artificer" and "armorer" in c.get("subclass", "").lower()
             for c in char.get("classes", [])
@@ -612,8 +619,7 @@ class RestOptionsDialog(QDialog):
                         "detail": "Once per day: recover slots totaling \u2264 half your Wizard "
                                   "level (rounded up), max slot level 5.",
                     })
-        # Eladrin season — long rest only, per the confirmed rule text
-        # ("you can change your chosen season after a long rest").
+        # Eladrin season changes only on a long rest ("you can change your chosen season after a long rest").
         race = char.get("species") or char.get("race", "")
         if self.rest_type == "long" and "eladrin" in race.lower() and char.get("_choices", {}).get("eladrin_season"):
             opts.append({
@@ -621,10 +627,7 @@ class RestOptionsDialog(QDialog):
                 "label": "Change Eladrin season",
                 "detail": "Changes which additional effect your Fey Step bonus action has.",
             })
-        # Pact Boon 1-hour rituals — per the user's specific request,
-        # packaged onto short rest (and long rest) since a short rest is
-        # defined as being at least an hour. Confirmed zero implementation
-        # existed for any of these three.
+        # Pact Boon 1-hour rituals are available on short rest (and long rest), since a short rest is defined as being at least an hour.
         pact_choice = char.get("_choices", {}).get("warlock_pact_boon", [])
         pact_name = pact_choice[0].lower() if pact_choice else ""
         if "blade" in pact_name:
@@ -649,10 +652,7 @@ class RestOptionsDialog(QDialog):
                 "detail": "1-hour ceremony, performable during a short or long rest. Destroys "
                           "the previous amulet.",
             })
-        # Guidance of the Spirits (Bard, College of Spirits) — long rest
-        # only, per the actual rule text. Whispers of the Dead (Rogue,
-        # Phantom) — either rest type, per its own rule text. Confirmed
-        # zero implementation existed for either before.
+        # Guidance of the Spirits (Bard, College of Spirits) resets on a long rest only. Whispers of the Dead (Rogue, Phantom) resets on either rest type.
         if self.rest_type == "long" and char.get("_choices", {}).get("guidance_of_the_spirits_skill"):
             opts.append({
                 "kind": "guidance_spirits_swap",
@@ -704,13 +704,12 @@ class LevelUpMulticlassDialog(QDialog):
         self.setMinimumSize(560, 480)
         self.setStyleSheet(f"QDialog{{background:{BG};}}")
         root = QVBoxLayout(self); root.setContentsMargins(20,18,20,18); root.setSpacing(12)
-        # Confirmed a real, pre-existing bug: setChecked(True) in the
-        # radio loop below fires the toggled signal synchronously (real
-        # Qt behavior), calling _on_pick() before several attributes it
-        # needs (_details_lbl, _SWAP_CLASSES, etc.) are constructed yet
-        # — crashing for any character with an existing class. The code
-        # already calls _on_pick(default_choice) explicitly once at the
-        # very end of __init__ regardless, so this guard just prevents
+        # setChecked(True) in the radio loop below fires the toggled signal
+        # synchronously (Qt behavior), which would call _on_pick() before
+        # several attributes it needs (_details_lbl, _SWAP_CLASSES, etc.)
+        # are constructed, crashing for any character with an existing
+        # class. __init__ already calls _on_pick(default_choice)
+        # explicitly at the end regardless, so this guard just prevents
         # the redundant, unsafe early trigger.
         self._init_in_progress = True
 
@@ -722,12 +721,10 @@ class LevelUpMulticlassDialog(QDialog):
 
         body = QHBoxLayout(); body.setSpacing(16)
 
-        # Confirmed a real pre-existing bug: creating this widget before
-        # the left-side radio loop, since rb.setChecked(True) below fires
-        # the toggled signal synchronously (real Qt behavior, not just
-        # the mock), calling _on_pick() — which needs this label to
-        # already exist. Previously it didn't yet, crashing for any
-        # character with an existing class (i.e. almost every character).
+        # This widget must be created before the left-side radio loop:
+        # rb.setChecked(True) below fires the toggled signal synchronously
+        # (Qt behavior), calling _on_pick(), which needs this label to
+        # already exist.
         self._details_lbl = _lbl("", TEXT, FS_BODY, wrap=True)
 
         # ── Left: radio list of every class ──────────────────────────────
@@ -775,7 +772,6 @@ class LevelUpMulticlassDialog(QDialog):
         # Per the real rule ("whenever you gain a level in this class, you
         # can replace one spell you know with another from the class
         # list"), shown/hidden based on which class is currently selected.
-        # Confirmed this never existed anywhere in the app before.
         self._SWAP_CLASSES = {"Bard", "Sorcerer", "Warlock", "Ranger"}
         self._swap_card = _card(qa(PURPLE, 0x44))
         swap_lay = QVBoxLayout(self._swap_card)
@@ -793,9 +789,8 @@ class LevelUpMulticlassDialog(QDialog):
         root.addWidget(self._swap_card)
 
         # ── Eldritch Versatility (Warlock, TCoE, optional) ────────────────
-        # Confirmed zero implementation existed for this before. Gated
-        # behind the Settings toggle since it's literally titled
-        # "(Optional)" in the actual rule text.
+        # Gated behind the Settings toggle since it's titled "(Optional)"
+        # in the rule text.
         self._ev_card = _card(qa(PURPLE, 0x44))
         ev_lay = QVBoxLayout(self._ev_card)
         ev_lay.setContentsMargins(10, 10, 10, 10)
@@ -818,19 +813,15 @@ class LevelUpMulticlassDialog(QDialog):
         self._ev_card.setVisible(False)
         root.addWidget(self._ev_card)
 
-        # Martial Versatility (Fighter/Paladin/Ranger, TCE, optional):
-        # confirmed via research this is also ASI-level-gated, matching
-        # Eldritch Versatility's architecture exactly — simpler here
-        # since there's only one swap type (fighting style for fighting
-        # style), not three.
+        # Martial Versatility (Fighter/Paladin/Ranger, TCE, optional) is
+        # also ASI-level-gated, matching Eldritch Versatility's
+        # architecture — simpler here since there's only one swap type
+        # (fighting style for fighting style), not three.
         self._mv_card = _card(qa(TEAL, 0x44))
         mv_lay = QVBoxLayout(self._mv_card)
         mv_lay.setContentsMargins(10, 10, 10, 10)
         mv_lay.addWidget(_lbl("MARTIAL VERSATILITY (OPTIONAL)", TEAL2, FS_SMALL, bold=True))
-        # Confirmed via the user's verified reference text: Fighter
-        # specifically can also swap a known Battle Master maneuver,
-        # not just a fighting style — the earlier build only ever
-        # handled the fighting-style case.
+        # Fighter can also swap a known Battle Master maneuver, not just a fighting style.
         self._mv_what_combo = QComboBox()
         self._mv_what_combo.addItem("Replace a Fighting Style", "style")
         mv_lay.addWidget(self._mv_what_combo)
@@ -846,9 +837,8 @@ class LevelUpMulticlassDialog(QDialog):
         self._mv_card.setVisible(False)
         root.addWidget(self._mv_card)
 
-        # Cantrip Versatility (Cleric/Druid, TCE, optional): confirmed
-        # genuinely missing entirely. Both classes share the exact same,
-        # single-swap-type rule, so one card covers both.
+        # Cantrip Versatility (Cleric/Druid, TCE, optional): both classes
+        # share the same single-swap-type rule, so one card covers both.
         self._cv_card = _card(qa(GOLD, 0x44))
         cv_lay = QVBoxLayout(self._cv_card)
         cv_lay.setContentsMargins(10, 10, 10, 10)
@@ -864,9 +854,8 @@ class LevelUpMulticlassDialog(QDialog):
         self._cv_card.setVisible(False)
         root.addWidget(self._cv_card)
 
-        # Bardic Versatility (TCE, optional): confirmed genuinely
-        # missing. Two swap types, matching the Eldritch Versatility
-        # "what kind" pattern.
+        # Bardic Versatility (TCE, optional): two swap types, matching the
+        # Eldritch Versatility "what kind" pattern.
         self._bv_card = _card(qa(CRIMSON, 0x44))
         bv_lay = QVBoxLayout(self._bv_card)
         bv_lay.setContentsMargins(10, 10, 10, 10)
@@ -887,8 +876,7 @@ class LevelUpMulticlassDialog(QDialog):
         self._bv_card.setVisible(False)
         root.addWidget(self._bv_card)
 
-        # Sorcerous Versatility (TCE, optional): confirmed genuinely
-        # missing. Two swap types, matching the same pattern.
+        # Sorcerous Versatility (TCE, optional): two swap types, matching the same pattern.
         self._sv_card = _card(qa(PURPLE, 0x44))
         sv_lay = QVBoxLayout(self._sv_card)
         sv_lay.setContentsMargins(10, 10, 10, 10)
@@ -1050,11 +1038,10 @@ class LevelUpMulticlassDialog(QDialog):
             self._ev_what_combo.setCurrentIndex(0)
             self._on_ev_what_changed(0)
 
-        # Martial Versatility: confirmed via the app's own class data
-        # that Fighter genuinely has a different ASI level set than
-        # Paladin/Ranger (extra levels at 6 and 14), so this can't
-        # reuse a single shared ASI_LEVELS set the way Eldritch
-        # Versatility does for Warlock alone.
+        # Martial Versatility: Fighter has a different ASI level set than
+        # Paladin/Ranger (extra levels at 6 and 14), so this can't reuse a
+        # single shared ASI_LEVELS set the way Eldritch Versatility does
+        # for Warlock alone.
         MV_ASI_LEVELS = {"Fighter": {4,6,8,12,14,16,19}, "Paladin": {4,8,12,16,19}, "Ranger": {4,8,12,16,19}}
         current_mv_lvl = existing.get(cls_name, 0)
         is_mv_asi_level = (current_mv_lvl + 1) in MV_ASI_LEVELS.get(cls_name, set())
@@ -1064,12 +1051,10 @@ class LevelUpMulticlassDialog(QDialog):
                    and is_mv_asi_level and has_a_style)
         self._mv_card.setVisible(show_mv)
         if show_mv:
-            # Confirmed via the user's verified reference text: Fighter
-            # specifically can also swap a known Battle Master maneuver
-            # ("if you know any maneuvers from the Battle Master
-            # archetype"), gated on actually knowing any — Paladin and
-            # Ranger never get maneuvers at all, so they only ever see
-            # the fighting-style option.
+            # Fighter can also swap a known Battle Master maneuver ("if you
+            # know any maneuvers from the Battle Master archetype"), gated
+            # on actually knowing any. Paladin and Ranger never get
+            # maneuvers, so they only see the fighting-style option.
             self._mv_what_combo.blockSignals(True)
             self._mv_what_combo.clear()
             self._mv_what_combo.addItem("Replace a Fighting Style", "style")
@@ -1080,8 +1065,7 @@ class LevelUpMulticlassDialog(QDialog):
             self._mv_what_combo.setCurrentIndex(0)
             self._on_mv_what_changed(0)
 
-        # Cantrip Versatility (Cleric/Druid): confirmed genuinely
-        # missing. Both share the exact same, single-swap-type rule.
+        # Cantrip Versatility (Cleric/Druid): both share the same single-swap-type rule.
         CV_CLASSES = {"Cleric", "Druid"}
         current_cv_lvl = existing.get(cls_name, 0)
         is_cv_asi_level = (current_cv_lvl + 1) in ASI_LEVELS
@@ -1110,7 +1094,7 @@ class LevelUpMulticlassDialog(QDialog):
                         and s["name"] not in known_cantrips):
                     self._cv_in_combo.addItem(s["name"], s["name"])
 
-        # Bardic Versatility: confirmed genuinely missing.
+        # Bardic Versatility swap.
         show_bv = (self.char.get("optional_rules", {}).get("bardic_versatility", False)
                    and cls_name == "Bard" and cls_name in existing and is_cv_asi_level)
         self._bv_card.setVisible(show_bv)
@@ -1118,7 +1102,7 @@ class LevelUpMulticlassDialog(QDialog):
             self._bv_what_combo.setCurrentIndex(0)
             self._on_bv_what_changed(0)
 
-        # Sorcerous Versatility: confirmed genuinely missing.
+        # Sorcerous Versatility swap.
         show_sv = (self.char.get("optional_rules", {}).get("sorcerous_versatility", False)
                    and cls_name == "Sorcerer" and cls_name in existing and is_cv_asi_level)
         self._sv_card.setVisible(show_sv)
@@ -1440,12 +1424,11 @@ class CharacterSheet(QWidget):
             if hasattr(self, "_levelup_panel"):
                 self._levelup_panel.refresh()
             self._refresh_gear_equipment()
-            # Features tab (class/race/subrace/subclass/feat features) and the
-            # subclass dropdown combos were previously only repainted on a full
-            # character load or a manual dropdown edit — never after a level-up
-            # or a choice made in the Level Up panel. That made level-ups, feat
-            # grants, and subclass picks via the Level Up panel look like they
-            # "didn't apply" even though the underlying data was correct.
+            # The Features tab (class/race/subrace/subclass/feat features)
+            # and the subclass dropdown combos are repainted here so
+            # level-ups, feat grants, and subclass picks made via the
+            # Level Up panel are reflected immediately, not only after a
+            # full character load or manual dropdown edit.
             if hasattr(self, "_rebuild_features"):
                 self._rebuild_features()
             if hasattr(self, "_populate_subclass_combo"):
@@ -1621,15 +1604,13 @@ class CharacterSheet(QWidget):
             if removed:
                 self._toast(f"📖 Unprepared {removed} spell(s) — pick new ones from the Spells tab")
                 changed_anything = True
-                # Confirmed a real bug: the data above is correctly
-                # cleared, but _refresh_spells() → _sync_new_spell_rows()
-                # deliberately never touches existing rows' checkbox
-                # state (by design, to avoid clobbering in-progress
-                # edits elsewhere) — so every spell row would stay
-                # visually checked despite the underlying prepared list
-                # now being empty. This bulk action is exactly the
-                # explicit exception that design doesn't cover, so
-                # every existing row is re-synced here directly.
+                # _refresh_spells() -> _sync_new_spell_rows() deliberately
+                # never touches existing rows' checkbox state, to avoid
+                # clobbering in-progress edits elsewhere — so after this
+                # bulk clear, every spell row would stay visually checked
+                # despite the underlying prepared list now being empty.
+                # Every existing row is re-synced here directly to cover
+                # this exception.
                 if hasattr(self, "_spell_rows"):
                     for row in self._spell_rows:
                         if row.spell.get("name") not in bonus and row.spell.get("level", 0) > 0:
@@ -1782,9 +1763,8 @@ class CharacterSheet(QWidget):
         """Prompt to save before leaving sheet. Returns True if safe to leave."""
         if getattr(self, "_confirm_leave_active", False):
             # Already showing (or just resolved) this exact prompt — a
-            # second, near-simultaneous call means something triggered
-            # this twice (e.g. a signal connected more than once), not
-            # that the user actually wants to see it again.
+            # second, near-simultaneous call means a signal fired twice
+            # (e.g. connected more than once), not a genuine repeat request.
             return False
         self._confirm_leave_active = True
         try:
@@ -2065,10 +2045,9 @@ class CharacterSheet(QWidget):
 
             # Condition-based auto-fail/disadvantage badge — separate from
             # the racial/class advantage badge above since it's a
-            # genuinely different, transient mechanic (Paralyzed/Stunned/
+            # different, transient mechanic (Paralyzed/Stunned/
             # Unconscious auto-fail STR/DEX saves outright; Restrained
-            # imposes disadvantage on DEX specifically). Confirmed
-            # conditions previously had zero effect on this display.
+            # imposes disadvantage on DEX specifically).
             cond_save_badge = _lbl("", CRIM2, FS_BODY, bold=True, wrap=False)
             if not hasattr(self, "_save_cond_badges"):
                 self._save_cond_badges = {}
@@ -2264,16 +2243,13 @@ class CharacterSheet(QWidget):
 
         tool_card = _card(AMBE2+"55"); tcl = QVBoxLayout(tool_card); tcl.setContentsMargins(14,12,14,14)
         tcl.addWidget(_lbl("TOOL PROFICIENCIES", AMBE2, FS_SMALL, bold=True))
-        # Plain QWidget + QGridLayout, not FlowContainer/FlowLayout — avoids
-        # FlowContainer.resizeEvent()'s setMinimumHeight()-inside-a-resize-
-        # handler pattern, which can cause an infinite resize loop in real
-        # Qt with a custom QLayout subclass. Confirmed via user bisection
-        # (v96 worked, v97 — which introduced this FlowLayout usage — did
-        # not) that this was the actual cause of the wizard "Create
-        # Character" button hang. A grid wraps at a fixed column count
-        # instead of dynamically by pixel width, which is a fine trade-off
-        # here since tool names are short and this list rarely exceeds a
-        # handful of entries.
+        # Plain QWidget + QGridLayout, not FlowContainer/FlowLayout —
+        # avoids FlowContainer.resizeEvent()'s setMinimumHeight()-inside-
+        # a-resize-handler pattern, which can cause an infinite resize
+        # loop in Qt with a custom QLayout subclass. A grid wraps at a
+        # fixed column count instead of dynamically by pixel width, an
+        # acceptable trade-off since tool names are short and this list
+        # rarely exceeds a handful of entries.
         self._tool_prof_frame = QWidget(); self._tool_prof_frame.setStyleSheet("QWidget{background:transparent;}")
         self._tool_prof_lay = QGridLayout(self._tool_prof_frame)
         self._tool_prof_lay.setSpacing(4); self._tool_prof_lay.setContentsMargins(0,0,0,0)
@@ -2446,12 +2422,11 @@ class CharacterSheet(QWidget):
         self.char["conditions"] = sorted(active)
         self._refresh_active_conditions()
         self._mark_dirty()
-        # Confirmed the same bug pattern found earlier with the
-        # Infusions tab: without this, the new condition-based
-        # mechanical indicators (saving throw badges, weapon row
-        # advantage/disadvantage, speed) would never actually update
-        # when a condition is toggled — only the underlying data and
-        # the "Active Conditions" badge list would change.
+            # Without this, condition-based mechanical indicators (saving
+            # throw badges, weapon row advantage/disadvantage, speed)
+            # would not update when a condition is toggled — only the
+            # underlying data and the "Active Conditions" badge list
+            # would change.
         self.ctrl.refresh()
 
     # ══ TAB 3: COMBAT ══════════════════════════════════════════════════════════
@@ -2518,12 +2493,9 @@ class CharacterSheet(QWidget):
             name, ok = QInputDialog.getItem(self, "Edit Background", "Background:", BACKGROUND_NAMES, 0, False)
             if ok and name:
                 self.ctrl.update("background", name)
-                # Confirmed a real, reported gap: changing background here
-                # had zero follow-up for any additional choice the new
-                # background might require — Rewarded/Ruined and others
-                # grant a real choice of feat, already correctly prompted
-                # during initial creation in the wizard, but that logic
-                # never existed for a post-creation background change.
+                # Changing background here needs the same follow-up
+                # prompts the creation wizard already runs for backgrounds
+                # that grant a choice of feat (Rewarded/Ruined and others).
                 bg = get_background(name)
                 feat_choices = (bg or {}).get("feat_choices") or []
                 if feat_choices:
@@ -2617,10 +2589,9 @@ class CharacterSheet(QWidget):
         except Exception:
             pass
         try:
-            # Re-apply the browser's castable-level/class-list filter — the
-            # character's max castable spell level (and class list) can
-            # change on level-up while the sheet is already open, and this
-            # filter was previously only re-run on the Homebrew toggle.
+            # Re-apply the browser's castable-level/class-list filter,
+            # since the character's max castable spell level (and class
+            # list) can change on level-up while the sheet is already open.
             self._filter_spell_browser()
         except Exception:
             pass
@@ -2974,9 +2945,7 @@ class CharacterSheet(QWidget):
 
         # Ability score prerequisites — per the 2014 PHB multiclassing
         # rule, a character must meet the requirements for BOTH their
-        # current class(es) and the new one. Confirmed this data already
-        # existed (multiclass_reqs on each class) but was never actually
-        # enforced anywhere in the app.
+        # current class(es) and the new one.
         def _meets_reqs(class_name):
             reqs = CLASS_DICT.get(class_name, {}).get("multiclass_reqs", {})
             if not reqs:
@@ -3068,8 +3037,7 @@ class CharacterSheet(QWidget):
             cur_hp = self.char.get("_wildshape_hp", beast["hp"])
             cl.addWidget(_lbl(f"HP {cur_hp}/{beast['hp']}   AC {beast['ac']}   "
                               f"(edit HP in the card above — same pool)", TEXT2, FS_SMALL))
-            # Circle of the Moon's Combat Wild Shape: confirmed a real,
-            # previously entirely unwired feature — while transformed,
+            # Circle of the Moon's Combat Wild Shape: while transformed,
             # spend a spell slot as a bonus action to regain 1d8 HP per
             # level of the slot expended.
             from dnd_app.core.calculator import subclasses as _subclasses_wsc, class_levels as _cl_wsc
@@ -3271,35 +3239,35 @@ class CharacterSheet(QWidget):
             f"QProgressBar{{background:{SURF2};border:none;border-radius:3px;}}"
             f"QProgressBar::chunk{{border-radius:3px;background:{GREEN2};}}")
         hpcl.addWidget(self._hp_bar)
-        # Resistances strip — FlowLayout wraps onto new rows so it can hold
-        # an arbitrary number of badges (a character with several
+        # Resistances strip: holds an arbitrary number of badges (multiple
         # resistance/immunity sources, or a "resistance to everything but
         # psychic"-style toggle expanded into 12 individual damage types)
-        # without overflowing or squeezing off-screen.
-        # Plain QWidget + QGridLayout, not FlowContainer/FlowLayout — same
-        # fix as the tool proficiency chips in _build_tab_skills, and for
-        # the same reason: FlowContainer.resizeEvent()'s setMinimumHeight()
-        # can trigger another resize event in real Qt, looping forever.
-        # These two strips are an even more direct trigger than the tool
-        # chips were, since their own refresh functions (below) also call
-        # heightForWidth()+setMinimumHeight() explicitly, on top of
-        # whatever resizeEvent() does. A grid wraps at a fixed column
-        # count instead of dynamically by pixel width — a fine trade-off
-        # here since these badges are short and few.
+        # without overflowing or squeezing off-screen. Uses plain QWidget
+        # + QGridLayout rather than FlowContainer/FlowLayout — same as
+        # the tool proficiency chips in _build_tab_skills, since
+        # FlowContainer.resizeEvent()'s setMinimumHeight() can trigger
+        # another resize event in Qt, looping forever; these strips are
+        # an even more direct trigger, since their own refresh functions
+        # also call heightForWidth()+setMinimumHeight() explicitly. A
+        # grid wraps at a fixed column count instead of dynamically by
+        # pixel width, an acceptable trade-off since these badges are
+        # short and few. A caption above each strip distinguishes it from
+        # adjacent badge groups sharing the same visual style.
+        self._resist_caption = _lbl("RESISTANCES", TEXT3, FS_TINY, bold=True, wrap=False)
+        self._resist_caption.setVisible(False)
+        hpcl.addWidget(self._resist_caption)
         self._resist_frame = QWidget(); self._resist_frame.setStyleSheet("QWidget{background:transparent;}")
         self._resist_lay = QGridLayout(self._resist_frame)
         self._resist_lay.setSpacing(4); self._resist_lay.setContentsMargins(0,0,0,0)
         self._resist_frame.setVisible(False)
         hpcl.addWidget(self._resist_frame, 1)
-        # Movement speeds strip — walk speed already shows in the top stat
-        # pill; this shows climb/swim/fly whenever the character actually
-        # has one (racial trait, Spirit Projection, Wind Soul, etc.), and
-        # simply stays hidden if all three are 0.
-        self._move_frame = QWidget(); self._move_frame.setStyleSheet("QWidget{background:transparent;}")
-        self._move_lay = QGridLayout(self._move_frame)
-        self._move_lay.setSpacing(4); self._move_lay.setContentsMargins(0,0,0,0)
-        self._move_frame.setVisible(False)
-        hpcl.addWidget(self._move_frame)
+        # NOTE: climb/swim/fly used to get their own badge strip here too,
+        # separate from the resistances strip above. Removed — the top
+        # stat-bar speed pill already shows climb/swim/fly (✈/🌊/↑ next to
+        # the walk speed) whenever any are non-zero, so this strip was
+        # pure duplication of information already on screen, not just a
+        # resistance-lookalike problem (which the caption/color fix above
+        # already solved on its own).
         # Small, read-only concentration indicator — the full tracker (with
         # Drop/Save buttons) lives in the Spells tab, which isn't very
         # visible during active combat where damage tracking happens. This
@@ -3381,16 +3349,9 @@ class CharacterSheet(QWidget):
             f"QPushButton:hover{{color:{TEAL};text-decoration:underline;}}")
         armor_jump.clicked.connect(lambda: self._tabs.setCurrentIndex(3))
         acl2.addWidget(armor_jump)
-        # Weapons section embedded in armor card
+        # Weapons section embedded in armor card. The Gear tab (for
+        # equipping weapons/armor) is one click away on the tab bar itself.
         acl2.addWidget(_lbl("WEAPONS", GOLD, FS_SMALL, bold=True))
-        add_wpn_btn = QPushButton("⚙ Equip weapons && armor in Gear ▸"); add_wpn_btn.setFixedHeight(28)
-        add_wpn_btn.setAccessibleName("Open Gear tab to manage equipment")
-        add_wpn_btn.setStyleSheet(
-            f"QPushButton{{background:{qa(TEAL,0x22)};border:1px solid {TEAL};border-radius:5px;"
-            f"color:{TEAL2};font-size:{FS_TINY}px;font-weight:700;padding:2px 8px;}}"
-            f"QPushButton:hover{{background:{TEAL};color:white;}}")
-        add_wpn_btn.clicked.connect(lambda: self._tabs.setCurrentIndex(3))
-        acl2.addWidget(add_wpn_btn)
         wpn_host = QWidget(); wpn_host.setStyleSheet("background:transparent;")
         self._weapon_rows = QVBoxLayout(wpn_host)
         self._weapon_rows.setSpacing(4); self._weapon_rows.setContentsMargins(0,0,0,0)
@@ -3475,19 +3436,16 @@ class CharacterSheet(QWidget):
             top_lay.addWidget(self._wildshape_card_widget, 4)
 
         top_half_lay.addWidget(top_strip)
-        # No addStretch() here — the user wants manually dragging the
-        # splitter handle below to actually grow top_strip (and its
-        # cards, since they're set to Expanding), not have the extra
-        # space absorbed as invisible blank space. With top_strip's
-        # policy now Preferred rather than a hard Maximum ceiling, and
-        # nothing else competing for space in this layout, it naturally
-        # claims whatever height the layout — including a manual splitter
-        # drag — actually gives it.
+        # No addStretch() here: dragging the splitter handle below should
+        # grow top_strip (and its cards, set to Expanding) rather than
+        # have the extra space absorbed as invisible blank space. With
+        # top_strip's size policy set to Preferred rather than a hard
+        # Maximum, and nothing else competing for space in this layout,
+        # it claims whatever height the layout gives it.
 
-        # Per-bucket category filters are built inside the tab-construction
-        # loop below (each tab gets its own independent filter row), not
-        # here as one shared row across all 4 — confirmed the user
-        # specifically wants each tab filtered independently.
+        # Per-bucket category filters are built inside the tab-
+        # construction loop below so each tab gets its own independent
+        # filter row, rather than one shared row across all 4.
 
         # ── BOTTOM: Action Economy tabs (full remaining height) ───────────────
         self._action_tabs = QTabWidget()
@@ -3517,9 +3475,9 @@ class CharacterSheet(QWidget):
             bw = QWidget(); bw.setStyleSheet("background:transparent;")
             bl = QVBoxLayout(bw); bl.setContentsMargins(8,8,8,8); bl.setSpacing(5)
 
-            # Per-bucket category filter row — own independent state,
-            # confirmed the user wants each tab (including Passive)
-            # filtered independently rather than one shared row.
+            # Per-bucket category filter row: independent state so each
+            # tab (including Passive) filters independently rather than
+            # sharing one row.
             self._action_cat_filters[bucket_name] = "All"
             self._action_cat_btns_by_bucket[bucket_name] = {}
             filter_row_w = QWidget()
@@ -3664,15 +3622,13 @@ class CharacterSheet(QWidget):
         splitter.addWidget(top_half)
         splitter.addWidget(self._action_tabs)
         self._combat_top_half = top_half
-        # The Attacks/action-tabs area holds the actual variable-length
-        # content (attacks, spells, abilities) a player needs to read
-        # clearly during play, and was previously starved of space by
-        # default (230 of 690px total, well under a third) — now it gets
-        # the majority share, with a minimum height so dragging the handle
-        # can't squeeze it down to near-nothing either. top_half (HP,
-        # conditions, resistance/movement badges, etc.) can still be
-        # dragged larger by the user if they have many badges wrapping
-        # across rows, same as before.
+        # The Attacks/action-tabs area holds the variable-length content
+        # (attacks, spells, abilities) a player needs to read during
+        # play, so it gets the majority share of the default split, with
+        # a minimum height so dragging the handle can't squeeze it down
+        # to near-nothing. top_half (HP, conditions, resistance/movement
+        # badges, etc.) can still be dragged larger if it has many
+        # badges wrapping across rows.
         self._action_tabs.setMinimumHeight(320)
         splitter.setSizes([280, 460])
         splitter.setStretchFactor(0, 0)
@@ -3924,12 +3880,9 @@ class CharacterSheet(QWidget):
         # Haste chip
         from dnd_app.core.effects import has_extra_action
         self._haste_chip.setVisible(has_extra_action(self.char))
-        # Sneak chip (rogues only) — hidden while Wild Shaped, since Sneak
+        # Sneak chip (rogues only): hidden while Wild Shaped, since Sneak
         # Attack requires a finesse or ranged weapon and natural weapons
-        # never qualify as either. Also hidden if nothing currently
-        # equipped actually qualifies (confirmed via direct testing this
-        # was previously showing "ready" even with something like a
-        # Warhammer equipped, which doesn't qualify).
+        # never qualify. Also hidden if nothing currently equipped qualifies.
         rogue_lvl = class_levels(self.char).get("Rogue", 0)
         has_qualifying_weapon = False
         if rogue_lvl > 0:
@@ -4201,21 +4154,18 @@ class CharacterSheet(QWidget):
         sides = int(die_key[1:])
         roll = random.randint(1, sides)
         con = ability_mod(self.char, "CON")
-        # Durable: the die roll itself (before CON is added) has a floor of
-        # 2x CON modifier (min 2). Confirmed missing entirely.
+        # Durable: the die roll itself (before CON is added) has a floor of 2x CON modifier (min 2).
         if "Durable" in self.char.get("feats", []):
             roll = max(roll, 2 * con, 2)
         heal = max(0, roll + con)
-        # Dwarven Fortitude: guarantees at least 1 HP healed (the
-        # standard hit-die-spend formula allows 0). Confirmed missing —
-        # the app doesn't track "when" a hit die is spent, so the
-        # Dodge-triggered part of this feat already works through this
-        # same button; only this floor was different from the norm.
+        # Dwarven Fortitude: guarantees at least 1 HP healed (the standard
+        # hit-die-spend formula allows 0). This app doesn't track "when"
+        # a hit die is spent, so the Dodge-triggered part of this feat
+        # works through this same button; only this floor differs from the norm.
         if "Dwarven Fortitude" in self.char.get("feats", []):
             heal = max(1, roll + con)
         # Vigor of the Hill Giant: extra HP = CON modifier + proficiency
-        # bonus when spending a Hit Die during a short rest ("Iron
-        # Stomach"). Confirmed missing entirely.
+        # bonus when spending a Hit Die during a short rest ("Iron Stomach").
         if "Vigor of the Hill Giant" in self.char.get("feats", []):
             from dnd_app.core.calculator import get_prof_bonus
             heal += con + get_prof_bonus(self.char)
@@ -4250,11 +4200,7 @@ class CharacterSheet(QWidget):
         for (name,cat,dmg,dmg_type,cost,wt,props) in ALL_WEAPONS:
             combo.addItem(f"{name} — {dmg} {dmg_type}", name)
         l.addWidget(combo)
-        # Material modifier: confirmed real, exact costs from the source
-        # reference (Adamantine +500gp, Silvered +100gp) — the missing
-        # piece from the earlier mundane items pass, since the material-
-        # prefix parsing itself already existed for the display badge but
-        # nothing let a player actually pick this rather than type it.
+        # Material modifier costs: Adamantine +500gp, Silvered +100gp.
         l.addWidget(_lbl("Material (optional):", TEXT, FS_BODY))
         material_combo = QComboBox()
         material_combo.addItem("None (+0 gp)", "")
@@ -4300,22 +4246,15 @@ class CharacterSheet(QWidget):
     def _add_weapon_row(self, wpn_name, is_offhand=False):
         from dnd_app.core.magic_items import parse_magic_suffix, parse_material_prefix
         base_wpn_name, magic_bonus = parse_magic_suffix(wpn_name)
-        # Confirmed a real, significant bug: "Silvered X"/"Adamantine X"
-        # weren't recognized by the weapon lookup at all (only the
-        # "+1"/"+2"/"+3" suffix was), so naming a weapon "Silvered
-        # Dagger" silently fell through to the generic named-magic-
-        # weapon fallback below and got corrupted stats — flat 1d8
-        # slashing with no properties, instead of the real dagger's
-        # 1d4 piercing with Finesse/Light/Thrown. Strips the material
-        # prefix (after the magic suffix, so "Silvered Longsword +1"
-        # parses correctly) so the real base weapon is found.
+        # "Silvered X"/"Adamantine X" aren't recognized by the weapon
+        # lookup on their own (only the "+1"/"+2"/"+3" suffix is), so the
+        # material prefix is stripped here (after the magic suffix, so
+        # "Silvered Longsword +1" parses correctly) to find the real base weapon.
         base_wpn_name, weapon_material = parse_material_prefix(base_wpn_name)
-        # Confirmed a real mechanical bug: an Artificer infusion's stated
-        # "+N" bonus (Enhanced Weapon, Radiant Weapon, Repeating Shot,
-        # Returning Weapon) was never actually applied to attack/damage
-        # rolls — infusing a weapon only set a cosmetic magic:True flag.
-        # Check for an active infusion targeting this weapon and apply
-        # its real bonus, using the higher of the two if both are present.
+        # Check for an active infusion targeting this weapon (Enhanced
+        # Weapon, Radiant Weapon, Repeating Shot, Returning Weapon) and
+        # apply its real "+N" attack/damage bonus, using the higher of
+        # the two if both are present.
         from dnd_app.core.calculator import get_infusion_bonus, class_levels
         art_lvl_wr = class_levels(self.char).get("Artificer", 0)
         for inf in self.char.get("active_infusions", []):
@@ -4335,8 +4274,7 @@ class CharacterSheet(QWidget):
                    0, 0, ["Finesse"] if nb else [])
         name,cat,dmg,dmg_type,_,_,props = wpn
         props = list(props or [])
-        # Thrown Arms Master: confirmed a genuine gap with zero mechanical
-        # presence anywhere. Simple/martial melee weapons without the
+        # Thrown Arms Master: simple/martial melee weapons without the
         # Thrown property gain it; weapons that already have it get an
         # extended range instead.
         if "Thrown Arms Master" in self.char.get("feats", []) and "Melee" in cat:
@@ -4357,9 +4295,7 @@ class CharacterSheet(QWidget):
         proficient = is_named_magic_fallback or has_weapon_proficiency(self.char, base_wpn_name, cat)
         pb = pb_full if proficient else 0
         is_finesse = "Finesse" in (props or [])
-        # Revenant Blade: grants Finesse to the Double-Bladed Scimitar
-        # specifically (it doesn't have Finesse by default). Confirmed
-        # zero mechanical presence existed for this feat previously.
+        # Revenant Blade: grants Finesse to the Double-Bladed Scimitar specifically (it doesn't have Finesse by default).
         if base_wpn_name == "Double-Bladed Scimitar" and "Revenant Blade" in self.char.get("feats", []):
             is_finesse = True
         is_ranged  = "Ranged" in cat
@@ -4371,12 +4307,10 @@ class CharacterSheet(QWidget):
         is_hexblade = "hexblade" in subclasses(self.char).get("Warlock", "").lower()
         # Battle Ready (Artificer, Battle Smith, 3rd level): use INT
         # instead of STR/DEX for attack/damage rolls with a magic
-        # weapon. Confirmed this only existed as a reminder before, with
-        # no actual "is this weapon magic" check anywhere — built one
-        # covering every path the app tracks magic weapons through: a
-        # "+N" suffix, a named-fallback item (not in the mundane weapon
-        # list at all), presence in magic_items, or an infusion-marked
-        # equipment entry.
+        # weapon. Checks every path this app tracks magic weapons
+        # through: a "+N" suffix, a named-fallback item (not in the
+        # mundane weapon list at all), presence in magic_items, or an
+        # infusion-marked equipment entry.
         art_lvl_br = class_levels(self.char).get("Artificer", 0)
         is_battlesmith = "battle smith" in subclasses(self.char).get("Artificer", "").lower()
         is_magic_weapon = bool(magic_bonus) or is_named_magic_fallback
@@ -4414,13 +4348,11 @@ class CharacterSheet(QWidget):
         if "Sacred Weapon" in self.char.get("active_effects", []):
             sacred_weapon_bonus = ability_mod(self.char, "CHA")
 
-        # Great Weapon Master / Sharpshooter: -5 to attack, +10 to damage,
-        # toggleable per weapon (the real rule is decided per attack, not
-        # a character-wide stance). Confirmed a real, significant gap:
-        # neither feat had ANY mechanical presence anywhere in the attack
-        # formula despite being two of the most commonly-used combat
-        # feats in the game. GWM requires a heavy melee weapon; Sharp-
-        # shooter requires a ranged weapon; both require proficiency.
+        # Great Weapon Master / Sharpshooter: -5 to attack, +10 to
+        # damage, toggleable per weapon (the real rule is decided per
+        # attack, not a character-wide stance). GWM requires a heavy
+        # melee weapon; Sharpshooter requires a ranged weapon; both
+        # require proficiency.
         is_heavy = "Heavy" in (props or [])
         char_feats = self.char.get("feats", [])
         can_power_attack = proficient and (
@@ -5424,14 +5356,12 @@ class CharacterSheet(QWidget):
         cl = QVBoxLayout(card); cl.setContentsMargins(0,0,0,0); cl.setSpacing(0)
 
         tracking = self.char.setdefault("summon_hp_tracking", {}) if hp_key else {}
-        # Confirmed a real, reported crash: some statblocks (e.g.
-        # "Tasha's Creeping Keelboat") store hp as a non-numeric
-        # placeholder like '—' rather than a real number, since the
-        # creature/vehicle genuinely has no standard numeric HP in its
+        # Some statblocks (e.g. "Tasha's Creeping Keelboat") store hp as
+        # a non-numeric placeholder like '—' rather than a real number,
+        # since the creature/vehicle has no standard numeric HP in its
         # own source text. QSpinBox.setRange requires an int, so this
-        # crashed the whole sheet. Falls back to 1 (still shown, but
-        # not a broken/negative range) rather than trusting the raw
-        # value to always be a real int.
+        # falls back to 1 (still shown, but not a broken/negative
+        # range) rather than trusting the raw value to always be a real int.
         raw_hp = sb["hp"]
         max_hp = raw_hp if isinstance(raw_hp, int) else 1
         if hp_key:
@@ -5605,13 +5535,13 @@ class CharacterSheet(QWidget):
             sections.append(("Martial Melee",  MARTIAL_MELEE,  "wep"))
             sections.append(("Martial Ranged", MARTIAL_RANGED, "wep"))
         if cat in ("All","Materials (Silvered/Adamantine)"):
-            # Confirmed real, distinct rules for each material: silvering
-            # applies to any weapon ("weapons aren't limited in choice"),
-            # while adamantine specifically applies only to melee weapons
-            # or ammunition (XGE: "a melee weapon or of ten pieces of
-            # ammunition") — a ranged weapon itself can't be adamantine,
-            # only its ammunition can, so ranged weapons only get a
-            # Silvered variant here, not an Adamantine one.
+            # Silvering applies to any weapon ("weapons aren't limited
+            # in choice"), while adamantine specifically applies only
+            # to melee weapons or ammunition (XGE: "a melee weapon or
+            # of ten pieces of ammunition") — a ranged weapon itself
+            # can't be adamantine, only its ammunition can, so ranged
+            # weapons only get a Silvered variant here, not an
+            # Adamantine one.
             SILVER_TIP = ("this weapon's damage counts as silvered for the purpose of "
                           "overcoming a creature's resistance or immunity to nonmagical "
                           "attacks (e.g. many lycanthropes and certain undead)")
@@ -5676,10 +5606,8 @@ class CharacterSheet(QWidget):
                 if search and search not in name.lower(): continue
                 child = QTreeWidgetItem([name, display_cat, display_dmg, display_wt, display_cost])
                 child.setData(0, Qt.UserRole, name)
-                # Confirmed a real, reported gap: no tooltip was ever set
-                # on any mundane item, despite rich descriptive text (like
-                # weapon property mechanics) already sitting unused in
-                # the data — built kind-appropriate here.
+                # Kind-appropriate tooltip built from the item's own
+                # descriptive text (e.g. weapon property mechanics).
                 tip_lines = [f"<b>{name}</b>"]
                 if kind == "wep":
                     tip_lines.append(f"{display_cat} \u2014 {dmg} {dtype} \u2014 {display_wt} \u2014 {display_cost}")
@@ -6003,7 +5931,6 @@ class CharacterSheet(QWidget):
             # which spell is actually written on this copy -- prompt for one
             # so the scroll becomes a concrete item (e.g. "Spell Scroll (3rd
             # level) — Fireball") instead of a vague inert placeholder.
-            # Confirmed there was no mechanism anywhere to record this.
             import re as _re
             m = _re.match(r'^Spell Scroll \((Cantrip|\d+(?:st|nd|rd|th) level)\)$', name)
             if m:
@@ -6109,10 +6036,8 @@ class CharacterSheet(QWidget):
                 self._magic_items_tree.setItemWidget(item, 0, dmg_combo)
 
             # Attuned checkbox (col 2) — only shown for items that
-            # actually need attunement. Confirmed a real bug: previously
-            # every item got a checkbox here, just disabled if attunement
-            # didn't apply, which looked like the item had some
-            # attunement state at all when it simply didn't.
+            # actually need attunement, rather than shown-but-disabled
+            # for every item regardless of whether attunement applies.
             if needs_attune:
                 att_cb = QCheckBox()
                 att_cb.setToolTip("Requires Attunement")
@@ -6157,6 +6082,10 @@ class CharacterSheet(QWidget):
             menu = QMenu(self._magic_items_tree)
             act = menu.addAction(f"📖  Details: {_name[:36]}")
             act.triggered.connect(lambda: QMessageBox.information(self, _name, _tip))
+            from dnd_app.core.magic_items import ABILITY_SCORE_MANUALS
+            if _name in ABILITY_SCORE_MANUALS:
+                study_act = menu.addAction(f"✨  Study {_name[:36]} (48 hrs over 6 days)")
+                study_act.triggered.connect(lambda checked=False, n=_name: self._study_manual(n))
             rm_act = menu.addAction(f"✕  Remove {_name[:36]}")
             rm_act.triggered.connect(lambda: self._remove_magic_item(_name))
             menu.exec(self._magic_items_tree.viewport().mapToGlobal(pos))
@@ -6207,10 +6136,9 @@ class CharacterSheet(QWidget):
         # Deferred: self.ctrl.refresh() -> _on_char_updated() ->
         # _refresh_magic_items() clears and rebuilds the whole tree,
         # including this very checkbox — destroying it while its own
-        # stateChanged signal is still on the call stack is a genuine Qt
-        # anti-pattern and the confirmed cause of the checkbox appearing
-        # not to work. Running it on the next event loop tick instead lets
-        # this signal handler finish cleanly first.
+        # stateChanged signal is still on the call stack is a Qt
+        # anti-pattern. Running it on the next event loop tick instead
+        # lets this signal handler finish cleanly first.
         from PySide6.QtCore import QTimer
         QTimer.singleShot(0, self.ctrl.refresh)
 
@@ -6218,11 +6146,10 @@ class CharacterSheet(QWidget):
         for entry in self.char.get("magic_items",[]):
             if isinstance(entry,dict) and entry.get("name")==name:
                 entry["equipped"] = on
-        # This checkbox previously only flipped the item's own bookkeeping
-        # flag — it never synced equipped_weapons/armor_worn/shield, so a
-        # magic weapon like Armblade or Sun Blade never actually showed up
-        # as an attackable weapon in the Combat tab no matter how many times
-        # you checked "Equipped".
+        # Syncs equipped_weapons/armor_worn/shield in addition to the
+        # item's own bookkeeping flag, so a magic weapon like Armblade
+        # or Sun Blade shows up as an attackable weapon in the Combat
+        # tab as soon as it's checked "Equipped".
         from dnd_app.data.magic_items import get_magic_item
         catalog = get_magic_item(name) or {}
         itype = catalog.get("type", "")
@@ -6273,6 +6200,24 @@ class CharacterSheet(QWidget):
 
         self.ctrl.refresh(); self._refresh_combat(); self._refresh_magic_items()
         if hasattr(self, "_refresh_gear_equipment"): self._refresh_gear_equipment()
+
+    def _study_manual(self, name: str):
+        """Study one of the 6 classic ability-score manuals/tomes: permanently
+        raises the named ability score by 2 (real 5e rule -- no hard cap on
+        this kind of magical increase) and consumes the book. Confirmed
+        there was no consumption path for these at all before this --
+        equip-based MAGIC_ITEM_EFFECTS can't represent a one-time permanent
+        change, so this writes directly to char["abilities"]."""
+        from dnd_app.core.magic_items import ABILITY_SCORE_MANUALS
+        ability = ABILITY_SCORE_MANUALS.get(name)
+        if not ability:
+            return
+        abilities = self.char.setdefault("abilities", {})
+        abilities[ability] = abilities.get(ability, 10) + 2
+        self._remove_magic_item(name)
+        self._toast(f"✨ {name} — your {ability} score permanently increases by 2 (now {abilities[ability]})")
+        self.ctrl.refresh()
+        self._mark_dirty()
 
     def _add_equipment_dialog(self):
         dlg = QDialog(self); dlg.setWindowTitle("Add Custom Item")
@@ -6382,16 +6327,12 @@ class CharacterSheet(QWidget):
                                     + (", stealth disadvantage" if a.get("stealth") else "")
                                     + (f", requires {a['str_req']} STR" if a.get("str_req") else ""))
             else:
-                # Confirmed a real, previously-missed gap: everything
-                # else (general adventuring gear — rope, torches,
-                # rations, tools, and the majority of a real inventory)
-                # fell through this chain with no tooltip at all.
-                # Confirmed a second layer of the same gap on broader
-                # regression: showing a tooltip only "if notes" still
-                # silently skipped every plain flavor item with no
-                # special mechanic text (Abacus, Bedroll, Rope) at all.
-                # Always shows at least weight/cost now, matching the
-                # same standard already used for the reference browser.
+                # General adventuring gear (rope, torches, rations,
+                # tools, and the majority of a real inventory) always
+                # shows at least weight/cost, matching the standard
+                # already used for the reference browser, even for
+                # plain flavor items with no special mechanic text
+                # (Abacus, Bedroll, Rope).
                 notes = GEAR_NOTES.get(name, "")
                 base = f"<b>{name}</b>"
                 if notes:
@@ -6482,12 +6423,11 @@ class CharacterSheet(QWidget):
                        f"{_eq.get('type','')}</i><br><br>{self._format_multi_para(_eq.get('desc',''))}")
                 act = menu.addAction(f"📖  Details: {_name[:36]}")
                 act.triggered.connect(lambda: QMessageBox.information(self, _name, tip))
-            # "Infuse this item" — only for weapons/armor/shields, only if
-            # the character actually knows an applicable Artificer
-            # infusion and hasn't hit the active-infusion cap. Confirmed
-            # via research that most infusions apply to an existing
-            # mundane item the character already owns, not a standalone
-            # creation.
+            # "Infuse this item" — only for weapons/armor/shields, only
+            # if the character actually knows an applicable Artificer
+            # infusion and hasn't hit the active-infusion cap. Most
+            # infusions apply to an existing mundane item the character
+            # already owns, not a standalone creation.
             if not _is_magic and (_is_weapon or _is_armor or _is_shield):
                 applicable = self._get_applicable_infusions(_is_weapon, _is_armor, _is_shield)
                 if applicable:
@@ -6565,10 +6505,8 @@ class CharacterSheet(QWidget):
             # Two cases: (1) enchanting an existing mundane item already
             # in equipment — mark it magical in place; (2) a standalone
             # creation (Replicate Magic Item's chosen item, Homunculus
-            # Servant, etc.) with no existing equipment entry — add it as
-            # a proper magic_items entry instead. Confirmed the old code
-            # only ever handled case 1, silently doing nothing for case 2
-            # despite still showing a success toast.
+            # Servant, etc.) with no existing equipment entry — add it
+            # as a proper magic_items entry instead.
             found = False
             for eq in self.char.get("equipment", []):
                 if eq.get("name") == item_name:
@@ -6961,14 +6899,10 @@ class CharacterSheet(QWidget):
             weapons.append({"name": "Grappling Appendages", "die": "1d6", "damage_type": "bludgeoning", "stat": "STR",
                              "note": "Immediately after hitting, try to grapple as a bonus action. Can't wield weapons/cast with these appendages."})
         # Dragon Hide (XGE): retractable claws, usable as natural weapons.
-        # Confirmed zero mechanical presence existed for this feat's claw
-        # attack previously — only the AC formula was ever wired.
         if "Dragon Hide" in self.char.get("feats", []):
             weapons.append({"name": "Dragon Hide Claws", "die": "1d4", "damage_type": "slashing", "stat": "STR",
                              "note": "Retractable claws (no action to extend/retract); replaces an unarmed strike's bludgeoning damage with slashing."})
-        # Touch of Death (DM reward, Dark Gift): a level-scaling necrotic
-        # bonus on an unarmed strike. Confirmed zero mechanical presence
-        # existed for this previously.
+        # Touch of Death (DM reward, Dark Gift): a level-scaling necrotic bonus on an unarmed strike.
         if "Touch of Death" in self.char.get("dm_rewards", []):
             from dnd_app.core.calculator import total_level as _tl_td
             _td_lvl = _tl_td(self.char)
@@ -7330,12 +7264,11 @@ class CharacterSheet(QWidget):
             return
         species = self.char.get("species") or self.char.get("race", "")
         subrace = self.char.get("subrace", "") or ""
-        # Confirmed the fangs themselves are mechanically identical
-        # between both versions (same 1d6 STR piercing) before matching
-        # both explicitly — deliberate, not a blanket normalization,
-        # since other Shifter mechanics (Shifting's own temp-HP formula)
-        # do genuinely differ between versions and must never be
-        # silently conflated the same way.
+        # The fangs themselves are mechanically identical between both
+        # versions (same 1d6 STR piercing), matched explicitly rather
+        # than via a blanket normalization, since other Shifter
+        # mechanics (Shifting's own temp-HP formula) do genuinely
+        # differ between versions and must never be conflated the same way.
         if species.strip().lower() not in ("shifter", "shifter (mpmm)") or "longtooth" not in subrace.lower():
             return
         pb = get_prof_bonus(self.char)
@@ -7664,9 +7597,9 @@ class CharacterSheet(QWidget):
         splitter.addWidget(top_half)
         splitter.addWidget(bottom_half)
         self._choices_top_half = top_half
-        # Roughly a third for the class/identity cards, two-thirds for the
-        # scrollable choices list — the user can drag the handle to
-        # whatever ratio they actually want, same as the Combat tab.
+        # Roughly a third for the class/identity cards, two-thirds for
+        # the scrollable choices list — the splitter handle can be
+        # dragged to any ratio, same as the Combat tab.
         splitter.setSizes([220, 460])
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
@@ -7790,10 +7723,10 @@ class CharacterSheet(QWidget):
         target_type = ARTIFICER_INFUSION_TARGETS.get(infusion_name, "standalone")
         if target_type == "standalone":
             # Homunculus Servant creates a companion CREATURE, not a
-            # giftable item — confirmed the generic "give it to
-            # yourself, or to another character?" prompt is nonsensical
-            # here (you can't hand off your own bonded companion), so
-            # it gets its own, simpler confirmation instead.
+            # giftable item, so it gets its own, simpler confirmation
+            # rather than the generic "give it to yourself, or to
+            # another character?" prompt (you can't hand off your own
+            # bonded companion).
             if infusion_name == "Homunculus Servant":
                 reply = QMessageBox.question(
                     self, infusion_name,
@@ -7845,10 +7778,8 @@ class CharacterSheet(QWidget):
             self, infusion_name, "Apply to which item?", candidates, 0, False)
         if ok and choice:
             self._infuse_item(choice, infusion_name)
-            # Resistant Armor: confirmed a real, previously-missing
-            # choice — the real rule requires picking one damage type
-            # when the armor is infused, and this only ever had a
-            # generic passive note with no actual mechanism at all.
+            # Resistant Armor: the real rule requires picking one damage
+            # type when the armor is infused.
             if infusion_name == "Resistant Armor":
                 dmg_type, ok2 = QInputDialog.getItem(
                     self, infusion_name, "Choose a damage type to resist:",
@@ -7958,10 +7889,9 @@ class CharacterSheet(QWidget):
         cf.addWidget(self._conc_save_btn)
         ll.addWidget(conc_frame)
 
-        # Soul of Artifice (Artificer, 20th level) — confirmed this had
-        # no real implementation for its "end an infusion to drop to 1
-        # HP instead of 0" half beyond the already-implemented +1-save
-        # bonus. Now buildable since active_infusions tracking exists.
+        # Soul of Artifice (Artificer, 20th level): the "end an infusion
+        # to drop to 1 HP instead of 0" half, alongside the +1-save
+        # bonus. Buildable since active_infusions tracking exists.
         self._soul_artifice_btn = QPushButton("💫 Soul of Artifice: End an Infusion (drop to 1 HP)")
         self._soul_artifice_btn.setStyleSheet(
             f"QPushButton{{background:{qa(PURPLE,0x33)};border:1px solid {PURPLE};"
@@ -8088,16 +8018,14 @@ class CharacterSheet(QWidget):
         self._class_level_headers = {}
         from dnd_app.data.spells import get_spell as _gs
         prepared_set = set(self.char.get("spells_prepared", []))
-        # Sort by class then level — directly requested. Confirmed via
-        # direct testing that reusing _attribute_known_spells() here was
-        # wrong: that function is intentionally scoped to only track
-        # "known spells" caps for Sorcerer/Warlock/Bard/Ranger, so a
-        # Wizard's (a prepared caster) leveled spells were never
-        # attributed to any class at all — silently vanishing from this
-        # display for the single-class case, the most common one. Built
-        # a dedicated attribution instead, covering every known spell
-        # for every caster type via _all_caster_classes() (which
-        # correctly includes prepared casters).
+        # Sort by class then level. _attribute_known_spells() is
+        # intentionally scoped to only track "known spells" caps for
+        # Sorcerer/Warlock/Bard/Ranger, so it can't be reused here — a
+        # Wizard's (a prepared caster) leveled spells would never be
+        # attributed to any class at all. This builds a dedicated
+        # attribution instead, covering every known spell for every
+        # caster type via _all_caster_classes() (which correctly
+        # includes prepared casters).
         all_classes = self._all_caster_classes()
         class_order = [c.get("class","") for c in self.char.get("classes", [])
                        if c.get("class","") in all_classes]
@@ -8279,7 +8207,16 @@ class CharacterSheet(QWidget):
         def _real_name(cn):
             return "Wizard" if cn in ("Fighter (EK)", "Rogue (AT)") else cn
 
+        # Racial/subclass bonus spells (Fairy's Druidcraft, a Cleric
+        # domain spell, etc.) are merged into spells_known so they're
+        # castable, but they're always-known freebies, not a pick that
+        # should eat into a class's own known-spells/cantrip cap — so
+        # this loop excludes anything in char["bonus_spells"] before
+        # counting entries against a class's cap.
+        bonus = set(self.char.get("bonus_spells", []))
         for name in self.char.get("spells_known", []):
+            if name in bonus:
+                continue
             sp = _gs(name)
             if not sp: continue
             is_cantrip = sp.get("level", 1) == 0
@@ -8986,10 +8923,9 @@ class CharacterSheet(QWidget):
             return
         if is_cantrip:
             # Cantrips don't expend a slot, but still cost the same
-            # action-economy resource as any other spell — confirmed a
-            # related gap found while building the turn-economy fix:
-            # this early return meant a cantrip never consumed anything
-            # at all, even though most have a 1-action cast time.
+            # action-economy resource as any other spell (most have a
+            # 1-action cast time), so this can't return early before
+            # that's consumed.
             self._mark_spell_cast_time(spell)
             self._toast(f"✨ Cast {spell['name']} (cantrip — at will)")
             return
@@ -9358,9 +9294,7 @@ class CharacterSheet(QWidget):
             # below — the positional system silently misassigns levels any
             # time the number of generic "Archetype Feature"-style
             # placeholders in classes.py's per-level table doesn't exactly
-            # match the length of SUBCLASS_FEATURES' flat list, which
-            # happens for roughly a quarter of all subclasses in the game
-            # (confirmed by direct count comparison — see class_feature_index.py).
+            # match the length of SUBCLASS_FEATURES' flat list (see class_feature_index.py).
             _sub_index = CLASS_FEATURE_INDEX.get(cname, {}).get(sub)
             _has_verified_levels = isinstance(_sub_index, dict)
             if _has_verified_levels:
@@ -9478,9 +9412,8 @@ class CharacterSheet(QWidget):
         if feat_items:
             self._add_feature_section("Feats", PURP2, feat_items, badge_color=PURP2)
 
-        # Fighting Style: confirmed a real gap — fully stored and
-        # mechanically wired (drives real attack/damage bonuses), but
-        # never displayed anywhere in the Features tab.
+        # Fighting Style is fully stored and mechanically wired (drives
+        # real attack/damage bonuses), but is displayed here for visibility in the Features tab.
         fs_items = self.char.get("fighting_styles", [])
         if fs_items:
             self._add_feature_section("Fighting Style", TEAL2, list(fs_items), badge_color=TEAL2)
@@ -9536,13 +9469,11 @@ class CharacterSheet(QWidget):
         if disciplines:
             self._add_feature_section("Elemental Disciplines", PURP2, disciplines, badge_color=PURP2)
 
-        # Replicated Magic Items (Artificer) — confirmed a real bug here:
-        # this used to dump every item across every tier the character's
-        # level qualifies for (up to 51 items at 14th level) as if all
-        # were automatically known. The real rule requires explicitly
-        # learning each one as its own "Replicate Magic Item" infusion
-        # pick, consuming an infusions-known slot — so this now shows
-        # only the specific items the character has actually learned.
+        # Replicated Magic Items (Artificer): the real rule requires
+        # explicitly learning each one as its own "Replicate Magic
+        # Item" infusion pick, consuming an infusions-known slot — not
+        # every item across every tier the character's level qualifies
+        # for. Shows only the specific items the character has actually learned.
         from dnd_app.core.character import class_levels as _cls_lvls_repl
         art_lvl = _cls_lvls_repl(self.char).get("Artificer", 0)
         if art_lvl >= 2:
@@ -9572,12 +9503,11 @@ class CharacterSheet(QWidget):
             for _ul,_fl in sorted(_cls_opts.items()):
                 if _ul>_cl: continue
                 for _f in _fl:
-                    # Confirmed a real inconsistency: some optional
-                    # features (Harness Divine Power) have a real
-                    # Settings-popup toggle; others (Martial Versatility,
-                    # Deft Explorer, etc.) only ever had this per-feature
-                    # one. Check both, so a feature enabled through
-                    # either mechanism is recognized consistently.
+                    # Some optional features (Harness Divine Power) have
+                    # a Settings-popup toggle; others (Martial
+                    # Versatility, Deft Explorer, etc.) only have this
+                    # per-feature one. Checks both, so a feature enabled
+                    # through either mechanism is recognized consistently.
                     _rules_key = _f["name"].lower().replace(" ", "_")
                     if _enabled.get(_f["name"],False) or _rules.get(_rules_key, False):
                         _rep=_f.get("replaces")
@@ -9738,13 +9668,23 @@ class CharacterSheet(QWidget):
 
         # Right: info + add/remove buttons
         fb_right = QVBoxLayout(); fb_right.setSpacing(6)
+        # Wrapped in a QScrollArea with a taller viewport rather than a
+        # fixed-height QLabel, so a long entry (any DM Reward with more
+        # than a couple sentences — Supernatural Gifts, Dark Gifts, and
+        # Iconoclast's tiers routinely run several paragraphs) scrolls
+        # rather than getting clipped with no way to reach the rest.
         fb_info = QLabel("Select a feat to see details.")
         fb_info.setWordWrap(True)
         fb_info.setStyleSheet(
-            f"QLabel{{color:{TEXT2};font-size:{FS_SMALL}px;background:{SURF2};"
-            f"border:1px solid {BORDER};border-radius:5px;padding:8px;}}")
-        fb_info.setMinimumWidth(220); fb_info.setMaximumHeight(120)
-        fb_right.addWidget(fb_info)
+            f"QLabel{{color:{TEXT2};font-size:{FS_SMALL}px;background:{SURF2};padding:8px;}}")
+        fb_info.setMinimumWidth(220)
+        fb_info_scroll = QScrollArea()
+        fb_info_scroll.setWidget(fb_info)
+        fb_info_scroll.setWidgetResizable(True)
+        fb_info_scroll.setStyleSheet(
+            f"QScrollArea{{background:{SURF2};border:1px solid {BORDER};border-radius:5px;}}")
+        fb_info_scroll.setMinimumHeight(120); fb_info_scroll.setMaximumHeight(280)
+        fb_right.addWidget(fb_info_scroll)
 
         def _on_feat_select(item, info=fb_info):
             if not item: return
@@ -9877,12 +9817,11 @@ class CharacterSheet(QWidget):
             m = re.match(r'^([A-Z][A-Za-z\'\u2019 ]{1,50}?)\.\s+(.*)$', p, re.DOTALL)
             if m and len(m.group(1).split()) <= 6:
                 p = f"<b>{m.group(1)}.</b> {m.group(2)}"
-            # Confirmed a real gap: some entries embed markdown tables
-            # (pipe-delimited rows) as raw text with single \n between
-            # rows, which was never converted — every row collapsed
-            # into one unreadable run in the rendered HTML. Converts
-            # any remaining single newlines to real line breaks too,
-            # after the paragraph-level bolding above already ran.
+            # Some entries embed markdown tables (pipe-delimited rows)
+            # as raw text with single \n between rows; each row would
+            # otherwise collapse into one unreadable run in the
+            # rendered HTML. Converts any remaining single newlines to
+            # real line breaks too, after the paragraph-level bolding above already ran.
             p = p.replace('\n', '<br>')
             out_paras.append(p)
         return '<br><br>'.join(out_paras)
@@ -10114,9 +10053,8 @@ class CharacterSheet(QWidget):
         self.ctrl.refresh()
 
         # Sync the condition checkboxes and exhaustion spinbox from the
-        # actual character data — previously neither was ever set here,
-        # so both always started at their default (unchecked/0) state on
-        # load regardless of what a saved character actually had active.
+        # actual character data, so both reflect what a saved character
+        # actually has active rather than their default (unchecked/0) state.
         if hasattr(self, "_cond_checks"):
             active_conds = set(char.get("conditions", []))
             for cname, cb in self._cond_checks.items():
@@ -10289,9 +10227,9 @@ class CharacterSheet(QWidget):
             is_p = ab in profs or self.char.get("saving_throws",{}).get(ab,False)
             dot.setChecked(is_p)
 
-        # Derived stat boxes (these were previously set once at build time and
-        # never refreshed — fixed so Passive Perception correctly reflects
-        # live advantage/disadvantage adjustments, e.g. from armor or items)
+        # Derived stat boxes are refreshed here (not just set once at
+        # build time) so Passive Perception correctly reflects live
+        # advantage/disadvantage adjustments, e.g. from armor or items.
         if hasattr(self, "_stat_boxes"):
             from dnd_app.core.calculator import (
                 get_skill_advantage_status, get_extra_attacks, get_sneak_attack,
@@ -10304,8 +10242,7 @@ class CharacterSheet(QWidget):
             senses_str = ", ".join(f"{k.title()} {v} ft" for k, v in senses.items() if v > 0) or "—"
             # Devil's Sight: the defining feature is seeing through
             # *magical* darkness specifically (which normal darkvision
-            # cannot do), not just a flat darkvision number — confirmed
-            # a real, requested note that was missing entirely.
+            # cannot do), not just a flat darkvision number.
             if self.char.get("_devils_sight", False):
                 senses_str += " (Devil's Sight: darkvision works through magical darkness too)"
 
@@ -10323,14 +10260,13 @@ class CharacterSheet(QWidget):
                 "Martial Arts": martial_arts_val,
                 "Rage Damage": rage_val,
             }
-            # These two are class-conditional (only meaningful for Monk /
-            # Barbarian respectively) and were previously only having
-            # their TEXT updated on a class change, never their
-            # visibility — so a character that had ever been a Barbarian
-            # in this sheet session kept showing a "Rage Damage: —" box
-            # forever after respeccing away from it, rather than the box
-            # disappearing entirely the way it does for a character that
-            # was never a Barbarian to begin with.
+            # These two are class-conditional (only meaningful for Monk
+            # / Barbarian respectively) — both their text AND visibility
+            # are updated on a class change, so a character that had
+            # ever been a Barbarian in this sheet session doesn't keep
+            # showing a "Rage Damage: —" box after respeccing away from
+            # it; the box disappears entirely, the same as for a
+            # character that was never a Barbarian.
             CONDITIONAL_BOXES = {"Martial Arts": martial_arts_val, "Rage Damage": rage_val}
             for label, val in updates.items():
                 box = self._stat_boxes.get(label)
@@ -10513,10 +10449,10 @@ class CharacterSheet(QWidget):
         self._bind_death_and_conditions()
         self._refresh_death_and_conditions()
 
-        # Delegate to _refresh_combat_weapons rather than duplicating the
-        # clear-and-rebuild loop here — this was previously a second copy
-        # that didn't know about Martial Arts / other synthetic attack rows,
-        # so they'd appear when equipment changed but vanish on tab switch.
+        # Delegates to _refresh_combat_weapons rather than duplicating
+        # the clear-and-rebuild loop here, so synthetic attack rows
+        # (Martial Arts, etc.) stay in sync with equipment changes
+        # rather than only appearing until the next tab switch.
         self._refresh_combat_weapons()
         self._refresh_companions_tab()
 
@@ -10526,13 +10462,11 @@ class CharacterSheet(QWidget):
 
         self._refresh_action_tabs()
         self._refresh_resistances_strip()
-        self._refresh_movement_strip()
-        # No maximumHeight cap on _combat_top_half (there used to be one,
-        # recomputed to the content's natural size on every refresh) — it
-        # was meant to stop dead space from appearing when the splitter
-        # shrinks the action list, but it also stopped the user from ever
-        # dragging the handle to give the top area MORE room, which matters
-        # a lot when there are many resistance/movement badges wrapped into
+        # No maximumHeight cap on _combat_top_half: a hard cap would
+        # stop dead space from appearing when the splitter shrinks the
+        # action list, but would also stop the user from ever dragging
+        # the handle to give the top area MORE room, which matters when
+        # there are many resistance/movement badges wrapped into
         # several rows. Manual drag control in both directions wins here.
 
     def _refresh_resistances_strip(self):
@@ -10556,8 +10490,10 @@ class CharacterSheet(QWidget):
 
         if not resistances and not immunities:
             self._resist_frame.setVisible(False)
+            self._resist_caption.setVisible(False)
             return
         self._resist_frame.setVisible(True)
+        self._resist_caption.setVisible(True)
         idx = 0
         cols = 5
 
@@ -10638,38 +10574,6 @@ class CharacterSheet(QWidget):
             self._resist_lay.addWidget(_badge(f"⊘ {display_label}", GOLD2, tip), r, c)
             idx += 1
 
-    def _refresh_movement_strip(self):
-        """Show climb/swim/fly speed badges whenever non-zero (walking
-        speed already has its own top-of-sheet pill, so it's not repeated
-        here). Hidden entirely if the character has none of these."""
-        if not hasattr(self, '_move_frame'):
-            return
-        while self._move_lay.count():
-            item = self._move_lay.takeAt(0)
-            if item.widget(): item.widget().setParent(None)
-
-        from dnd_app.core.calculator import get_effective_speed
-        spd = get_effective_speed(self.char)
-        entries = [("🧗 climb", spd["climb"], TEAL2), ("🏊 swim", spd["swim"], TEAL2),
-                   ("🦅 fly", spd["fly"], TEAL2)]
-        visible = [(label, val, color) for label, val, color in entries if val > 0]
-
-        if not visible:
-            self._move_frame.setVisible(False)
-            return
-        self._move_frame.setVisible(True)
-
-        def _badge(text, color):
-            b = _lbl(text, color, FS_SMALL, bold=True, wrap=False)
-            b.setStyleSheet(
-                f"background:{qa(color,0x33)};border:1.5px solid {qa(color,0x99)};"
-                f"border-radius:5px;padding:3px 8px;color:{color};"
-                f"font-size:{FS_SMALL}px;font-weight:700;")
-            return b
-
-        for i, (label, val, color) in enumerate(visible):
-            self._move_lay.addWidget(_badge(f"{label} {val} ft", color), 0, i)
-
     def _build_resource_rows(self, bl):
         """
         Populate the top of the 'Other' tab with live resource pools: class
@@ -10732,12 +10636,11 @@ class CharacterSheet(QWidget):
                       f"QPushButton:hover{{background:{bar_color};color:white;}}")
             minus.setStyleSheet(btn_ss); plus.setStyleSheet(btn_ss)
             def _on_minus_click(checked=False, _key=res_key):
-                # Earth Genasi Blade Ward: confirmed by the user this
-                # needed the same gate as real spell-casting — even
-                # though Blade Ward is a cantrip, spending this use is
-                # "casting a spell with a bonus action," which can be
-                # blocked if a leveled spell was already cast via the
-                # regular Action that turn.
+                # Earth Genasi Blade Ward needs the same gate as real
+                # spell-casting — even though Blade Ward is a cantrip,
+                # spending this use is "casting a spell with a bonus
+                # action," which can be blocked if a leveled spell was
+                # already cast via the regular Action that turn.
                 if _key == "earth_genasi_blade_ward":
                     if not self._check_bonus_action_spell_rule(True, "Bonus Action"):
                         self._toast("✖ Can't cast Blade Ward via Bonus Action — you've already "
@@ -10746,11 +10649,10 @@ class CharacterSheet(QWidget):
                     self._bonus_action_spell_is_cantrip = True
                 sp.setValue(max(0, sp.value()-1))
                 # Harness Divine Power (Cleric/Paladin, TCE optional
-                # feature): confirmed via direct clarification this
-                # feature both has its own limited uses AND separately
-                # consumes a normal Channel Divinity charge each time
-                # it's used — not two independent pools. Only this one
-                # resource needs the linked decrement.
+                # feature): this feature both has its own limited uses
+                # AND separately consumes a normal Channel Divinity
+                # charge each time it's used — not two independent
+                # pools. Only this one resource needs the linked decrement.
                 if _key == "harness_divine_power":
                     for cd_key in ("channel_divinity", "channel_div"):
                         for res in self.char.get("resources", []):
@@ -10758,10 +10660,9 @@ class CharacterSheet(QWidget):
                                 res["current"] = max(0, res.get("current", 0) - 1)
                                 self._mark_dirty()
                                 QTimer.singleShot(0, self.ctrl.refresh)
-                # Action Surge: confirmed a real, reported gap — existed
-                # only as a spendable resource with zero connection to
-                # the turn-economy system, despite genuinely granting an
-                # extra action for the current turn per the real rule.
+                # Action Surge grants an extra action for the current
+                # turn per the real rule, tied into the turn-economy
+                # system here rather than existing only as a spendable resource.
                 if _key == "action_surge":
                     self.char["_action_surge_used_this_turn"] = True
                     self._toast("⚡ Action Surge: gained an extra action this turn")
@@ -10930,10 +10831,8 @@ class CharacterSheet(QWidget):
 
         for bucket_name, (bw, bl) in self._action_bucket_widgets.items():
             # Clear existing rows — items 0 and 1 are the permanent
-            # filter row and level-filter row (confirmed the old
-            # "clear everything but the stretch" logic would have
-            # wrongly deleted these on every refresh), keep the
-            # stretch at the end too.
+            # filter row and level-filter row and must be preserved,
+            # along with the stretch at the end.
             while bl.count() > 3:
                 item = bl.takeAt(2)
                 if item.widget():
@@ -10954,9 +10853,7 @@ class CharacterSheet(QWidget):
 
             # Conditional filter visibility: only show the chooser for
             # THIS bucket if more than one distinct category is
-            # actually present — confirmed this is exactly what the
-            # user asked for ("if you only have common actions or only
-            # 1 of any filter type then the filter chooser doesnt show").
+            # actually present.
             present_cats = {self._classify_action_entry(e) for e in rows}
             self._action_filter_rows[bucket_name].setVisible(len(present_cats) > 1)
 
@@ -11151,10 +11048,9 @@ class CharacterSheet(QWidget):
                                 return
                             slot_lvl = avail_levels[[f"{l}{'st' if l==1 else 'nd' if l==2 else 'rd' if l==3 else 'th'}-level"
                                                       for l in avail_levels].index(level)]
-                            # Confirmed a real gap in the earlier version: the
-                            # undead/fiend bonus was only ever a static
-                            # reminder in the toast text, never actually
-                            # asked about or added to the computed total.
+                            # The undead/fiend bonus is asked about and
+                            # added to the computed total here, not just
+                            # shown as a static reminder in the toast text.
                             is_undead_fiend = QMessageBox.question(
                                 self, "Divine Smite", "Is the target undead or a fiend?",
                                 QMessageBox.Yes | QMessageBox.No) == QMessageBox.Yes
@@ -11196,11 +11092,8 @@ class CharacterSheet(QWidget):
                             self._refresh_effects_list()
                             return
                         if key == "peerless athlete":
-                            # Confirmed via multiple sources: Peerless
-                            # Athlete is a Channel Divinity option (Oath of
-                            # Glory, 3rd level), not its own resource —
-                            # corrected from an earlier, incorrect
-                            # standalone-resource implementation.
+                            # Peerless Athlete is a Channel Divinity
+                            # option (Oath of Glory, 3rd level), not its own resource.
                             fx = self.char.setdefault("active_effects", [])
                             if "Peerless Athlete" in fx:
                                 fx.remove("Peerless Athlete")

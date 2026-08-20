@@ -1,4 +1,8 @@
-"""D&D 5e condition definitions with full mechanical text."""
+"""D&D 5e condition definitions with full mechanical text.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
+"""
 
 CONDITIONS = {
     "Blinded": {

@@ -4,6 +4,9 @@ Official D&D 5e Feats — rebuilt from user-provided official sourcebook text
 published text rather than paraphrased from an earlier, partially-corrupted
 version of this file, which had both a widespread duplicate-text-fragment
 formatting bug and several genuinely invented/wrong mechanics.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 def feat(name, source, prereq="", asi=None, asi_flex=None, special="", **kwargs):

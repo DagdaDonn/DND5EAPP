@@ -21,6 +21,9 @@ Source book abbreviations: IDRotF = Icewind Dale: Rime of the Frostmaiden,
 MOT = Mythic Odysseys of Theros, EGW = Explorer's Guide to Wildemount,
 VRGR = Van Richten's Guide to Ravenloft, HotDQ = Hoard of the Dragon Queen,
 OotA = Out of the Abyss.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 def dm_reward(name, desc, category, source, prereq="", replaces_bg=False, is_secret=False):

@@ -1,4 +1,8 @@
-"""Floating dice roller panel."""
+"""Floating dice roller panel.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
+"""
 import random
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt, Signal, QTimer

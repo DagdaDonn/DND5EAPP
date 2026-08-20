@@ -13,6 +13,9 @@ Multiclass handler for D&D 5e (both 2014 and 2024 rules).
 - Extra Attack: does NOT stack between classes (exception: Fighter Two Extra Attacks/Three Extra Attacks)
 - Unarmored Defense: only one method can apply at a time
 - Pact Magic slots interoperate with Spellcasting slots (2024: fully bidirectional)
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 import math
@@ -154,10 +157,8 @@ def check_multiclass_prereq(class_name: str, ability_scores: dict) -> tuple[bool
             failures.append(f"{stat} {score} < {min_val} required")
 
     # Mixed AND+OR case (Blood Hunter: INT 13 AND (STR 13 OR DEX 13)) —
-    # confirmed the simple all-AND/all-OR logic above couldn't express
-    # this at all, which is why the prerequisite was wrong in the first
-    # place. The plain (non-grouped) stats above are still AND'd
-    # normally; the _or_group stats need at least one to pass.
+    # the plain (non-grouped) stats above are still AND'd normally; the
+    # _or_group stats need at least one to pass.
     if or_group:
         group_passes = []
         group_failures = []
@@ -260,9 +261,8 @@ def get_warlock_slots(warlock_levels: int) -> dict:
         "count": WARLOCK_PACT_SLOTS[wl],
         "level": WARLOCK_PACT_LEVEL[wl],
         "reset": "SR/LR",  # Pact Magic slots recover on a short OR long
-        # rest — confirmed this metadata was inaccurate ("SR" only),
-        # though currently unused/dead (actual reset logic is hardcoded
-        # separately in both rest functions), fixed for correctness.
+        # rest — actual reset logic is hardcoded separately in both rest
+        # functions; this metadata is currently unused/dead but kept accurate.
     }
 
 
@@ -464,11 +464,7 @@ def _add_subclass_resources(resources: list, class_levels: dict,
     # ── Fighter ──────────────────────────────────────────────────────────────
     fighter_lvl = class_levels.get("Fighter", 0)
     if fighter_lvl > 0:
-        # Psi Warrior: Psionic Energy Dice (d6 pool = TWICE proficiency
-        # bonus). Confirmed via the reference file this was previously
-        # wrong — coded as a flat proficiency bonus, giving exactly half
-        # the intended pool size. A real mechanical bug, not just a
-        # display error.
+        # Psi Warrior: Psionic Energy Dice (d6 pool = TWICE proficiency bonus).
         if _has("Fighter", "psi warrior"):
             _add("Psionic Energy Dice (Psi Warrior)", "psionic_dice", "LR",
                  pb * 2, "pool", "d6 pool (d8 at 5th, d10 at 11th, d12 at 17th); 2x proficiency bonus", "Fighter", "Psi Warrior")
@@ -490,9 +486,7 @@ def _add_subclass_resources(resources: list, class_levels: dict,
     # ── Rogue ─────────────────────────────────────────────────────────────────
     rogue_lvl = class_levels.get("Rogue", 0)
     if rogue_lvl > 0:
-        # Soulknife: Psionic Energy Dice (twice proficiency bonus, per
-        # the same real rule text as Psi Warrior — confirmed the same
-        # bug existed here too).
+        # Soulknife: Psionic Energy Dice (twice proficiency bonus, per the same rule text as Psi Warrior).
         if _has("Rogue", "soulknife"):
             _add("Psionic Energy Dice (Soulknife)", "psionic_dice_rogue", "LR",
                  pb * 2, "pool", "d6 pool (scales at 5th/11th/17th); 2x proficiency bonus", "Rogue", "Soulknife")
@@ -546,20 +540,16 @@ def _add_subclass_resources(resources: list, class_levels: dict,
     # ── Warlock ───────────────────────────────────────────────────────────────
     warlock_lvl = class_levels.get("Warlock", 0)
     if warlock_lvl > 0:
-        # Hexblade: Hexblade's Curse — uses = CHA modifier (min 1),
-        # confirmed via the reference: "you can use this feature a
-        # number of times equal to your Charisma modifier (a minimum
-        # of once)." Previously coded as a flat 1 use, a real
-        # mechanical bug matching what was already fixed in the
-        # KNOWN_ACTIONS text earlier this session.
+        # Hexblade: Hexblade's Curse — uses = CHA modifier (min 1), per
+        # "you can use this feature a number of times equal to your
+        # Charisma modifier (a minimum of once)."
         if _has("Warlock", "hexblade"):
             _add("Hexblade's Curse", "hexblade_curse", "SR/LR",
                  max(1, ability_mods.get("CHA", 0)), "uses",
                  "Bonus to damage = prof bonus; crit on 19-20; kill = regain HP (level + CHA mod)",
                  "Warlock", "Hexblade")
-        # Undead: Form of Dread — uses = proficiency bonus (confirmed via
-        # the real text: "you can transform a number of times equal to
-        # your proficiency bonus"), not CHA modifier as previously built.
+        # Undead: Form of Dread — uses = proficiency bonus, per "you can
+        # transform a number of times equal to your proficiency bonus."
         if _has("Warlock", "undead"):
             _add("Form of Dread", "form_of_dread", "LR",
                  max(1, pb), "uses",
@@ -594,8 +584,7 @@ def _add_subclass_resources(resources: list, class_levels: dict,
                      1, "uses",
                      f"Bonus action: regain 1d8+{warlock_lvl} HP, or reattach/regrow a severed body part",
                      "Warlock", "The Undying")
-        # Genie: Bottled Respite — confirmed the duration was fabricated
-        # as "INT hours"; the real formula is twice proficiency bonus.
+        # Genie: Bottled Respite — duration is twice proficiency bonus.
         if _has("Warlock", "genie"):
             _add("Bottled Respite", "bottled_respite", "LR",
                  1, "uses", f"Enter vessel for a short rest; lasts up to {2*pb} hours (2x proficiency bonus)",
@@ -613,9 +602,7 @@ def _add_subclass_resources(resources: list, class_levels: dict,
     # ── Druid ─────────────────────────────────────────────────────────────────
     druid_lvl = class_levels.get("Druid", 0)
     if druid_lvl > 0:
-        # Circle of Dreams: Balm of the Summer Court — confirmed a
-        # genuine d6 dice pool with zero resource tracking, despite the
-        # Combat-page text already correctly describing the mechanic.
+        # Circle of Dreams: Balm of the Summer Court — a d6 dice pool.
         if _has("Druid", "dreams"):
             _add("Balm of the Summer Court", "balm_summer_court", "LR",
                  druid_lvl, "pool",
@@ -623,21 +610,17 @@ def _add_subclass_resources(resources: list, class_levels: dict,
                  "on an ally within 120 ft as a bonus action — roll them, restore that much "
                  "HP, and grant 1 temp HP per die spent",
                  "Druid", "Circle of Dreams")
-        # Spores: Symbiotic Entity / Halo of Spores. Confirmed "1d16" in
-        # the old note was fabricated — not even a real die size. The
-        # real mechanic rolls the Halo of Spores damage die a SECOND
-        # time (not a die-size change), plus +1d6 necrotic on melee
-        # weapon hits, which was previously omitted entirely.
+        # Spores: Symbiotic Entity / Halo of Spores. The real mechanic
+        # rolls the Halo of Spores damage die a SECOND time (not a
+        # die-size change), plus +1d6 necrotic on melee weapon hits.
         if _has("Druid", "spores"):
             _add("Symbiotic Entity Temp HP", "symbiotic_hp", "Wild Shape use",
                  4 * druid_lvl, "pool",
                  "Use Wild Shape: gain 4×druid level temp HP; while active, roll your Halo of "
                  "Spores die twice, and melee weapon attacks deal +1d6 necrotic",
                  "Druid", "Circle of Spores")
-        # Stars: Starry Form. Confirmed the previous "2 uses per long
-        # rest" was fabricated — the real feature expends a use of
-        # Wild Shape (same pattern as Symbiotic Entity above), with no
-        # separate resource pool of its own.
+        # Stars: Starry Form expends a use of Wild Shape (same pattern
+        # as Symbiotic Entity above), with no separate resource pool of its own.
         if _has("Druid", "stars"):
             _add("Starry Form", "starry_form", "Wild Shape use",
                  99, "uses",
@@ -672,9 +655,8 @@ def _add_subclass_resources(resources: list, class_levels: dict,
                      uses, "uses",
                      "Bonus action: transform into werewolf hybrid form for up to 1 hour; enhanced Crimson Rite; feral instincts",
                      "Blood Hunter", "Order of the Lycan")
-        # Order of the Mutant: Mutagencraft — two SEPARATE progressions
-        # (previously conflated into one wrong number): how many mutagens
-        # you can concoct per rest, and how many formulas you know in total.
+        # Order of the Mutant: Mutagencraft — two SEPARATE progressions:
+        # how many mutagens you can concoct per rest, and how many formulas you know in total.
         if _has("Blood Hunter", "mutant"):
             if bh_lvl >= 15: created = 3
             elif bh_lvl >= 7: created = 2
@@ -689,18 +671,14 @@ def _add_subclass_resources(resources: list, class_levels: dict,
                  f"Concoct {created} mutagen(s) per short/long rest (choosing from your {known} known formulas); "
                  f"each lasts until your next short/long rest and has an effect plus a side effect",
                  "Blood Hunter", "Order of the Mutant")
-        # Order of the Ghostslayer: Rite of the Dawn now has a proper
-        # Combat-page reminder (added this session) instead of the
-        # earlier "1 use" resource workaround, which was misleading —
-        # this is an always-on passive benefit while the rite is
-        # active, not a genuinely limited resource.
+        # Order of the Ghostslayer: Rite of the Dawn is an always-on
+        # passive benefit while the rite is active, shown as a Combat-
+        # page reminder rather than tracked as a limited resource.
 
     # ── Wizard ────────────────────────────────────────────────────────────────
     wiz_lvl = class_levels.get("Wizard", 0)
     if wiz_lvl > 0:
-        # Bladesinging: Bladesong — uses = proficiency bonus per long
-        # rest. Confirmed via the reference this was previously wrong
-        # (coded as INT modifier), a real resource-pool sizing bug.
+        # Bladesinging: Bladesong — uses = proficiency bonus per long rest.
         if _has("Wizard", "bladesing"):
             _add("Bladesong", "bladesong", "LR",
                  pb, "uses",
@@ -708,11 +686,10 @@ def _add_subclass_resources(resources: list, class_levels: dict,
                  "extra concentration save bonus, for 1 minute",
                  "Wizard", "Bladesinging")
         # Abjuration: Arcane Ward — a damage-absorbing pool (2x Wizard
-        # level + INT mod), previously missing entirely despite being a
-        # core, high-impact Abjuration mechanic. Recharges when you cast
-        # an Abjuration spell of 1st level or higher (not a rest) — "LR"
-        # here just sets the starting value; the player manually restores
-        # it via the pool's own +/- control when that trigger happens.
+        # level + INT mod). Recharges when you cast an Abjuration spell
+        # of 1st level or higher (not a rest) — "LR" here just sets the
+        # starting value; the player manually restores it via the
+        # pool's own +/- control when that trigger happens.
         if _has("Wizard", "abjuration"):
             _add("Arcane Ward", "arcane_ward", "LR",
                  max(0, 2 * wiz_lvl + ability_mods.get("INT", 0)), "pool",
@@ -720,11 +697,8 @@ def _add_subclass_resources(resources: list, class_levels: dict,
                  "twice the level of an Abjuration spell you cast, instead of on a rest.",
                  "Wizard", "Abjuration")
         # Divination: Portent — 2 dice at 2nd level, 3 at 14th (Greater
-        # Portent). Confirmed via the reference this scaling IS real:
-        # "you roll three d20s for your Portent feature, rather than
-        # two." (An earlier pass briefly "fixed" this to a flat 2,
-        # based on not having found the 14th-level entry yet — reverted
-        # once the full reference confirmed the original was correct.)
+        # Portent): "you roll three d20s for your Portent feature,
+        # rather than two."
         if _has("Wizard", "divination"):
             portent_dice = 3 if wiz_lvl >= 14 else 2
             _add("Portent", "portent", "LR",
@@ -733,9 +707,7 @@ def _add_subclass_resources(resources: list, class_levels: dict,
                  f"saving throw, or ability check (yours or a creature you can see) "
                  f"with one of these dice instead of rolling",
                  "Wizard", "Divination")
-        # Chronurgy: Chronal Shift and Momentary Stasis — confirmed
-        # these had zero resource tracking despite genuine per-long-
-        # rest use limits described in their Combat-page text.
+        # Chronurgy: Chronal Shift and Momentary Stasis each have a per-long-rest use limit.
         if _has("Wizard", "chronurgy"):
             _add("Chronal Shift", "chronal_shift", "LR",
                  2, "uses",
@@ -768,9 +740,7 @@ def _add_subclass_resources(resources: list, class_levels: dict,
     bard_lvl = class_levels.get("Bard", 0)
     if bard_lvl >= 6 and _has("Bard", "creation"):
         # College of Creation: Animating Performance ("Dancing Item") —
-        # confirmed a genuine "once per long rest" limit (or spend a 3rd+
-        # level spell slot to reuse early) with zero resource tracking
-        # anywhere, matching the same gap found for Drake Companion.
+        # once per long rest, or spend a 3rd+ level spell slot to reuse early.
         _add("Animating Performance", "dancing_item_summon", "LR",
              1, "uses",
              "Animate a Large or smaller nonmagical item as a temporary ally for 1 hour; "
@@ -825,11 +795,8 @@ def _add_subclass_resources(resources: list, class_levels: dict,
                  "Command an undead creature you can see (CHA save DC = spell DC)",
                  "Paladin", "Oathbreaker")
         # Crown: Compelled Duel (no extra resource, uses spell slots)
-        # Conquest: Invincible Conqueror — genuinely standalone 1/LR
-        # capstone (confirmed via multiple sources it's NOT a Channel
-        # Divinity option, unlike Peerless Athlete). Was missing entirely,
-        # meaning its Use button appeared to work but never actually
-        # activated the effect since no resource existed to spend.
+        # Conquest: Invincible Conqueror — a standalone 1/LR capstone,
+        # not a Channel Divinity option (unlike Peerless Athlete).
         if paladin_lvl >= 20 and _has("Paladin", "conquest"):
             _add("Invincible Conqueror", "invincible_conqueror", "LR",
                  1, "uses",
@@ -854,9 +821,6 @@ def _add_subclass_resources(resources: list, class_levels: dict,
                  "one creature within 10 ft, for 1 minute",
                  "Paladin", "Oath of Vengeance")
         # Glory: Living Legend — 20th-level capstone, 1 min duration.
-        # Confirmed via official text this is the real name, not "Idol of
-        # Glory" (an earlier, wrong name that had also caused this feature
-        # to look like orphaned/unreferenced data elsewhere).
         if paladin_lvl >= 20 and _has("Paladin", "glory"):
             _add("Living Legend", "living_legend", "LR",
                  1, "uses",
@@ -932,10 +896,7 @@ def _add_subclass_resources(resources: list, class_levels: dict,
     # ── Ranger ────────────────────────────────────────────────────────────────
     ranger_lvl = class_levels.get("Ranger", 0)
     if ranger_lvl > 0:
-        # Drakewarden: Drake Companion — confirmed a genuine "can't
-        # summon more than once per long rest" limit with zero tracking
-        # anywhere, despite the summon's own AC/HP formula also being
-        # completely absent from its Combat-page text before this pass.
+        # Drakewarden: Drake Companion can't be summoned more than once per long rest.
         if _has("Ranger", "drakewarden"):
             _add("Drake Companion (summon)", "drake_companion_summon", "LR",
                  1, "uses",
@@ -966,11 +927,10 @@ def _add_subclass_resources(resources: list, class_levels: dict,
                  max(1, ability_mods.get("INT", 0)), "uses",
                  "Add INT mod to an ability check/save you or a creature within 30 ft makes",
                  "Artificer", "")
-        # Armorer (Guardian model only): Defensive Field — confirmed
-        # this had zero resource tracking despite being a real,
-        # proficiency-bonus-limited use count in the actual rule. Gated
-        # on the character's actual armor model choice, not just "is an
-        # Armorer" — Infiltrator-model characters don't have this at all.
+        # Armorer (Guardian model only): Defensive Field — a
+        # proficiency-bonus-limited use count. Gated on the character's
+        # actual armor model choice, not just "is an Armorer" —
+        # Infiltrator-model characters don't have this at all.
         if _has("Artificer", "armorer"):
             model_picks = (choices or {}).get("armorer_model_3", [])
             if any("guardian" in p.lower() for p in model_picks):
@@ -1090,9 +1050,7 @@ def get_extra_attacks(class_levels: dict, subclasses: dict = None, char: dict = 
             max_attacks = max(max_attacks, 2)
 
     # Fighter is the class with escalating Extra Attacks (PHB p.72):
-    # 2 attacks at 5th level, 3 at 11th, 4 at 20th. There is NO breakpoint
-    # at 17th — a stray "elif fighter_lvl >= 17: ...4" here previously gave
-    # 4th-level fighters their extra attack three levels early (17-19).
+    # 2 attacks at 5th level, 3 at 11th, 4 at 20th. There is no breakpoint at 17th.
     if fighter_lvl >= 20:
         max_attacks = max(max_attacks, 4)
     elif fighter_lvl >= 11:
@@ -1112,8 +1070,7 @@ def get_extra_attacks(class_levels: dict, subclasses: dict = None, char: dict = 
             max_attacks = max(max_attacks, 2)
 
     # Bard's Extra Attack is subclass-specific (College of Valor or
-    # College of Swords only) and granted at 6th level, not 5th — this
-    # was previously missing entirely; no Bard subclass ever got it.
+    # College of Swords only) and granted at 6th level, not 5th.
     bard_lvl = class_levels.get("Bard", 0)
     if bard_lvl >= 6:
         bard_sub = subclasses.get("Bard", "").lower()

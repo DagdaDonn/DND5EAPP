@@ -1,7 +1,13 @@
 """
-D&D 5e Classes — all 14 classes with full feature tables, subclasses,
-resource trackers (ki, lay on hands, rage, etc.), spell slot tables,
-and level-up choice definitions.
+Classes data module.
+
+D&D 5e class data: all 14 classes with full feature tables,
+subclasses, resource trackers (ki, lay on hands, rage, etc.), spell
+slot tables, and level-up choice definitions. Consumed by
+dnd_app.core.builder/calculator and the level-up UI.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 # ── Shared constants ──────────────────────────────────────────────────────────
@@ -1308,8 +1314,7 @@ ARTIFICER_INFUSIONS = [
     "Resistant Armor – resistance to one damage type of choice (min level 6)",
     "Returning Weapon (+1) – +1 atk/dmg; thrown weapon returns to hand",
     "Spell-Refueling Ring – once per day, regain one expended spell slot (3rd level or lower) (min level 6)",
-    # Replicable Items (2nd-Level Artificer) — confirmed this entire
-    # table was previously missing from the list altogether.
+    # Replicable Items (2nd-Level Artificer).
     "Alchemy Jug – produce vinegar, honey, oil, water, wine, or acid (min level 2)",
     "Bag of Holding – 500 lb / 64 cu ft of extradimensional storage (min level 2)",
     "Cap of Water Breathing – breathe underwater (min level 2)",
@@ -1327,8 +1332,7 @@ ARTIFICER_INFUSIONS = [
     "Lantern of Revealing – invisible creatures in its light are visible (min level 6)",
     "Pipes of Haunting – frighten listeners on a failed WIS save (charges) (min level 6)",
     "Ring of Water Walking – walk on any liquid surface as if solid ground (min level 6)",
-    # Replicable Items (10th-Level Artificer) — confirmed 12 of these 22
-    # were previously missing entirely.
+    # Replicable Items (10th-Level Artificer).
     "Boots of Striding and Springing – speed 30 ft even if heavier, triple jump distance (min level 10)",
     "Boots of the Winterlands – cold resistance, unaffected by extreme cold, no snow penalty (min level 10)",
     "Bracers of Archery – proficiency with longbow/shortbow, +2 damage with them (min level 10)",
@@ -1351,10 +1355,7 @@ ARTIFICER_INFUSIONS = [
     "Slippers of Spider Climbing – climb difficult surfaces/ceilings like a spider (min level 10)",
     "Ventilating Lungs – breathe underwater, swim speed 30 ft (min level 10)",
     "Winged Boots – flying speed = walking speed for a limited duration (charges) (min level 10)",
-    # Replicable Items (14th-Level Artificer) — confirmed 11 of these
-    # 13 were previously missing entirely, and the 2 that were present
-    # (Boots of Levitation, Boots of Speed) were mislabeled "Lv6+"
-    # instead of their real 14th-level requirement.
+    # Replicable Items (14th-Level Artificer).
     "Amulet of Health – CON score becomes 19 (if not already higher) (min level 14)",
     "Arcane Propulsion Arm – replacement arm, magic melee weapon, INT for attack/damage (min level 14)",
     "Belt of Hill Giant Strength – STR score becomes 21 (if not already higher) (min level 14)",
@@ -1385,8 +1386,7 @@ ARTIFICER_INFUSION_TARGETS = {
     "Resistant Armor": "armor",
     "Armor of Magical Strength": "armor",
     "Arcane Propulsion Armor": "armor",
-    "Mind Sharpener": "armor",  # "a suit of armor or robes" — confirmed
-                                # miscategorized as standalone before
+    "Mind Sharpener": "armor",  # "a suit of armor or robes"
     "Repulsion Shield (+1)": "shield",
     "Boots of the Winding Path": "standalone",  # boots — no "boots" equipment slot tracked
     "Enhanced Arcane Focus": "standalone", # wand/rod/staff — not tracked as separate gear
@@ -1395,12 +1395,11 @@ ARTIFICER_INFUSION_TARGETS = {
     "Spell-Refueling Ring": "standalone",       # ring — no separate slot tracked
 }
 
-# Confirmed via the reference: these four infusions grant a genuine
-# charge pool, none of which were tracked anywhere before (the existing
-# charge system only covered magic_items catalog entries with a
-# grant_spell effect — infusion-based charges are a completely
-# different data path, since these enchant an existing equipment item
-# rather than creating a standalone magic_items entry).
+# These four infusions grant a genuine charge pool — a different data
+# path from the existing charge system, which only covers magic_items
+# catalog entries with a grant_spell effect, since these enchant an
+# existing equipment item rather than creating a standalone
+# magic_items entry.
 # {infusion_name: (max_charges, recharge_dice, recharge_timing)}
 ARTIFICER_INFUSION_CHARGES = {
     "Armor of Magical Strength": (6, "1d6", "dawn"),

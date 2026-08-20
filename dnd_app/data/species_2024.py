@@ -7,6 +7,9 @@ Key 2024 changes:
 - Subraces replaced by Lineages/Ancestries on most species
 - Sunlight Sensitivity removed from Drow
 - 10 core species in PHB 2024; others still usable from older books
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 # ── 2024 PHB Core Species (10 total) ─────────────────────────────────────────

@@ -4,6 +4,9 @@ Each background: name, skills (2), tools (list), languages (int = # free),
 feature (name + desc), source, equipment.
 Personality traits/ideals/bonds/flaws are handled as free-text player
 input elsewhere (Backstory tab), not background-specific roll tables.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 def bg(name, skills, tools=None, languages=0, feature="", feature_desc="",

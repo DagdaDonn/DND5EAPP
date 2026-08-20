@@ -2,6 +2,9 @@
 Feature Detail & Configuration Dialog.
 Opens when a user clicks a feature card.
 Shows full description + any interactive choices (ASI, expertise, spell selection, etc.)
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt, Signal

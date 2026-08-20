@@ -30,6 +30,9 @@ Draconic Strike's per-attack damage type, which the "ascendant_dragon_ack"
 info acknowledgment already covers), and Sorcerer/Fighter feats with a
 DM's-choice or chosen-plane component (Scion of the Outer Planes,
 Elemental Adept). These are intentionally left out rather than guessed.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 RACIAL_RESISTANCES = {
@@ -69,10 +72,9 @@ FEAT_RESISTANCES = {
     "Fury of the Frost Giant":     [{"kind": "resistance", "target": "cold", "source": "Fury of the Frost Giant"}],
 }
 
-# DM-Granted Bonus Features (dm_rewards.py) with a passive resistance or
-# immunity — confirmed real, direct mechanical content in the source
-# text rather than assumed. Keyed by exact DM reward name, same shape
-# as FEAT_RESISTANCES above.
+# DM-Granted Bonus Features (dm_rewards.py) with a passive resistance
+# or immunity. Keyed by exact DM reward name, same shape as
+# FEAT_RESISTANCES above.
 DM_REWARD_RESISTANCES = {
     "Anvilwrought":  [{"kind": "resistance", "target": "poison", "source": "Constructed Resilience"},
                        {"kind": "condition", "condition": "disease", "source": "Constructed Resilience"}],
@@ -82,9 +84,7 @@ DM_REWARD_RESISTANCES = {
                        {"kind": "resistance", "target": "radiant", "source": "Nyxborn Resistance"}],
 }
 
-# Spells (spells.py) with a real resistance grant — keyed by active_effects
-# name, not feat/DM-reward name. Confirmed 454 of 508 spells in this app
-# had zero mechanical wiring of any kind before this pass began.
+# Spells (spells.py) with a real resistance grant — keyed by active_effects name, not feat/DM-reward name.
 SPELL_EFFECT_RESISTANCES = {
     "Protection from Poison": [{"kind": "resistance", "target": "poison", "source": "Protection from Poison"}],
     "Gaseous Form": [{"kind": "resistance", "target": "nonmagical", "source": "Gaseous Form"}],

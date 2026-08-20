@@ -10,6 +10,9 @@ inline as comments:
   - COMPANION_STATBLOCKS / ELDRITCH_CANNON
   - FIND_GREATER_STEED_OPTIONS / SCALING_SUMMONS / resolve_scaling_summon()
   - WILDSHAPE_BEASTS
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -865,6 +868,34 @@ VEHICLE_STATBLOCKS_MAGIC = {
         ],
         "actions": [],
     },
+    "Carpet of Flying, 3 ft. × 5 ft.": {
+        "size": "Large", "ac": "—", "hp": "—", "speed": "fly 80 ft. (hover)",
+        "cargo": "200 lb (400 lb overloaded, half speed)", "is_magic_item": True, "no_combat_stats": True,
+        "traits": [("Description", "Speak the command word (action) to make the carpet hover and fly; "
+                     "moves according to your spoken directions as long as you're within 30 feet of it.")],
+        "actions": [],
+    },
+    "Carpet of Flying, 4 ft. × 6 ft.": {
+        "size": "Large", "ac": "—", "hp": "—", "speed": "fly 60 ft. (hover)",
+        "cargo": "400 lb (800 lb overloaded, half speed)", "is_magic_item": True, "no_combat_stats": True,
+        "traits": [("Description", "Speak the command word (action) to make the carpet hover and fly; "
+                     "moves according to your spoken directions as long as you're within 30 feet of it.")],
+        "actions": [],
+    },
+    "Carpet of Flying, 5 ft. × 7 ft.": {
+        "size": "Huge", "ac": "—", "hp": "—", "speed": "fly 40 ft. (hover)",
+        "cargo": "600 lb (1,200 lb overloaded, half speed)", "is_magic_item": True, "no_combat_stats": True,
+        "traits": [("Description", "Speak the command word (action) to make the carpet hover and fly; "
+                     "moves according to your spoken directions as long as you're within 30 feet of it.")],
+        "actions": [],
+    },
+    "Carpet of Flying, 6 ft. × 9 ft.": {
+        "size": "Huge", "ac": "—", "hp": "—", "speed": "fly 30 ft. (hover)",
+        "cargo": "800 lb (1,600 lb overloaded, half speed)", "is_magic_item": True, "no_combat_stats": True,
+        "traits": [("Description", "Speak the command word (action) to make the carpet hover and fly; "
+                     "moves according to your spoken directions as long as you're within 30 feet of it.")],
+        "actions": [],
+    },
     "Quaal's Feather Token, Swan Boat": {
         "size": "Huge", "ac": "—", "hp": "—", "speed": "6 mph (self-propelled on water)",
         "is_magic_item": True, "no_combat_stats": True,
@@ -961,9 +992,8 @@ COMPANION_STATBLOCKS = {
         "requires_summon_action": True,
         "summon_uses_wild_shape": True,  # shares the existing Wild Shape
         # charge pool rather than having its own dedicated resource —
-        # confirmed via research this expends a normal Wild Shape use,
-        # unlike Drake Companion/Dancing Item which have their own
-        # separate "once per long rest" resource.
+        # this expends a normal Wild Shape use, unlike Drake Companion/
+        # Dancing Item which have their own separate "once per long rest" resource.
         "size": "Small", "creature_type": "elemental",
         "ac_formula": "13",
         "hp_formula": "5 + 5 \u00d7 {level}",

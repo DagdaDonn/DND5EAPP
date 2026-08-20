@@ -1,6 +1,9 @@
 """
 Apply magic item effects from data/magic_items.py onto character state.
 All item definitions and effect payloads live in the data layer.
+
+Author: Ethan O'Brien
+Date: 2026-08-20
 """
 
 from __future__ import annotations
@@ -14,6 +17,22 @@ SPELLCASTING_CLASSES = ("Bard", "Cleric", "Druid", "Paladin", "Ranger",
 CLASS_NAMES = ("Artificer", "Barbarian", "Bard", "Blood Hunter", "Cleric",
                "Druid", "Fighter", "Monk", "Paladin", "Ranger", "Rogue",
                "Sorcerer", "Warlock", "Wizard")
+
+# The 6 classic DMG "manual"/"tome" magic items: studying one for 48 hours
+# over 6 days or fewer permanently raises the named ability score by 2
+# (PHB p.140 rule: no hard 20 cap on this kind of magical increase). This
+# is a one-time consumption effect on char["abilities"] directly, not an
+# equip-based MAGIC_ITEM_EFFECTS entry -- the book is used up and removed
+# from magic_items, not worn/attuned, so the normal reapply-on-refresh
+# effect model doesn't fit it.
+ABILITY_SCORE_MANUALS = {
+    "Manual of Bodily Health": "CON",
+    "Manual of Gainful Exercise": "STR",
+    "Manual of Quickness of Action": "DEX",
+    "Tome of Clear Thought": "INT",
+    "Tome of Leadership and Influence": "CHA",
+    "Tome of Understanding": "WIS",
+}
 
 
 def attunement_prereq_met(char: dict, item_name: str) -> tuple[bool, str]:
@@ -455,13 +474,10 @@ def sync_item_charges(char: dict) -> None:
         effect_list = effect if isinstance(effect, list) else [effect]
         for sub in effect_list:
             # grant_spell: a single fixed spell with its own charge pool
-            # (Wand of Fireballs). charges: a general charge pool for items
-            # whose reference text describes multiple charge-costed
-            # abilities that don't fit the single-spell grant_spell model
-            # (Staff of Power, Blackstaff, etc.) — confirmed these had zero
-            # charge tracking despite the catalog description naming an
-            # exact charge count, because nothing but grant_spell populated
-            # item_charges at all.
+            # (Wand of Fireballs). charges: a general charge pool for
+            # items whose reference text describes multiple charge-
+            # costed abilities that don't fit the single-spell
+            # grant_spell model (Staff of Power, Blackstaff, etc.).
             if sub.get("type") not in ("grant_spell", "charges"):
                 continue
             uses = sub.get("uses") if sub["type"] == "grant_spell" else sub.get("max", 0)
