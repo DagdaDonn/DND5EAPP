@@ -8223,3 +8223,55 @@ OR `INSTANT_POTION_EFFECTS` OR `ABILITY_SCORE_MANUALS`) after all of
 the above. Still 1278/1283 (99.6%) -- the same 5 Artificer-infusion
 false positives as before, nothing new. The magic item catalog remains
 complete as far as this survey can tell.
+
+## Cursed magic items: fixed a wrong effect and wired missing real grants
+
+User asked "are curses implemented properly?" Audited every one of
+this catalog's 7 items with an explicit "Cursed:"/"Curse:" clause
+(Blasted Goggles, Berserker Axe, Shrieking Greaves, Orb of the Veil,
+Spear of Backbiting, Javelin of Backbiting, Tloques' Berserker
+Battleaxe) against their real catalog text. Curse-spells (Bestow
+Curse, Hex) and curse-driven class features (Hexblade's Curse, Armor
+of Hexes, Master of Hexes) were already correctly wired as note-only
+reminders from earlier passes; lycanthropy's curse (Blood of the
+Lycanthrope Antidote) was already handled too.
+
+**Found a real data bug**: Blasted Goggles was wired to
+`{"type": "resistance", "damage_type": "radiant"}` — a fabricated
+effect matching nothing in the item's actual text (a fire-beam attack
+item with a blindness curse, no radiant resistance anywhere). Replaced
+with its real mechanics: a 3-charge pool and the fire-beam action.
+
+**Found missing real numeric grants**:
+- Berserker Axe / Tloques' Berserker Battleaxe both state "your hit
+  point maximum increases by 1 for each level you have attained" while
+  attuned — a clean, real hp_max_bonus grant that was completely
+  absent (only the flat attack/damage bonus was wired). Added a new
+  "per_level" formula to the hp_max_bonus effect handler
+  (core/magic_items.py), alongside the existing "10_plus_level"
+  formula used elsewhere.
+- Tloques' Berserker Battleaxe also grants passwall/gust of wind/
+  burning hands via a 12-charge pool — entirely unwired before this;
+  added the charges pool (matching Staff of Power's exact pattern) and
+  a description of the 3 spells and their charge costs.
+- Orb of the Veil's darkvision ("60 ft., or +60 ft if you already have
+  darkvision") was missing entirely — only its +2 WIS was wired. Added
+  as an inline additive check in get_character_senses(), the same
+  shape already used for Keenness of the Stone Giant, gated on the
+  item actually being equipped+attuned via `_active_item_names()`.
+
+**The curse penalties themselves** (disadvantage on attack rolls with
+other weapons, "unwilling to part with it," the berserk trigger, the
+natural-1 backfire attack against your own AC) stay note-only by
+design, consistent with every other roll-dependent/narrative mechanic
+in this catalog — this app doesn't simulate individual d20 rolls or
+model per-attack conditional disadvantage triggered by which weapon is
+used, so a `grant_action` passive entry names each curse's real
+mechanical text (previously absent for 5 of these 7 items) rather than
+leaving it undiscoverable outside the item's own catalog description.
+
+Verified: full 1283-item catalog regression, 0 errors. Confirmed
+directly — Berserker Axe/Tloques' hp_max_bonus scales with character
+level (+8 at level 8), Blasted Goggles/Tloques' both track a real
+charge pool, and Orb of the Veil grants 60 ft darkvision with no prior
+darkvision or a correct +60 ft on top of an existing value.

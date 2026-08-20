@@ -2060,6 +2060,16 @@ def get_character_senses(char: dict) -> dict:
         else:
             senses["darkvision"] = 60
 
+    # Orb of the Veil (magic item): darkvision 60 ft., or +60 ft. range
+    # if you already have darkvision from another source -- same
+    # additive shape as Keenness of the Stone Giant above.
+    from .magic_items import _active_item_names as _senses_active_item_names
+    if "Orb of the Veil" in _senses_active_item_names(char):
+        if senses["darkvision"] > 0:
+            senses["darkvision"] += 60
+        else:
+            senses["darkvision"] = 60
+
     # Doppelganger (DM Reward): darkvision 60 ft.
     if "Doppelganger" in char.get("dm_rewards", []):
         senses["darkvision"] = max(senses["darkvision"], 60)

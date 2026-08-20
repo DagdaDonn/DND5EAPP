@@ -1,14 +1,12 @@
-# 🎲 MIMIC
+# MIMIC
 
-### *A Complete D&D 5e Character Creator & Management Tool*
+### A Complete D&D 5e Character Creator & Management Tool
 
-**MIMIC** is a desktop application for Dungeons & Dragons 5th Edition that puts everything you need in one place — races, classes, subclasses, spells, feats, backgrounds, magic items, companions, wild shape, combat tracking, and more. All offline, all free, all in a single portable executable.
-
-> *"It looks like a character builder... or is it?"*
+MIMIC is a desktop application for Dungeons & Dragons 5th Edition that brings together everything a player needs in one place: races, classes, subclasses, spells, feats, backgrounds, magic items, companions, wild shape, and combat tracking. It runs entirely offline, is free to use, and ships as a single portable executable.
 
 ---
 
-## 📦 What's Included
+## What's Included
 
 ### Core Database
 - **85 races** with subraces from every official sourcebook, including modern (MPMM) revisions kept alongside their original printings where the two differ mechanically
@@ -17,75 +15,72 @@
 - **14 classes** including Blood Hunter
 - **126 subclass combinations** (2014 ruleset) — audited line-by-line against source text, not filled in from memory
 - **508 spells** across all 9 levels with per-class spell lists
-- **856 magic items**, with real mechanical effects (ability score overrides, resistances, weapon bonuses) for a growing subset rather than description-only text
-- **All standard weapons and armor** with computed attack bonuses and damage, plus **browsable Silvered and Adamantine variants** of every weapon (correctly restricted to melee weapons only for Adamantine, per the real rule) with accurate cost surcharges and the real mechanical text for each
-- **28-beast Wild Shape catalog** spanning CR ¼ through CR 6, filtered by your actual druid level and any race/beast restrictions
+- **1,283 magic items**, with real mechanical effects (ability score overrides, resistances, weapon bonuses, resource pools, and more) wired for over 99% of the catalog
+- **All standard weapons and armor** with computed attack bonuses and damage, plus browsable Silvered and Adamantine variants of every weapon (correctly restricted to melee weapons only for Adamantine, per the real rule) with accurate cost surcharges and the real mechanical text for each
+- **28-beast Wild Shape catalog** spanning CR 1/4 through CR 6, filtered by your actual druid level and any race/beast restrictions
 - **Full companion stat blocks** for Steel Defender, Wildfire Spirit, Drake Companion, Dancing Item, Primal Companions (Beast of the Land/Sea/Sky), and Eldritch Cannon
 - **11 races with real natural weapons** (Aarakocra Talons, Tabaxi Claws, Lizardfolk Bite, Minotaur Horns, Satyr Ram, Longtooth Shifter's Fangs, and more) rendered as actual weapon rows with computed attack and damage — not just flavor text, and correctly covering both original and MPMM printings where a race has both
 
 ### Character Builder
-- **Full Character Creation Wizard:** Race → Ability Scores → Background & Class → Spells → Equipment
+- **Full character creation wizard:** Race, Ability Scores, Background & Class, Spells, Equipment
 - **Point Buy, Standard Array, or Manual Entry** for ability scores
 - **Live race detail panel** — picking a subrace updates the shown ASI and traits immediately, not just at the end
 - **Full background details** — feature descriptions, bonus languages, and starting equipment shown in full, not truncated
-- **Starting equipment picker** with class-appropriate options — every chosen item (armor, weapons, and a chosen equipment pack's real individual contents) lands correctly in your actual inventory, alongside your background's own equipment and starting gold
-- **Level-up wizard** — walks through each level's choices, including nested sub-choices (like Aspect of the Beast's Tiger option, which itself grants a further skill pick)
+- **Starting equipment picker** with class-appropriate options — every chosen item lands correctly in your inventory, alongside your background's own equipment and starting gold
+- **Level-up wizard** — walks through each level's choices, including nested sub-choices
 - **Multiclassing support** — full rules for combining classes
 
 ### Spell Management
-- **Prepared/known spell tracking** — mark spells as prepared or known
+- **Prepared/known spell tracking**
 - **Spell slots by level** — automatically calculated and tracked
 - **Concentration tracking** — with save prompts when you take damage
-- **Ritual and quick-cast markers** — identify spells at a glance
-- **Searchable spell browser** — find any spell instantly
-- **Auto-prepared spells** for domains, oaths, and circles with a verified spell list (currently covers Cleric's Knowledge/Ambition/Solidarity/Strength/Zeal Domains, all 8 Circle of the Land terrains, and 3 Paladin oaths — more added as each subclass's spell list is checked against source)
-- **Spell descriptions on hover** — tooltips for every spell
+- **Ritual and quick-cast markers**
+- **Searchable spell browser**
+- **Auto-prepared spells** for domains, oaths, and circles with a verified spell list
+- **Spell descriptions on hover**
 
 ### Optional Class Features
-- **Eldritch Invocations** — all 54 real options, individually wired with real mechanics (spell grants, resources, Known Actions entries, or passive effects as each actually requires), correctly gated by level, Pact Boon, and spell prerequisites (like requiring Eldritch Blast or Hex) rather than showing every option regardless of eligibility
-- **Battle Master Maneuvers, Metamagic, Fighting Styles, and Artificer Infusions** — every real option audited and wired, including subtler ones like Resistant Armor's actual choosable damage resistance
-- **Elemental Disciplines, Arcane Shot, and Rune Knight Runes** — fully wired, correctly showing your chosen options as real, usable entries rather than passive text
-- **Eldritch Adept, Metamagic Adept, and Martial Adept feats** — grant a real choice of invocation/metamagic/maneuver, not just the underlying resource
-- **Eldritch Versatility** — swap a cantrip, your Pact Boon, or a Mystic Arcanum spell at the right levels, with any now-ineligible invocation correctly flagged for replacement
+- **Eldritch Invocations** — all 54 real options, individually wired with real mechanics and correctly gated by level, Pact Boon, and spell prerequisites
+- **Battle Master Maneuvers, Metamagic, Fighting Styles, and Artificer Infusions** — every real option audited and wired
+- **Elemental Disciplines, Arcane Shot, and Rune Knight Runes** — fully wired as real, usable entries
+- **Eldritch Adept, Metamagic Adept, and Martial Adept feats** — grant a real choice of invocation, metamagic, or maneuver
+- **Eldritch Versatility** — swap a cantrip, your Pact Boon, or a Mystic Arcanum spell at the right levels
 
 ### Combat Tracker
 - **Full HP tracking** — Max, Current, and Temporary HP with one-click damage/heal
-- **Max HP override** — with reset-to-calculated button
 - **Turn tracker** — Action, Bonus Action, and Reaction economy with one-click New Turn reset
-- **Known Actions filter** — every real, usable action, filterable by Common/Race/Spell (Magic Item filter category reserved for when that system gets full mechanical wiring), with a further level sub-filter (Cantrip through 9th) when viewing spells, so a full spellbook doesn't flood the page
-- **Casting a spell correctly consumes the right action-economy slot** — cantrips and leveled spells alike, based on each spell's real casting time (Action, Bonus Action, or Reaction), with longer ritual/utility casts correctly exempted
-- **The real "one leveled spell per turn" rule enforced** — casting a spell with a bonus action correctly restricts the only other spell castable that turn to a cantrip, checked in both directions (whichever slot is used first), with Haste's genuine extra action correctly recognized as an exception
-- **Casting a spell that matches an existing buff/condition system automatically applies it** — Bless, Haste, Shield of Faith, and more, with a self-vs-another prompt for spells that could target either
+- **Known Actions filter** — every real, usable action, filterable by category and spell level
+- **Correct action-economy consumption** — cantrips and leveled spells consume the right slot based on real casting time
+- **The real "one leveled spell per turn" rule enforced**, with Haste's genuine extra action recognized as an exception
+- **Casting a spell that matches an existing buff/condition system automatically applies it**
 - **Class resource tracking** — Rage, Ki, Sorcery Points, Superiority Dice, Channel Divinity, and every other class resource
-- **Short and long rest auto-reset** — all resources recharge correctly
-- **Death saves, conditions checklist, and exhaustion tracking**
+- **Short and long rest auto-reset**
+- **Death saves, condition tracking, and exhaustion**, with real mechanical effects on saves, attack rolls, ability checks, and movement — not just a checkbox
 - **Weapon and armor equipping** with computed attack bonuses and damage
-- **On-hit damage bonuses shown separately by type** — Divine Strike, Improved Divine Smite, Genie's Wrath, Dreadful Strikes, Aura of Hate, and weapon-specific item bonuses (like Bracers of Archery) each appear as their own badge next to a weapon, rather than folded into one number — since a different damage type genuinely matters against resistance/immunity
+- **On-hit damage bonuses shown separately by type**, since a different damage type genuinely matters against resistance/immunity
 
 ### Resistances, Immunities & Movement
-- **Automatic resistance/immunity resolution** from racial traits, subraces, feats, subclass passive features, subclass toggles, and attuned magic items
+- **Automatic resistance/immunity resolution** from racial traits, subraces, feats, subclass features, and attuned magic items
 - **Immunity correctly supersedes resistance** to the same damage type
 - **"Resistance to all damage" and "all except X" effects** expand into every individual damage type
-- **Player-chosen resistance items** (Ring of Resistance, Armor of Resistance, Absorbing Tattoo, Orb of Shielding) get a real dropdown to pick which damage type your copy protects against, rather than guessing
+- **Player-chosen resistance items** get a real dropdown to pick which damage type your copy protects against
 - **Full movement tracking** — climbing, swimming, and flying speeds from racial traits and class features
 
 ### Magic Item Integration
-- **836 magic items** with full descriptions
+- **1,283 magic items** with full descriptions
 - **Attunement tracking** — max 3 attuned items (4 for Artificers at 10th level)
-- **Automatic mechanical effects** for 252 items — resistances, immunities, ability score overrides, AC/save bonuses, and weapon damage bonuses, applied only while equipped/attuned
+- **Mechanical effects wired for over 99% of the catalog** — resistances, immunities, ability score overrides, AC/save bonuses, weapon and damage bonuses, resource pools, and reminders for effects too situational to automate
 - **Searchable magic item browser** with filtering
 
 ### Gear & Inventory
-- **Equipment browser** with search and category filtering, including a dedicated Materials category for browsable Silvered and Adamantine weapon variants
+- **Equipment browser** with search and category filtering
 - **Quantity tracking** for stackable items
-- **Equipment equipping** with computed AC and attack bonuses
-- **Real tooltips on every item** — both in the reference browser and your actual owned inventory, showing weight, cost, and any real mechanical text (weapon properties, armor stats, special rules) rather than a blank or generic hover
+- **Real tooltips on every item**, both in the reference browser and your owned inventory
 
 ### Feat Manager
 - **138 feats** from all official sources
-- **Feat prerequisites** — automatically checked
-- **DM-granted feats browser** for feats gained outside normal class progression
-- **Feat descriptions on hover**
+- **Automatically checked prerequisites**
+- **DM-granted feats browser** for feats gained outside normal progression
 
 ### Interface & Customization
 - **12 themes** — Obsidian, Dragon's Hoard, Shadowfell, Arcane Scroll (light mode), Feywild, Blood Moon, Frostspire, Cinderveil, Tavern Hearth, Mossgrove, Gearworks, Hallowed Stone
@@ -101,12 +96,12 @@
 ### Dice Roller
 - **Built-in dice roller** for any dice combination
 - **Quick roll buttons** — d4, d6, d8, d10, d12, d20, d100
-- **Advantage/Disadvantage** — roll twice, take the better/worse result
+- **Advantage/Disadvantage** — roll twice, take the better or worse result
 - **Modifier support and roll history**
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 **Requirements:** Python 3.9+ and pip.
 
@@ -119,7 +114,7 @@ A splash screen appears immediately and animates while the app loads in the back
 
 ---
 
-## 🛠️ Building a Standalone EXE
+## Building a Standalone Executable
 
 ### Windows
 ```bat
@@ -135,24 +130,24 @@ build_exe.bat
 
 ---
 
-## 🔧 Troubleshooting
+## Troubleshooting
 
 ### "No module named 'PySide6'"
 ```bash
 pip install PySide6
 ```
 
-### EXE starts but immediately closes
-1. Run from a terminal/command prompt to see error output
-2. Delete `build/` and `dist/` folders and rebuild
-3. Check that `dnd_app/assets/` and `dnd_app/icon.ico` exist before building
+### Executable starts but immediately closes
+1. Run from a terminal or command prompt to see error output.
+2. Delete the `build/` and `dist/` folders and rebuild.
+3. Check that `dnd_app/assets/` and `dnd_app/icon.ico` exist before building.
 
-### Splash screen looks frozen / doesn't animate
-Make sure you're on current source — the heavy startup import now runs on a background thread specifically so the splash animation keeps playing while it loads.
+### Splash screen looks frozen or doesn't animate
+Make sure you're on current source — the heavy startup import runs on a background thread specifically so the splash animation keeps playing while it loads.
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 dnd_app/
@@ -169,7 +164,7 @@ build_exe.bat / build_exe.sh # One-command build scripts
 
 ---
 
-## 📚 Sources Covered
+## Sources Covered
 
 | Category | Sources |
 |----------|---------|
@@ -182,23 +177,18 @@ build_exe.bat / build_exe.sh # One-command build scripts
 
 ---
 
-## 🙏 Credits
+## Roadmap
 
-**Created by Ethan O'Brien**
-
-**Built with:**
-- Python — the language that made it possible
-- PySide6 — the UI framework that brought it to life
-- PyInstaller — for packaging it all into a single executable
-
-**MIMIC is dedicated to every player who has ever said:**
-
-> *"I wish I could build characters offline."*
-> *"I wish I had all the options in one place."*
+- Full support for the 2024 ruleset
+- Clickable hyperlinks for spell/feat/ability cross-references
+- Broader auto-prepared spell coverage across remaining subclasses
+- Wider on-hit damage bonus coverage
+- Player-choice resistance selection for the few remaining items that need it
+- Monster and bestiary integration
 
 ---
 
-## 📄 License
+## License
 
 MIMIC is free to use. It is not affiliated with or endorsed by Wizards of the Coast.
 
@@ -206,17 +196,13 @@ D&D 5e content is used under the Open Gaming License (OGL) and/or with permissio
 
 ---
 
-## 🎯 What's Next
+## Credits
 
-- [ ] 2024 ruleset — full support
-- [ ] Hyperlinks — clickable spell/feat/ability references
-- [ ] Broader auto-prepared spell coverage — remaining Cleric domains, Paladin oaths, Warlock patrons, Sorcerer/Druid subclasses
-- [ ] Wider on-hit damage bonus coverage — more class features and magic items beyond the current set
-- [ ] Player-choice magic item resistance for a few remaining items
-- [ ] Magic items in Known Actions — wiring the 856-item catalog into the same real, usable-action system built for class features, race traits, and spells this pass
-- [ ] Monster/bestiary integration (future)
+**Created by Ethan O'Brien**
 
----
+**Built with:**
+- Python
+- PySide6, for the desktop interface
+- PyInstaller, for packaging the app into a single executable
 
-**MIMIC** — *A treasure chest of 5e data.*
-*Free. Offline. Hungry.*
+Thank you for downloading MIMIC, and for supporting the project.

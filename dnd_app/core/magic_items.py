@@ -399,9 +399,13 @@ def _apply_single_effect(char: dict, item_name: str, effect: dict) -> None:
         senses[sense] = max(senses.get(sense, 0), effect.get("value", 0))
 
     elif etype == "hp_max_bonus":
-        if effect.get("formula") == "10_plus_level":
+        formula = effect.get("formula")
+        if formula == "10_plus_level":
             from .calculator import total_level
             val = 10 + total_level(char)
+        elif formula == "per_level":
+            from .calculator import total_level
+            val = total_level(char)
         else:
             val = effect.get("value", 0)
         char["magic_hp_max_bonus"] = char.get("magic_hp_max_bonus", 0) + val
