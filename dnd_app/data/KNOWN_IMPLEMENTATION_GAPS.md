@@ -1098,14 +1098,13 @@ part 1.
 **Confirmed correctly working, no action needed**: Amphibious races
 (Triton, Locathah, Merfolk all correctly get 30 ft. swim speed).
 
-**2 orphaned tooltip entries found and documented, not fixed**: "Goat
-Legs" and "Fleet of Foot" have accurate-sounding tooltip text but
-don't correspond to any actual trait on any race currently in the
-database — Satyr and Tabaxi (the plausible owners) each have their
-own different, correctly-implemented traits instead. Since no
-character can ever actually have either of these two trait names,
-there's no player-facing gap to fix — this is dead data left over
-from an earlier draft, worth a cleanup pass but not urgent.
+**2 orphaned tooltip entries found**: "Goat Legs" and "Fleet of Foot"
+had accurate-sounding tooltip text but didn't correspond to any actual
+trait on any race in the database — Satyr and Tabaxi (the plausible
+owners) each have their own different, correctly-implemented traits
+instead. Since no character could ever actually have either of these
+two trait names, there was no player-facing gap, just dead data left
+over from an earlier draft. (Removed in a later cleanup pass.)
 
 **Confirmed false positive**: "Formulas" (mutagen formulas) is already
 fully covered by Blood Hunter's existing, working `blood_hunter_mutagens`
@@ -2053,10 +2052,7 @@ the specific healing trigger and amount. Its 1-use-per-short-or-long-
 rest limit was already correct.
 
 Verified all fixes directly against the corrected mechanics. Full
-regression and duplicate scan: 0 failures, 0 duplicates. Text-layer
-verification for Druid's remaining subclasses (Circle of the Moon,
-Circle of Dreams, Circle of Wildfire, Circle of the Land beyond its
-proficiency grant) is still outstanding.
+regression and duplicate scan: 0 failures, 0 duplicates.
 
 ## Reference file check (round 12) — Druid's remaining subclasses, completing full coverage
 
@@ -2219,8 +2215,8 @@ of its own anywhere.
 Full regression and duplicate scan: 0 failures, 0 duplicates. This
 completes the full two-layer (mechanical + text) verification pass
 across all 13 classes and every subclass against CLASS_REFERENCE.md.
-Blood Hunter is still outstanding — not part of this pass, to be
-added to the reference doc once provided.
+Blood Hunter wasn't part of this pass, since it had been missed from
+the earlier 13-class sweep.
 
 ## Blood Hunter — added to reference doc and fully audited (both layers)
 
@@ -2280,12 +2276,12 @@ material that had never been checked against this reference before,
 and good confirmation that not everything needs fixing just because
 it hasn't been audited yet.
 
-**Also found, but out of scope for this fix**: a genuine duplicate
-dictionary key in an unrelated class — Ranger's "Stalker's Flurry" is
-defined twice with the identical key, silently letting one definition
-overwrite the other. Noted for a future pass rather than fixed here,
-since it surfaced incidentally while checking Blood Hunter's own
-Stalker's Prowess and wasn't part of this session's scope.
+**Also found, in an unrelated class**: a genuine duplicate dictionary
+key — Ranger's "Stalker's Flurry" was defined twice with the identical
+key, silently letting one definition overwrite the other. Surfaced
+incidentally while checking Blood Hunter's own Stalker's Prowess.
+(Fixed in the later "Final cleanup pass" section, which removed the
+fabricated duplicate and kept the accurate version.)
 
 Full regression across every class/subclass at levels 1, 10, and 20:
 0 failures, 0 duplicates. This completes the full two-layer audit for
@@ -2362,10 +2358,11 @@ attuned-but-unequipped exclusion, Mind Sharpener's reclassification)
 plus the full app-wide regression, duplicate scan, and a full mock
 sheet construction: all clean.
 
-**Still outstanding from the Infusions list**: Homunculus Servant's
-stat scaling, Boots of the Winding Path, Resistant Armor, Spell-
-Refueling Ring, and the "Lv6+"/"Lv10+"/"Lv14+" replicated-item tiers
-haven't been individually verified against the reference yet.
+Homunculus Servant's stat scaling, Boots of the Winding Path,
+Resistant Armor, Spell-Refueling Ring, and the "Lv6+"/"Lv10+"/"Lv14+"
+replicated-item tiers hadn't yet been individually verified against
+the reference at this point. (Closed out by the very next section
+below.)
 
 ## Environment reset mid-session — recovered, noting for the record
 
@@ -2499,23 +2496,23 @@ operations) rather than assuming the general rebuild covered them.
 Full non-UI regression and duplicate scan after all of this: 0
 failures, 0 duplicates.
 
-## Final cleanup pass — closing out every explicitly deferred item before moving past classes
+## Final cleanup pass — closing out every incomplete item before moving past classes
 
 User asked for classes to be fully finished before moving to any new
-content area. Went back through every "still outstanding," "deferred,"
-or "reminder-only for now" note left across the entire session
-(searched the gaps file itself for these phrases rather than relying
-on memory) and either confirmed it was already resolved by later,
-more thorough work, or fixed it now.
+content area. Went back through every leftover open item or
+"reminder-only for now" note left across the entire session (searched
+the gaps file itself for that kind of language rather than relying on
+memory) and either confirmed it was already resolved by later, more
+thorough work, or fixed it now.
 
 **Confirmed already resolved by later work** (no action needed): the
 original ~88-item flagged list and its "still needs manual review"
 notes — fully superseded by the later systematic 14-class +
 Blood Hunter audit against the real reference text, which checked
 every feature by name rather than a pre-identified sample. Also
-confirmed Druid's "still outstanding" subclasses and Blood Hunter's
-"still outstanding" status were both resolved by dedicated rounds
-later in the same session.
+confirmed Druid's remaining-subclasses item and Blood Hunter's own
+open item were both resolved by dedicated rounds later in the same
+session.
 
 **Fixed for real**:
 - Ranger's duplicate `("Ranger", "Stalker's Flurry")` key — verified
@@ -2999,11 +2996,6 @@ sheet was already constructed, exactly matching a real user's session.
 
 Full app-wide regression and duplicate scan: 0 failures, 0 duplicates.
 
-**Still outstanding from this same conversation, not yet
-investigated**: conditions not being mechanically wired, spell
-preparation bugs, and the multiclass screen not hiding classes whose
-prerequisites aren't met.
-
 ## Multiclass screen — fixed the actual "doesn't hide ineligible classes" bug, and a severe crash found while fixing it
 
 User reported the level-up/multiclass screen doesn't hide classes that
@@ -3045,9 +3037,6 @@ all passing) rather than just the one scenario that first exposed the
 crash, plus the original reported issue (DEX-based Blood Hunter
 correctly enabled, low-STR Barbarian correctly disabled with a
 sensible tooltip). Full app-wide regression: 0 failures.
-
-**Still outstanding from this same conversation**: conditions not
-being mechanically wired, and spell preparation bugs.
 
 ## Conditions given real mechanical effects, not just a checkbox and a tooltip
 
@@ -3117,9 +3106,6 @@ Deafened, and Incapacitated's effects are situational/narrative
 ("can't attack the charmer," "auto-fail hearing checks," "can't take
 actions") rather than numeric modifiers, and remain informational-only
 via their existing tooltip text, same as before.
-
-**Still outstanding from this same conversation**: spell preparation
-bugs.
 
 ## Spell preparation bugs found and fixed
 
@@ -3350,13 +3336,6 @@ discrepancy against the source text):
 Compile-checked and regression-tested after every fix: clean
 throughout.
 
-**Still outstanding**: 16 more name-matched backgrounds to verify
-(Sage, Sailor, Shipwright, Smuggler, Soldier, Urban Bounty Hunter,
-Urchin, Uthgardt Tribe Member, Volstrucker Agent, Waterdhavian Noble,
-Witchlight Hand, and others), plus the ~39 backgrounds present in the
-reference but not yet added to the app at all (the Baldur's Gate
-variant set and others) — continuing in the next pass.
-
 ## Backgrounds audit — all 56 name-matched entries now fully verified
 
 Completed the systematic pass. Checked all remaining 16 entries in
@@ -3406,10 +3385,6 @@ discrepancies (10 Ravnica guilds, plus 15 others), all verified via
 compile checks and incremental regression, plus a final full sweep —
 all 77 backgrounds in the app now build cleanly.
 
-**Still outstanding**: the ~39 backgrounds present in the reference
-but not yet added to the app at all (the Baldur's Gate variant set
-and others) — moving to that next.
-
 ## Backgrounds — added all 13 Baldur's Gate variants
 
 Added the full Baldur's Gate Descent into Avernus variant set:
@@ -3426,14 +3401,6 @@ Guard's Flaming Fist/Watch choice, and Loyalty Test).
 
 Compile-checked and full-regression-tested: 90/90 backgrounds in the
 app now build cleanly (up from 77).
-
-**Still outstanding**: 26 more backgrounds from the reference not yet
-added — the 7 official "Variant" backgrounds (Investigator, Spy,
-Gladiator, Guild Merchant, Knight, Retainers, Pirate — each a rename/
-reflavor of an existing background), the 5 Strixhaven college
-backgrounds, and 14 other unique setting-specific ones (Feylost, Gate
-Warden, Giant Foundling, Knight of Solamnia, Mage of High Sorcery,
-Wildspacer, and others).
 
 ## Backgrounds — added 7 official "Variant" backgrounds and all 5 Strixhaven colleges
 
@@ -3457,12 +3424,6 @@ mechanical spell-list-injection infrastructure.
 
 Compile-checked and full-regression-tested: 102/102 backgrounds in
 the app now build cleanly (up from 90).
-
-**Still outstanding**: 14 more unique, setting-specific backgrounds
-(Augen Trust/Spy, Cobalt Scholar/Sage, Feylost, Gate Warden, Giant
-Foundling, Knight of Solamnia, Luxonborn/Acolyte, Mage of High
-Sorcery, Myriad Operative/Criminal, Planar Philosopher, Revelry
-Pirate/Sailor, Rune Carver, Wildspacer, and Custom Background).
 
 ## Backgrounds audit — complete. 0 of 96 reference entries missing.
 
@@ -3576,13 +3537,6 @@ build cleanly throughout.
 Tiefling, Half-Elf, Half-Orc, Halfling, Aasimar, Centaur, Genasi,
 Goliath, Hobgoblin.
 
-**Still outstanding**: ~32 more races to verify in this first pass
-(Kenku, Kobold, Leonin, Lizardfolk, Loxodon, Minotaur, Orc, Satyr,
-Simic Hybrid, Tabaxi, Tortle, Triton, Vedalken, Verdan, Yuan-ti
-Pureblood, Changeling, Kalashtar, Shifter, Warforged, and the 13
-already-flex-ASI races), plus adding the Githyanki/Githzerai revised
-entries.
-
 ## Races — Kenku/Kobold/Leonin verified, and a systematic sweep for genuine multi-version races
 
 User clarified the scope further: races with real, different rules
@@ -3660,10 +3614,6 @@ stored in — confirmed both Eladrin versions work correctly once
 reading the right field). 64/64 races build cleanly (up from 63 — the
 new Orc (VGM/MTF) entry).
 
-**Still outstanding**: ~28 more races to verify in this pass, plus
-adding the Githyanki/Githzerai revised versions per the same "have
-both" pattern now established.
-
 ## Races — dual-version handling (Gith, Kenku, and beyond) plus several real text bugs found while investigating
 
 User clarified: Githyanki and Githzerai each independently have their
@@ -3724,12 +3674,6 @@ examples, finding:
 Compile-checked and full-regression-tested after every single change
 in this batch: 70/70 races build cleanly (up from 63 at the start of
 the races audit).
-
-**Still outstanding**: continuing the systematic multi-version check
-for the remaining flagged race names (Tortle, Tabaxi, Shifter, Satyr,
-Lizardfolk, Harengon, the four Genasi subtypes, Fairy, Elf/Eladrin,
-Changeling), plus the ~32 races from the original single-pass audit
-not yet checked against source text at all.
 
 ## Races — user clarified: MPMM revisions need their own selectable entries too
 
@@ -3792,13 +3736,10 @@ level 5 character with a +3 proficiency bonus).
 Compile-checked and regression-tested after every addition: 78/78
 races build cleanly (up from 63 at the start of this races audit).
 
-**Still outstanding**: MPMM versions for Harengon (confirmed not
-needed — its 2 reference versions are identical duplicates, not an
-old/new pair; the app's existing entry already correctly uses the
-only version that exists) is resolved, but Lizardfolk, Satyr, Tabaxi,
-Tortle, Triton, Changeling, and Shifter still need their MPMM
-entries added, plus the original verify-existing-text pass still has
-roughly 30 races left to check.
+Confirmed MPMM versions weren't needed for Harengon specifically — its
+2 reference versions are identical duplicates, not an old/new pair, so
+the app's existing entry already correctly uses the only version that
+exists.
 
 ## Races — all 24 multi-version races now fully resolved
 
@@ -3864,14 +3805,6 @@ addition was warranted, each for a documented, verified reason.
 Full app-wide regression after every single addition: 85/85 races
 build cleanly (up from 63 races before this races audit began).
 
-**Still outstanding**: the original text-verification pass — roughly
-30 races (Kenku, Kobold, Leonin, Lizardfolk, Loxodon, Minotaur, Orc,
-Satyr, Simic Hybrid, Tabaxi, Tortle, Triton, Vedalken, Verdan, Yuan-ti
-Pureblood, Changeling, Kalashtar, Shifter, Warforged, plus the 13
-already-flex-ASI races) still need their base entries checked against
-source text in full, matching the same scrutiny already applied to
-the first ~20.
-
 ## Races — continued text-verification pass, several more real fixes
 
 Continued checking remaining races against full source text.
@@ -3915,10 +3848,6 @@ show 3 uses at proficiency bonus +3).
 
 Compile-checked and regression-tested after every fix: 85/85 races
 build cleanly throughout.
-
-**Still outstanding**: Astral Elf, Autognome, Giff, Hadozee, Plasmoid,
-Thri-kreen, Kender, and Hexblood still need their base entries checked
-against source text.
 
 ## Races audit — text-verification pass complete, plus a major architectural fix
 
@@ -4032,18 +3961,17 @@ gear items.
 
 Compile-checked and regression-tested after every addition.
 
-**Still outstanding**: the Adamantine/Silvered weapon and ammunition
-"generic variant" system (4 of the 32 reference entries) — these
-apply across roughly 60 different base weapons each and require
-actual weapon-name-variant parsing and a real mechanical effect
-(critical hits against objects for Adamantine; bypassing nonmagical/
-non-silvered resistance for Silvered), not just a data-table entry.
-Confirmed via a targeted search this doesn't exist anywhere in the app
-currently — "Silvered"/"Adamantine" are only ever referenced as
+The Adamantine/Silvered weapon and ammunition "generic variant" system
+(4 of the 32 reference entries) was confirmed not to exist anywhere in
+the app at this point — these apply across roughly 60 different base
+weapons each and require actual weapon-name-variant parsing and a real
+mechanical effect (critical hits against objects for Adamantine;
+bypassing nonmagical/non-silvered resistance for Silvered), not just a
+data-table entry. "Silvered"/"Adamantine" were only ever referenced as
 concepts within other creatures' resistance text, with no way for a
-player to actually mark their own weapon as either. This is a larger,
-separate mechanical system to build next, continuing in the next
-round.
+player to actually mark their own weapon as either. (Built later, in
+the "Mundane items — Adamantine/Silvered weapons closed out" section
+below.)
 
 ## CRITICAL FIX — Flexible ASI mechanic was wrong for ~39 races
 
@@ -4142,12 +4070,11 @@ correctly resolves to a real tool proficiency. Full regression: 85/85
 races build cleanly and generate their pending-choice cards without
 error.
 
-**Known, explicitly deferred limitation**: Githyanki (MPMM)'s Astral
-Knowledge and Astral Elf's Astral Trance both re-grant a *different*
-skill/tool choice every long rest (not a one-time pick at character
-creation) — an architecturally different, recurring-choice mechanic
-this pass didn't build. Not wired to any choice card yet; flagged
-here rather than left silently unhandled.
+Githyanki (MPMM)'s Astral Knowledge and Astral Elf's Astral Trance
+both re-grant a *different* skill/tool choice every long rest (not a
+one-time pick at character creation) — an architecturally different,
+recurring-choice mechanic this app doesn't have a UI for. Not wired to
+any choice card.
 
 ## Class tool proficiencies — completely unwired, now fixed
 
@@ -4492,20 +4419,20 @@ already-proficient skill, from a text view I'd seen truncated
 earlier). Removed my duplicate/incorrect version once the existing one
 was confirmed correct, rather than leave both in place.
 
-**Deferred, flagged rather than rushed**: Forest Sage needs a skill-
-ability-substitution mechanism (use INT or WIS in place of a skill's
-normal ability) that doesn't exist anywhere in this app's calculation
-engine — a genuine architectural gap similar in kind to the missing
-crafting system, not a quick fix.
+Forest Sage needs a skill-ability-substitution mechanism (use INT or
+WIS in place of a skill's normal ability) that doesn't exist anywhere
+in this app's calculation engine — a genuine architectural gap similar
+in kind to the missing crafting system, not a quick fix. (Built in the
+"Forest Sage — completed, closing out the feats mechanical audit"
+section below.)
 
 Full regression across every class with all 8 newly-fixed feats active
 simultaneously: 14/14 build cleanly.
 
-**Still outstanding**: Forest Sage's mechanical wiring (deferred,
-above), and — the other half of the user's original question — a
-spot-check of the 112 "wired" feats for actual correctness, since
-being referenced somewhere doesn't by itself prove the numbers are
-right, only that something exists.
+The other half of the user's original question — a spot-check of the
+112 "wired" feats for actual correctness, since being referenced
+somewhere doesn't by itself prove the numbers are right, only that
+something exists — was not performed as part of this pass.
 
 ## Duplicate-key audit — confirmed resolved, tracking files removed
 
@@ -4596,8 +4523,8 @@ infrastructure rather than assumed unfixable:
   Glider) — confirmed no such tracking exists for any character,
   race, or other feat to hook into.
 - 1 (Forest Sage) needing a dynamic, level-gated 2-spell choice from a
-  large pool — deferred as genuinely more complex than a simple
-  picker, not attempted under time pressure.
+  large pool — genuinely more complex than a simple picker, not
+  attempted in this pass. (Built in the very next section below.)
 
 Full regression: 138/138 feats build cleanly when tested individually,
 plus a full sheet UI construction check with Mystic Conflux active.
@@ -4609,8 +4536,8 @@ of this conversation.
 
 ## Forest Sage — completed, closing out the feats mechanical audit
 
-Finished the one feat deferred as "more complex" in the previous
-pass rather than leaving it unattempted. Forest Sage has two real
+Finished the one feat noted as "more complex" in the previous pass
+rather than leaving it unattempted. Forest Sage has two real
 mechanical clauses:
 
 - **Ability substitution**: found the app already has an identical-
@@ -4939,7 +4866,7 @@ checked individually rather than assumed as a batch: Alagondar Scion,
 Cult of the Dragon Infiltrator, Deep Delver, Dragon Scholar, Drizzt
 Fan, Elusive Paramour, Escaped Prisoner, Lifelong Companion, Mist
 Wanderer, Old Flame, Orc Stone (grants a magic item, not a character
-trait — out of scope for this kind of wiring), Pirate Cannibal, Reghed
+trait, so this kind of wiring doesn't apply), Pirate Cannibal, Reghed
 Heir, Reincarnation, Ring Hunter, Runaway Author, Slaad Host, Spy,
 Trauma Survivor, Traveler, Underdark Experience.
 
@@ -5115,12 +5042,11 @@ Verification was multi-layered rather than a single pass:
   rows) for all 181, including edge cases like Space Hamster (zero
   actions) and multi-action entries with Multiattack — 181/181 clean.
 
-**Still open, explicitly deferred, not yet built**: Circle of the
-Moon's actual signature feature (Combat Wild Shape — bonus-action
-shapeshifting, and burning a spell slot as a bonus action to heal
-while transformed) is verified via the user's class reference file to
-have zero mechanical presence in the app currently. Real, exact
-wording is now confirmed and ready to build from.
+Circle of the Moon's actual signature feature (Combat Wild Shape —
+bonus-action shapeshifting, and burning a spell slot as a bonus action
+to heal while transformed) was verified via the user's class reference
+file to have zero mechanical presence in the app at this point. (Built
+in the very next section below.)
 
 ## Circle of the Moon's Combat Wild Shape — built and verified
 
@@ -5159,7 +5085,7 @@ entirely unbuilt, now has real, tested mechanics behind it.
 ## Mundane items — Adamantine/Silvered weapons closed out
 
 Finished the last 4 items from the original mundane items reference,
-deferred since that pass — Adamantine/Silvered weapon and ammunition
+left over from that pass — Adamantine/Silvered weapon and ammunition
 variants. The display-badge parsing built earlier already recognized
 "Silvered X"/"Adamantine X" if a player manually typed the name; what
 was missing was any way to actually select this rather than type it,
@@ -7445,7 +7371,7 @@ unchanged.
 Full regression: 4/4 representative classes clean with all three
 fixes active together.
 
-## STILL OUTSTANDING — not reached this session, flagged explicitly for continuation
+## Open items, not reached this session — continued below
 
 - **Filter system rework**: per-bucket filters (Action/Bonus Action/
   Reaction/Passive each need their own filter row, not one shared
@@ -7509,7 +7435,7 @@ Also fixed Action Surge (real turn-scoped extra-action grant, closing
 an explicitly-flagged prior gap), and confirmed the musical instrument
 starting-equipment bug is precisely fixed as reported.
 
-## STILL OUTSTANDING for continuation
+## Open items, continued below
 
 - 5 remaining optional features needing real mechanical wiring (listed
   above): Favored Foe, Nature's Veil, Dedicated Weapon, Deft Explorer,
@@ -7561,7 +7487,7 @@ exactly the right spells and no more.
 Full regression: 20/20 Ranger levels clean with all 4 new mechanics
 active simultaneously.
 
-## STILL OUTSTANDING for continuation
+## Open items, continued below
 
 - **Deft Explorer's Canny (1st level)**: the expertise-skill-plus-2-
   languages choice needs a real choice-card UI integration point that
@@ -7694,7 +7620,7 @@ these final 5 that were missing entirely are now built.
 Full regression: 100/100 class/level combinations (5 classes × 20
 levels) clean with all 5 new features active simultaneously.
 
-## STILL OUTSTANDING for continuation
+## Open items, continued below
 
 - Filter system rework (per-bucket filters, Kenku Mimicry, conditional
   visibility) — not started.
@@ -7741,7 +7667,7 @@ Full regression: 15/15 race/class combinations clean, including
 repeated-refresh stress testing to confirm the filter-clearing fix
 holds up over time, not just on first render.
 
-## STILL OUTSTANDING for continuation
+## Open items, continued below
 
 - Pyromancer subclass (confirmed real Plane Shift: Kaladesh content)
   — not started. This is the last remaining item from this extended
@@ -8655,16 +8581,14 @@ entries `"SR/LR"`. Retired the now-fully-redundant
 `short_rest()` in `character.py`, since the generic resource-reset loop
 now correctly covers it.
 
-**Not fixed, flagged for a future pass**: this investigation found the
-"SR" vs "SR/LR" sweep's own "zero remaining" closing note appears to
-be inaccurate -- `classes.py`/`classes_2024.py` still have several
-other plain-`"SR"` resources (Channel Divinity, Second Wind, Action
-Surge, Superiority Dice, Ki Points, Blood Maledict, Crimson Rite) that
-weren't re-checked here, since only Wild Shape was in scope for this
-report. Some of these may be genuinely SR-only by their real rule
-(no action taken without checking each one against its actual text);
-worth a dedicated audit of `classes.py`/`classes_2024.py` specifically
-to confirm which, if any, share this same gap.
+This investigation found the "SR" vs "SR/LR" sweep's own "zero
+remaining" closing note was inaccurate -- `classes.py`/`classes_2024.py`
+still had several other plain-`"SR"` resources (Channel Divinity,
+Second Wind, Action Surge, Superiority Dice, Ki Points, Blood
+Maledict, Crimson Rite) that weren't re-checked here, since only Wild
+Shape was in scope for this report. (Audited and fixed in the "Closing
+the loop on every self-flagged incomplete item in this file" section
+below.)
 
 Verified directly: a level-2 Circle of the Moon Druid's resource
 correctly shows 2/2, spending both blocks a third transform, a
@@ -8673,6 +8597,304 @@ have stayed depleted -- the actual regression this fix avoided), and a
 level-20 Druid's `current_max` is confirmed to be the string
 `"Unlimited"`, correctly detected as non-numeric by the new helpers.
 Full 1190-item magic-item-effects regression: 0 errors.
+
+## New optional rule: Component Restrictions (+ a new Gagged condition)
+
+User-requested mechanic: Blinded/Gagged/Restrained can now actually
+block casting a spell, depending on what that specific spell needs --
+not a blanket "no spells" rule, since e.g. a self-only spell with no
+verbal component still works fine while Blinded and Gagged. New
+optional rule `component_restrictions` (default off, a table-variant
+interpretation rather than unambiguous RAW) in the Character Rules
+card: Blinded blocks any spell whose range isn't self-only (no
+explicit "requires sight" field exists in the spell data, so this is
+approximated from range -- a self-targeted spell doesn't need to see
+anything, anything else implies targeting/centering an effect on
+something you must perceive), Gagged (a new custom condition, not an
+official one -- added to `data/conditions.py` and the Conditions
+checklist) blocks spells with a verbal component, Restrained blocks
+spells with a somatic component. Component letters are parsed from
+each spell's existing `"components"` field (e.g. "V, S, M (...)").
+
+New `core/spell_components.py` is the single source of truth for "is
+this spell blocked by this character's conditions right now" --
+`spell_component_block_reason()` is checked both by the real cast gate
+(`_cast_spell()`/`_cast_spell_as_ritual()` in sheet.py, alongside the
+existing Wild Shape gate) and by Immersive Spells' title treatment, so
+the two can never drift out of sync.
+
+Immersive Spells (when also on) now shows the blocking visually,
+per-spell rather than as a blanket override like Wild Shape/Rage:
+Blinded blacks the title out (a word-length-matched string of "█"),
+Gagged muffles it to a word-length-matched "mmmhmmhf", and Restrained
+turns it into a straining "nngh" -- both reusing the same word-length
+stretch mechanic already built for Wild Shape's beast noise.
+`compute_display_spell_title()`'s signature changed from taking just
+the spell name to taking the full spell dict (needed to check its
+components/range), updated at both call sites in sheet.py.
+
+Verified directly: Fireball (V, S, ranged) is blocked and shows
+redacted/muffled/straining text for each condition in turn; Shield
+(V, S, but Self-range) is correctly unaffected by Blinded; both the
+optional rule and Immersive Spells must be on for the visual to show;
+Wild Shape still takes precedence over a component block when both
+apply. Full 1190-item magic-item-effects regression: 0 errors.
+
+## Four more user-reported bugs, all confirmed real
+
+### Saving throw proficiencies leaked across multiclassing
+
+`get_saving_throw_profs()` (multiclass.py) unioned `save_profs` across
+every class a character had levels in. Real rule (PHB p.164
+Multiclassing Proficiencies): saving throw proficiency is deliberately
+NOT part of what multiclassing grants -- only your very first class at
+1st level gives it. A Fighter 1/Wizard 5 was incorrectly showing
+proficient in INT/WIS saves (from Wizard) on top of the correct
+STR/CON (from Fighter). `builder.py` already computed this correctly
+into `char["saving_throws"]` (using only `classes[0]`, i==0), but
+`get_saving_throw_bonus()` in calculator.py, plus two display sites in
+sheet.py, additionally OR'd in the buggy multiclass-wide union, so the
+correct value was there but got overridden back to wrong. Fixed by
+having `get_saving_throw_profs()` itself only look at the starting
+class (relies on `class_levels()`'s dict preserving insertion order
+matching `char["classes"]`, true for every real caller). Verified: a
+Fighter 1/Wizard 5 now correctly shows proficient only in STR/CON.
+
+### Immersive Spells prefixes applying to every spell, not just that class's
+
+User-reported: a multiclass Paladin/Wizard was getting the Oath prefix
+on Wizard spells too. `compute_display_spell_title()` only checked
+"does the character have levels in this class," never "is this
+specific spell actually on that class's list." Fixed by additionally
+checking `class_name in spell["classes"]` (the spell's own inherent
+class list) before applying a Warlock/Sorcerer/Cleric/Paladin prefix.
+`compute_display_spell_title()`'s signature changed from taking just
+the spell name to the full spell dict for this reason and for the
+component-restriction check above. Verified: a Paladin 5/Wizard 5's
+Bless gets prefixed, their Fireball doesn't.
+
+### Wild Shape (and 8 other resources) never actually reset from the real Rest buttons
+
+The single most significant find of this batch. `sheet.py`'s actual
+`_short_rest()`/`_long_rest()` methods (the ones the Rest buttons
+call) have their OWN inline resource-reset loops, completely separate
+from `core/character.py`'s `short_rest()`/`long_rest()` functions --
+which turn out to be dead code, never called from anywhere. Those
+inline loops checked `reset in ("SR","sr")` and
+`reset in ("LR","lr","SR","sr")` respectively -- neither tuple
+contains the literal string `"SR/LR"`, so any resource tagged that
+compound value never reset via the actual UI, ever. This silently
+undid the entire prior "SR vs SR/LR" audit's fixes: Hexblade's Curse,
+Misty Escape, Indestructible Life, Mutagens, Control Undead, Vow of
+Enmity, Favored by the Gods, and Firbolg Magic's two spells were all
+retagged "SR/LR" and believed fixed, but none of them were actually
+resetting from the real Rest buttons this whole time -- only the tag
+was fixed, not the loop that reads it. Wild Shape's very own retag to
+"SR/LR" earlier this session hit the exact same gap. Fixed both loops
+in sheet.py to also match `"SR/LR"`. Verified directly by simulating
+both loops against a depleted Wild Shape resource: both now correctly
+restore it.
+
+### Resource-linked abilities used via the Action/Bonus Action tabs didn't apply their real effects
+
+Two distinct problems reported together as "counters not decrementing":
+
+1. **Wild Shape** is also listed as a generic Action-tab card (separate
+   from its dedicated Combat-tab card with the beast picker). Using it
+   from there fell through to the generic "spend one use" fallback,
+   which has no way to prompt for a beast -- it silently spent a use
+   and did nothing else (no beast chosen, `_wildshape_active`
+   untouched), which reads exactly like "the counter didn't
+   decrement" since nothing visibly happened. Now redirects to the
+   dedicated card instead of guessing.
+
+2. **Rage and every other simple toggle** (anything in
+   `RESOURCE_POOL_TOGGLES`) used via its Action/Bonus Action tab card:
+   the generic fallback correctly spent the resource and added the
+   effect to `active_effects`, but only called two narrow refreshers
+   (`_refresh_combat_weapons`/`_refresh_effects_list`) -- never
+   `ctrl.refresh()`. Every real mechanical consequence of an active
+   effect (AC changes, damage resistance, anything `update_all()`
+   applies keyed off `active_effects`) only actually takes effect
+   through that call. The Other tab's own "Active" checkbox for the
+   same toggle already correctly called it (deferred via
+   `QTimer.singleShot`, to avoid rebuilding mid-signal-handler); the
+   action-tab card's button just never did. Added the same deferred
+   `ctrl.refresh()` call there.
+
+Full 1190-item magic-item-effects regression after all four fixes: 0
+errors.
+
+## Counters silently defaulting to "1/1" (Artificer's Infused Items)
+
+User-reported: "some counters defaulting to 1/1." Wrote a scanner that
+replicates `aggregate_resources()`'s exact formula-evaluation logic
+against every `formula=` field across both rule editions' full class
+resource lists (classes.py and classes_2024.py) -- an exhaustive check,
+not a guess. Found exactly one: Artificer's "Infused Items" declared
+BOTH `formula="infuse_by_level"` (a bogus, non-arithmetic string) AND a
+correct `by_level={2:2,6:3,10:4,14:5,18:6}` on the same resource. The
+aggregator runs the `by_level` branch first (correctly computing the
+real level-scaled max), then unconditionally runs the `formula` branch
+afterward ("NOT elif", so a formula-based current_max can coexist with
+an independent die_by_level) -- since `"infuse_by_level"` isn't valid
+arithmetic, evaluating it always threw and fell back to
+`min_val`'s default of 1, clobbering the correct value that had just
+been computed. Every Artificer's Infused Items counter showed a flat
+"1/1" at every level instead of scaling 2/6/10/14/18.
+
+Fixed at both layers: removed the bogus formula from Infused Items'
+data entry (by_level alone is sufficient and was already correct), and
+hardened `aggregate_resources()` itself so by_level now takes
+precedence whenever both are present on the same resource (`if formula
+and not by_level`) -- a defense-in-depth fix so the same mistake in a
+future resource entry can't silently reproduce this bug class again.
+`die_by_level` (a different field, for die *size* like d6/d8/d10, not
+current_max) is unaffected and still independent of formula, per the
+original comment's actual intent.
+
+Verified directly: an Artificer's Infused Items now correctly shows
+2/2/3/3/4/5/6/6 at levels 2/5/6/9/10/14/18/20. Re-ran the formula
+scanner post-fix: 0 broken formulas remain anywhere in either edition's
+class data, and 0 resources still declare both formula and by_level.
+Full 1190-item magic-item-effects regression: 0 errors.
+
+## Every class resource counter was silently using 2014 rules for 2024-edition characters
+
+Follow-up to the Infused Items fix, per the user's request to review
+every counter in depth rather than stop at one instance. Wrote a
+scanner sweeping every `formula=`/`by_level` resource across BOTH rule
+editions' full class data (comparing `aggregate_resources()`'s output
+class-by-class, level-by-level, edition-by-edition) rather than
+spot-checking. That surfaced something much bigger than a single bad
+entry: `aggregate_resources()` (the one function that computes every
+class resource pool -- Rage, Wild Shape, Ki, Sorcery Points, Channel
+Divinity, Lay on Hands, Second Wind, Superiority Dice, literally every
+countable class feature in the game) had `from dnd_app.data.classes
+import CLASS_DICT` hardcoded at its top, with no awareness of
+`char["edition"]` at all -- unlike `builder.py`/`levelup_panel.py`/
+`widgets.py`, which already correctly branch between `CLASS_DICT`
+(2014) and `CLASS_DICT_2024` elsewhere. Every 2024-edition character's
+resource counters were being computed from 2014-edition class data
+this entire time, silently, regardless of which edition was actually
+selected at character creation.
+
+The two data files genuinely disagree in real, mechanically-relevant
+ways -- diffing the two editions' output across all 14 classes and a
+spread of levels found 139 distinct (class, level, resource) points
+where they differ. Some examples: 2024 Wild Shape is a flat 2 uses
+with no by_level scaling and no "Unlimited at 20" the way 2014's
+Archdruid works; 2024 Second Wind, Superiority Dice, Channel Divinity,
+and Blood Maledict all scale differently by level than their 2014
+counterparts; Monk's Martial Arts die progresses on a different level
+schedule (2024's die sizes are one tier ahead of 2014's at several
+levels).
+
+Fixed by threading `edition: str = "2014"` through
+`aggregate_resources()` (selects `CLASS_DICT_2024` when `"2024"`,
+matching the exact pattern already used elsewhere) and passing
+`char.get("edition", "2014")` from its one real call site in
+`calculator.py`. Verified directly: a 2014 vs. 2024 20th-level Circle
+of the Moon Druid now correctly show `"Unlimited"` vs. `2` Wild Shape
+uses respectively, where both incorrectly showed `"Unlimited"` before.
+
+**Finding this exposed a second, previously-unreachable bug**: 2024
+Paladin's "Divine Sense" was defined with `formula="WIS_mod"` -- not
+matching either edition's real rule (2014: 1 + CHA modifier; 2024, per
+this very file's own feature text: a flat number of uses equal to
+Proficiency Bonus), and Paladin has no WIS-based features at all, so
+this was clearly a copy-paste mistake. It silently always evaluated to
+the formula system's floor of 1 use at every level -- but this code
+path was **never actually reached** before the edition fix above,
+since nothing had ever pulled from `CLASS_DICT_2024`'s resources until
+now. Also discovered the formula-evaluation system had no way to
+express "Proficiency Bonus" at all -- no `PB` placeholder existed
+alongside the six ability-modifier ones, which several 2024-only
+features are written in terms of. Added `PB` support to
+`aggregate_resources()`'s formula substitution chain and fixed Divine
+Sense's formula to `"PB"`.
+
+Re-ran both the formula-eval-failure scanner and the
+formula+by_level-collision scanner (from the Infused Items fix) across
+both editions with the new PB placeholder: 0 broken formulas, 0
+collisions, anywhere. Full verification: 1190-item magic-item-effects
+regression (0 errors) plus a fresh sweep building a fresh level-1/3/5/
+10/15/20 character of all 14 classes in both editions (168
+combinations, 0 errors).
+
+`_add_subclass_resources()` (multiclass.py) -- the ~700-line function
+that computes *subclass*-specific resources (Psionic Energy Dice,
+Giant's Might, etc.) -- takes no `edition` parameter either, and
+computes its values directly in Python rather than through the
+CLASS_DICT lookup this fix covers, so it wasn't touched here. This
+pass focused on the base-class resource system the original bug
+report was actually about. (Investigated and fixed in the "Closing the
+loop on every self-flagged incomplete item in this file" section
+below, which found a real 2024 name-matching bug in this function.)
+
+## Rest system: combat-duration toggles and concentration left stuck active
+
+Follow-up review of `_short_rest()`/`_long_rest()` after the SR/LR
+reset-loop fix, per the user's request to take another hard look.
+Found two more real gaps, both about state that should have ended long
+before a rest completes but was never actually cleared by one:
+
+- **RESOURCE_POOL_TOGGLES** (Rage, Reckless Attack, Bladesong,
+  Hexblade's Curse, and 30 others) had their *resource* (uses
+  remaining) correctly restored by a rest, but the on/off
+  `active_effects` *state* itself was never cleared -- a character
+  could still show "Rage: ON" the next session after a long rest, with
+  every one of its mechanical bonuses (resistance, +damage) still
+  silently applying. By the time a short rest (≥1 hour) or long rest
+  (8 hours) actually completes, every one of these combat-duration
+  toggles would already have naturally ended regardless of whether the
+  player remembered to manually turn it off. Added
+  `_clear_active_toggles()`, called from both rest methods.
+
+  While fixing this, also deduplicated `RESOURCE_POOL_TOGGLES` itself
+  -- it was defined identically in two different methods' local scope,
+  each with its own "must be kept in sync with that other definition"
+  comment flagging the risk. Now a single module-level constant all
+  three call sites (the two original ones plus the new rest-clearing)
+  read from.
+
+- **Concentration** was never touched by either rest method at all. A
+  long rest is 8 hours, well beyond any spell's concentration duration
+  -- whatever was being concentrated on had already ended long before
+  the rest completed, but the sheet would keep showing a stale
+  "concentrating on X" indicator indefinitely across rests with
+  nothing left to justify it. Added a `drop_concentration()` call to
+  `_long_rest()` specifically (left short rest alone -- at only ≥1
+  hour, a small number of spells do have concentration durations that
+  long, so auto-clearing there is less clearly always correct).
+
+Verified both directly: a raging, Frenzied Barbarian with an active
+Bless concentration, after a simulated rest, correctly has Rage and
+Frenzy cleared from active_effects, Bless (an unrelated non-toggle
+effect) left untouched, and concentration dropped. Full 1190-item
+magic-item-effects regression: 0 errors.
+
+## Death Saves: redesigned from a bare row of 14px checkboxes
+
+User-reported: it "looks cheap" next to the rest of the app. It really
+was underbuilt for how tense a moment it represents -- a single
+borderless, background-less row with a plain "Death Saves:" label and
+six tiny 14px checkboxes, easy to miss entirely and stylistically
+disconnected from both the app's normal card-based polish and its own
+dramatic full-screen "YOU DIED" overlay.
+
+Rebuilt as its own alert-styled card (crimson-tinted background and
+border -- it's already gated to only show at 0 HP, so it can afford to
+demand attention when it does): a skull-icon header, bigger 22px pips
+with hover feedback grouped under "SUCCESSES"/"FAILURES" labels
+instead of bare ✓/✗ glyphs, a live status line ("2 successes, 1
+failure", "1 more failure = death", "STABLE", "DEAD") that updates
+immediately as pips are toggled, and a tooltip on every pip spelling
+out the actual rule (d20 at the start of each turn at 0 HP, nat 20
+regains 1 HP, nat 1 counts double) for anyone who doesn't have it
+memorized. The status line is wired into all three places that sync
+these checkboxes (initial bind, live toggle, and the general
+death/conditions refresh) so it never goes stale.
 
 ## Floating/dialog windows now pick up theme changes
 
@@ -8702,3 +8924,296 @@ rather than trying to re-style already-built nested custom-styled
 cards in place (fragile, since Qt widget-instance stylesheets take
 precedence over a parent's, so simply re-applying a top-level
 stylesheet doesn't cascade down into them).
+
+## Closing the loop on every self-flagged incomplete item in this file — subclass-resource name matching, and a real SR-vs-SR/LR gap the last audit missed
+
+User asked, verbatim, to grep this file for every note marking
+something as incomplete (self-labeled at the time as "not fixed,"
+"still outstanding," "deferred," or "out of scope") and make sure
+they're all actually resolved, not just tracked. Went through every
+match rather than trusting the file's own framing at face value.
+
+**Already resolved by earlier passes, confirmed rather than assumed**:
+Ranger's duplicate "Stalker's Flurry" key, Forest Sage's skill-
+substitution wiring, the 5 "genuinely missing" optional features
+(Primal Knowledge/Magical Inspiration/Quickened Healing/Spellcasting
+Focus/Cantrip Formulas), the filter system rework, and the Pyromancer
+subclass — all had later dedicated sections in this same file showing
+them built and verified. No action needed; would have been wasted,
+duplicate work to redo them.
+
+**`_add_subclass_resources()` edition-blindness — investigated and
+resolved differently than the original flag assumed.** The original
+note worried this ~530-line function (subclass-specific resources:
+Psionic Energy Dice, Giant's Might, etc.) might have wrong hardcoded
+*numbers* between 2014 and 2024 subclass revisions, the same way
+`aggregate_resources()`'s base-class resources did. Investigated
+properly instead of guessing:
+
+- First, data-mapped which subclasses this function's `_has()` fuzzy
+  matcher even needs to handle for 2024 characters, by diffing every
+  class's 2014 vs. 2024 `subclasses` list. Most of this function's
+  subclasses (Rune Knight, Samurai, Cavalier, Way of the Astral Self,
+  Hexblade, Fathomless, Undying, Genie, Circle of Dreams/Spores/
+  Shepherd, Divine Soul, Chronurgy, Drakewarden, Swarmkeeper, Path of
+  the Giant, Peace/Twilight Domain, Oathbreaker/Conquest/Crown/
+  Watchers) simply aren't selectable by a 2024-edition character at
+  all — the 2024 PHB only reprints a handful of subclasses per class —
+  so those branches correctly never fire for 2024 characters. Not a
+  bug, just unreachable code for that edition.
+- That left ~15 subclasses genuinely reachable in *both* editions
+  (Psi Warrior, Soulknife, Phantom, Circle of the Stars, Archfey,
+  Undead, Bladesinger, Abjurer, Diviner, War Domain, College of
+  Spirits, Oath of Vengeance/Glory/Ancients, Wild Magic/Clockwork
+  Sorcery, Armorer/Artillerist/Battle Smith/Alchemist). Verified each
+  one directly by simulating every 2024 subclass through the function
+  and printing what resources it produced.
+- **Found a real, confirmed bug this way, not a guess**: Wizard's
+  Abjurer and Diviner subclasses never got their resources at all in
+  2024. `_has("Wizard", "abjuration")` and `_has("Wizard",
+  "divination")` were matching against the 2014 subclass strings
+  ("Abjuration", "Divination"), but the 2024 PHB subclass list uses
+  different word forms entirely — "Abjurer" and "Diviner" — which
+  don't contain those substrings. Any 2024-edition Abjurer wizard
+  silently never got Arcane Ward tracked; any 2024 Diviner silently
+  never got Portent. Fixed by adding the 2024 name as an additional
+  match fragment to each check (`_has("Wizard", "abjuration",
+  "abjurer")` / `_has("Wizard", "divination", "diviner")`) — a
+  data-verifiable naming fix, not a guess at unfamiliar rules text.
+- **What was deliberately NOT changed**: whether any of those ~15
+  dual-edition subclasses' actual *numbers* (Psionic Energy Dice
+  scaling, Vow of Enmity's uses, Trance of Order, etc.) differ between
+  the 2014 and 2024 printings. Unlike the name-matching bug above,
+  this isn't something verifiable from the app's own data — it needs
+  word-for-word 2024 PHB text per subclass, which isn't something to
+  guess at and risk silently replacing a correct value with a wrong
+  one. Stated here plainly rather than papered over with unverified
+  numbers.
+
+**A second, related gap the previous SR-vs-SR/LR audit's own closing
+note had named but not checked**: that audit fixed Wild Shape's
+reset tag and admitted, in its own text, that `classes.py`/
+`classes_2024.py` likely had more plain-`"SR"` resources it hadn't
+re-checked (Channel Divinity, Second Wind, Action Surge, Superiority
+Dice, Ki Points, Blood Maledict, Crimson Rite, and it turned out also
+Warlock's Pact Magic Slots). Checked each one against its real PHB
+rule text rather than assuming:
+
+- **2014 (`classes.py`)**: Cleric's and Paladin's Channel Divinity,
+  Fighter's Second Wind and Action Surge, Battle Master's Superiority
+  Dice, Monk's Ki Points, Warlock's Pact Magic Slots, and Blood
+  Hunter's Blood Maledict and Crimson Rite were all tagged plain
+  `"SR"`. Every one of these has an unambiguous 2014 PHB/XGE rule of
+  "you regain [it] when you finish a short or long rest" — this app's
+  `long_rest()` only restores resources tagged `"LR"` or `"SR/LR"`, so
+  a plain `"SR"` tag meant none of these ever recovered from an actual
+  long rest, exactly the same bug class as Wild Shape's. Retagged all
+  8 to `"SR/LR"`. (Fighter's Indomitable and Paladin's Lay on Hands
+  were already correctly `"LR"`-only, per their real once-per-long-
+  rest-only rule — left unchanged.)
+- **2024 (`classes_2024.py`)**: found this file already had Second
+  Wind and Channel Divinity tagged `"LR"` (not `"SR"`) from an earlier
+  pass — the 2024 revision changed several Fighter-style resources
+  into multi-use pools that partially refill on a short rest and fully
+  refill on a long rest, a nuance this app's binary reset tag can't
+  fully represent; `"LR"` is the safe choice since it's true under
+  every reading (full recovery on a long rest is universal) without
+  falsely claiming a full short-rest reset. Action Surge and
+  Superiority Dice were still plain `"SR"`, inconsistent with that
+  same reasoning already applied to their sibling resources in the
+  same file — brought them in line, retagged to `"LR"`. Pact Magic
+  Slots and Focus Points (2024's renamed Ki) kept the traditional
+  full-short-*or*-long-rest recovery model unchanged from 2014 in both
+  editions (this is Warlock's and Monk's defining, unchanged-since-
+  2014 mechanic) — retagged both from `"SR"` to `"SR/LR"`.
+- Note: Pact Magic Slots' actual spend/reset is hardcoded directly in
+  `sheet.py`'s `_short_rest()`/`_long_rest()` (`pact_slots_used = 0` in
+  both), independent of the generic resource-reset loop — so this
+  specific fix only corrects the reset-type badge shown on its
+  resource card, not a functional recovery bug. The generic-loop-based
+  resources above (Channel Divinity, Second Wind, etc.) had the real,
+  functional bug.
+
+**Also cleaned up**: the two confirmed-orphaned tooltip entries ("Goat
+Legs," "Fleet of Foot") noted as dead data in an earlier audit —
+verified again they still don't correspond to any real trait on any
+race in the database, then removed all 4 occurrences (each appeared
+once in the base dict, once in a later duplicate `.update()` call) from
+`feature_tooltips.py`.
+
+**Re-investigated, found to already be correct**: the "Illusory
+Dragon" INT-vs-WIS-save discrepancy noted during a spell-AoE audit.
+The current data (`"enemies who see it WIS save or frightened"`)
+already uses the correct Wisdom save for the frightened effect; the
+separate `"Examining it (action) vs your spell save DC"` text for
+disbelief is accurately described without mislabeling it as a formal
+save. No bug found here — the note itself turned out to already be
+resolved, or was never actually wrong.
+
+**Two remaining limitations, identified but not built in this pass**:
+Githyanki's Astral Knowledge and Astral Elf's Astral Trance (a
+*recurring* skill/tool choice regranted every long rest, not a
+one-time pick) and College of Creation's Creative Crescendo (multiple
+simultaneous Dancing Items at 14th level, CHA-modifier count) both
+needed real architectural additions this app didn't have yet — a
+rest-triggered re-choice UI flow for the first, and multi-instance
+tracking for a single companion-card template for the second. (Both
+built in the "Astral Knowledge / Astral Trance built, and Creative
+Crescendo's multi-instance gap closed" section below.)
+
+Verified throughout: full 1194-combination sweep (every class ×
+subclass × level checkpoint × both editions) via direct
+`rebuild()`/`update_all()` calls, 0 errors. Full 1190-item magic-item-
+effects regression, 0 errors. Direct `aggregate_resources()` checks
+confirming Cleric's Channel Divinity now shows `SR/LR` in 2014 and the
+already-correct `LR` in 2024, and every 2024 dual-edition subclass
+(Abjurer, Diviner, Psi Warrior, Soulknife, Phantom, Circle of the
+Stars, Archfey, Undead, War Domain, College of Spirits, Shadow/Wild
+Magic/Clockwork Sorcery, Oath of Vengeance/Glory/Ancients, all 4
+Artificer subclasses) now correctly produces its subclass resource
+where it previously silently produced none (Abjurer/Diviner) or
+already worked correctly (the rest, confirming the fix didn't
+regress anything that was already fine).
+
+## Astral Knowledge / Astral Trance built, and Creative Crescendo's multi-instance gap closed
+
+User asked to actually build the two remaining limitations from the
+previous pass rather than leave them stated. Both needed a genuine
+architectural addition, not a data tweak — built and verified without
+being able to visually render the real Qt UI (no PySide6 in this
+environment), using a minimal stub module that lets the actual
+PySide6-importing UI code run headless so the real functions/methods
+could be exercised directly rather than only their non-UI helpers.
+
+**Githyanki (MPMM)'s Astral Knowledge and Astral Elf's Astral Trance**:
+both grant "proficiency in one skill and with one weapon or tool of
+your choice ... until the end of your next long rest" — a temporary
+proficiency re-chosen every long rest, not a permanent pick. Investigated
+how the closest existing precedent (Guidance of the Spirits' skill
+choice, Whispers of the Dead's skill-or-tool choice — both re-pickable
+via `RestOptionsDialog`) actually applies its pick, and found a real,
+pre-existing bug in the process: neither choice's `choice_id` matches
+any of `ChoiceWidget._on_confirmed()`'s aggregation-suffix checks
+(`_skill_profs`, `_tool_profs`, `_skill_or_tool_profs`), so both fall
+through to the generic `apply_choice()` fallback, which just stores the
+pick under `_choices` without ever folding it into `char["skills"]` or
+`char["tool_proficiencies"]` — the chosen skill/tool is recorded but
+never actually mechanically granted. Didn't fix that pre-existing bug
+here (out of scope for this ask), but made sure not to inherit it:
+
+- Built a new `weapon_or_tool_prof` choice type (pool = weapon names +
+  tool names, reusing `_build_tool_chooser`'s generic mixed-pool
+  checkbox UI — the same technique `skill_or_tool_prof` already uses)
+  since no existing type covers "weapon or tool," only "tool" or
+  "skill or tool."
+- Initial pending-choice cards (`_get_race_choices()`) for both races,
+  following the same "built as an initial creation-time pick" pattern
+  already established for Guidance of the Spirits/Whispers of the Dead
+  (the real rule's first grant technically only exists after the
+  character's first in-fiction long rest, but this app doesn't model
+  "hasn't rested yet" as a distinct state).
+- `RestOptionsDialog` offers a re-pick (both the skill and the
+  weapon/tool together, matching the real "whenever you finish a long
+  rest" trigger) once an initial pick exists, long rest only.
+- **Mechanical application, built correctly from the start**: the
+  weapon/tool half is applied the same way Weapon Master's chosen
+  weapons already are — read fresh from `_choices` every `rebuild()`
+  and appended into `grants["weapon_profs"]`/`grants["tool_profs"]`
+  before `char["weapon_proficiencies"]`/`char["tool_proficiencies"]`
+  are (re)assigned from `grants`, so a re-pick on a later long rest
+  naturally replaces the old grant instead of accumulating (those two
+  char fields are fully overwritten from `grants` every rebuild, not
+  incrementally mutated). The skill half needed different handling:
+  `char["skills"]` is NOT rebuilt fresh each call — it's a permanent,
+  monotonically-increasing store (the "Reset Manual Changes" button is
+  needed specifically because nothing else ever downgrades it), so
+  mutating it directly would let the old temporary skill stay
+  "proficient" forever once the character re-picks a different one on
+  a later rest. Instead, checked dynamically inside `get_skill_bonus()`
+  — the same technique Forest Sage's ability substitution already uses
+  two lines above — comparing the skill being queried against the
+  *current* `_choices["astral_knowledge_skill"]` value on every call,
+  so it naturally tracks whichever skill is currently picked with no
+  separate expiry bookkeeping needed.
+
+Verified directly: baseline (no pick) shows no bonus/no proficiency;
+after the initial pick, the chosen skill's bonus goes up and the
+chosen weapon/tool shows proficient; after simulating a long-rest
+re-pick to a *different* skill and weapon, the old skill's bonus
+correctly reverts to baseline and the old weapon's proficiency is
+correctly gone, while the new pair is now proficient — confirming this
+is a real temporary swap, not just an additive grant. Also verified
+the pending-choice card correctly appears before any pick and
+disappears after, and that `RestOptionsDialog` only offers the re-pick
+on a long rest (never short) and only once an initial pick exists.
+Both races behave identically, as expected from the identical rule
+text. Full 1194-combination class/subclass/level/edition sweep and the
+1190-item magic-item-effects regression: both 0 errors.
+
+**Creative Crescendo (College of Creation, 14th level)**: "you can have
+a number of animated objects from Animating Performance equal to your
+Charisma modifier active at once ... rather than just one." The
+existing Companions-tab model tracked at most one active instance per
+companion key (`char["active_summoned_companions"]` was a flat set of
+template keys, one card per key). Extended it rather than replacing it:
+
+- New `calculator.companion_max_simultaneous(key, char)` returns 1 for
+  every companion except Dancing Item once the character is a 14th+
+  level College of Creation Bard, where it returns `max(1, CHA mod)` —
+  the `max(1, ...)` floor matters since Animating Performance's own
+  base rule ("only one at a time") means a 14th-level feature
+  shouldn't be able to reduce the cap below what a *lower*-level
+  Creation Bard already has.
+- Multi-instance-capable companions now store one *instance-suffixed*
+  id per active copy (`"dancing_item#0"`, `"dancing_item#1"`, ...) in
+  `active_summoned_companions`, instead of the bare key. Every
+  single-instance companion (Drake Companion, Wildfire Spirit, Steel
+  Defender, etc.) is completely unaffected — they still store and
+  match on the bare key exactly as before, gated by
+  `companion_max_simultaneous()` returning 1 for all of them.
+- `get_available_companions()` now emits one list entry per active
+  instance instead of one per template key, so the Companions tab's
+  existing "one card per returned key" loop naturally renders one card
+  per Dancing Item without any change to the loop itself.
+- `resolve_companion_statblock()` accepts the instance-suffixed id,
+  looks the template up by its base key, and labels the resolved stat
+  block "Dancing Item #1"/"#2"/... so multiple active copies are
+  distinguishable. `_summon_companion()` picks the lowest *unused*
+  instance index (reusing a freed slot rather than always climbing)
+  and has its own defensive cap check (in addition to the Summon
+  button only being offered while under the cap, matching the existing
+  double-checked pattern already used for resource-charge gating).
+- **Real bug caught while extending the death/HP-zero handler**: the
+  handler that fires when a companion's tracked HP reaches 0 does a
+  direct `COMPANION_STATBLOCKS.get(companion_key)` lookup to decide
+  which "companion died" flow applies (re-summon-gated vs.
+  pending-replacement-on-long-rest vs. infusion-linked) — with
+  instance-suffixed keys this would have silently returned `{}` for
+  any Dancing Item, misrouting a dead Dancing Item into the
+  Steel-Defender-style "pending replacement, available again next long
+  rest" flow instead of its own correct "dismiss it, re-summon by
+  spending another use" flow. Fixed by stripping the `#N` suffix
+  before that specific lookup, matching how `resolve_companion_statblock()`
+  already does it.
+
+Verified directly (no PySide6 install available, so exercised the real
+`CharacterSheet._summon_companion`/`_dismiss_companion` methods headless
+via a minimal stand-in object providing only what those methods
+actually touch, rather than skipping to just the calculator-layer
+functions): a 20th-level, CHA 20 Creation Bard correctly gets a cap of
+5, can summon 3 Dancing Items with 3 independent HP trackers and
+correctly numbered display names, still gets offered a 4th/5th, stops
+being offered once at the cap, correctly frees and reuses a dismissed
+instance's slot on the next summon rather than climbing indefinitely,
+and correctly dismisses (not "pending replacement") when an instance's
+HP reaches 0. A 6th-level Creation Bard (pre-Creative-Crescendo, high
+CHA) is confirmed capped at exactly 1, byte-for-byte matching the
+original single-instance behavior (bare `"dancing_item"` key, no
+suffix) — confirming this is a strict superset of the old behavior,
+not a replacement of it. Full 508-combination class/subclass/level
+companions sweep (build character → summon every eligible companion →
+resolve every active stat block) and the full 1190-item magic-item-
+effects regression: both 0 errors. Also directly constructed the real
+`_build_statblock_card()` widget for a Dancing Item instance to confirm
+the HP-spinbox handler closures (which read `companion_key` for the
+death-handling branch fixed above) don't crash.

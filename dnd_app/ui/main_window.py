@@ -204,6 +204,7 @@ class SettingsDialog(QDialog):
                 "cantrip_versatility": False, "bardic_versatility": False,
                 "sorcerous_versatility": False, "max_hp_per_level": False,
                 "immersive_spells": False, "critical_flavor": False,
+                "component_restrictions": False,
             })
 
         self._feat_prereq_cb = QCheckBox("Enforce feat prerequisites (race, ability scores, etc.)")
@@ -239,6 +240,20 @@ class SettingsDialog(QDialog):
             "every level instead of 12 + CON at 1st and 7 + CON afterward. "
             "A common table variant, not an official rule.")
         rcl.addWidget(self._max_hp_per_level_cb)
+
+        self._component_restrictions_cb = QCheckBox(
+            "Component Restrictions — Blinded/Gagged/Restrained block casting "
+            "spells needing sight/verbal/somatic components")
+        self._component_restrictions_cb.setChecked(opt_rules.get("component_restrictions", False))
+        self._component_restrictions_cb.setToolTip(
+            "When on, a spell can't be cast if an active condition blocks "
+            "something it specifically needs: Blinded blocks any non-self-only "
+            "spell (can't see a target), Gagged (a homebrew condition, not an "
+            "official one) blocks spells with a verbal component, Restrained "
+            "blocks spells with a somatic component. Only checked per-spell — "
+            "e.g. a self-only spell with no verbal component still works while "
+            "Blinded and Gagged. A table-variant interpretation, not RAW.")
+        rcl.addWidget(self._component_restrictions_cb)
         root.addWidget(rules_card)
 
         # ── Tasha's Cauldron of Everything: "swap something at an ASI
@@ -382,6 +397,7 @@ class SettingsDialog(QDialog):
             sheet.char["optional_rules"]["bardic_versatility"] = self._bardic_versatility_cb.isChecked()
             sheet.char["optional_rules"]["sorcerous_versatility"] = self._sorcerous_versatility_cb.isChecked()
             sheet.char["optional_rules"]["max_hp_per_level"] = self._max_hp_per_level_cb.isChecked()
+            sheet.char["optional_rules"]["component_restrictions"] = self._component_restrictions_cb.isChecked()
             sheet.char["optional_rules"]["immersive_spells"] = self._immersive_spells_cb.isChecked()
             sheet.char["optional_rules"]["critical_flavor"] = self._critical_flavor_cb.isChecked()
             # Saving here alone doesn't recompute char["resources"]

@@ -148,7 +148,7 @@ class ChoiceWidget(QFrame):
             self._build_skill_chooser(ctype)
         elif ctype == "tool_prof":
             self._build_tool_chooser()
-        elif ctype == "skill_or_tool_prof":
+        elif ctype in ("skill_or_tool_prof", "weapon_or_tool_prof"):
             self._build_tool_chooser()  # generic checkbox-from-pool behavior works for a mixed pool too
         elif ctype == "language":
             self._build_language_chooser()
@@ -243,7 +243,11 @@ class ChoiceWidget(QFrame):
     def _build_tool_chooser(self):
         from dnd_app.data.items import ALL_TOOLS
         pool = self.choice_info.get("pool") or ALL_TOOLS
-        current_tools = set(self.char.get("tool_proficiencies", []))
+        # Also gray out weapons the character is already proficient with —
+        # relevant when this pool is a mixed weapon-or-tool pool (see
+        # weapon_or_tool_prof), harmless for tool-only pools since weapon
+        # names never appear in them.
+        current_tools = set(self.char.get("tool_proficiencies", [])) | set(self.char.get("weapon_proficiencies", []))
 
         scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setMinimumHeight(140)
         scroll.setStyleSheet(f"QScrollArea{{background:transparent;border:1px solid {BORDER};border-radius:4px;}}")
@@ -2735,6 +2739,36 @@ def _get_race_choices(char):
                 "type": "skill_or_tool_prof", "count": 1, "pool": None,
                 "label": "Decadent Mastery (Githyanki): choose 1 skill or tool proficiency",
                 "already_chosen": already,
+            })
+
+    # Githyanki (MPMM)'s Astral Knowledge and Astral Elf's Astral Trance
+    # are mechanically identical: "whenever you finish a long rest, you
+    # gain proficiency in one skill and with one weapon or tool of your
+    # choice ... until the end of your next long rest" — a temporary
+    # grant re-chosen every long rest via RestOptionsDialog, not a
+    # permanent one-time pick like Githyanki's own Decadent Mastery
+    # above. Built as an initial pick at character creation (same
+    # simplification already used for Guidance of the Spirits/Whispers
+    # of the Dead) so the feature isn't blank until the character's
+    # first in-fiction long rest.
+    if race in ("Githyanki (MPMM)", "Astral Elf"):
+        trait_name = "Astral Knowledge" if race == "Githyanki (MPMM)" else "Astral Trance"
+        already_sk = made.get("astral_knowledge_skill", [])
+        if not already_sk:
+            choices.append({
+                "id": "astral_knowledge_skill", "source": "race", "source_name": race,
+                "type": "skill_prof", "count": 1, "pool": ALL_SKILLS,
+                "label": f"{trait_name}: choose a skill proficiency (re-chosen on each long rest)",
+                "already_chosen": already_sk,
+            })
+        already_wt = made.get("astral_knowledge_weapon_or_tool", [])
+        if not already_wt:
+            from dnd_app.data.items import WEAPON_NAMES, ALL_TOOLS
+            choices.append({
+                "id": "astral_knowledge_weapon_or_tool", "source": "race", "source_name": race,
+                "type": "weapon_or_tool_prof", "count": 1, "pool": WEAPON_NAMES + ALL_TOOLS,
+                "label": f"{trait_name}: choose a weapon or tool proficiency (re-chosen on each long rest)",
+                "already_chosen": already_wt,
             })
 
     # Eladrin: seasonal Fey Step effect. Player picks one season;

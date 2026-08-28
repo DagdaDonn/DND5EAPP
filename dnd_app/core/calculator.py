@@ -288,6 +288,16 @@ def get_skill_bonus(char: dict, skill: str) -> int:
             ability = fs_ability
     mod = ability_mod(char, ability)
     prof_level = char.get("skills", {}).get(skill, 0)
+    # Githyanki (MPMM) Astral Knowledge / Astral Elf Astral Trance: a
+    # temporary skill proficiency re-chosen every long rest, not a
+    # permanent grant. Checked dynamically here (same technique as
+    # Forest Sage's ability substitution above) rather than mutating
+    # char["skills"], since that dict is otherwise a permanent,
+    # monotonically-increasing store with no way to "expire" an entry
+    # when the character re-picks a different skill on a later rest.
+    astral_skill = char.get("_choices", {}).get("astral_knowledge_skill")
+    if astral_skill and skill == astral_skill[0]:
+        prof_level = max(prof_level, 2)
     pb = get_prof_bonus(char)
     cl = class_levels(char)
 
@@ -1426,21 +1436,50 @@ def get_innate_movement_grants(char: dict) -> dict:
     return best
 
 
+def companion_max_simultaneous(key: str, char: dict) -> int:
+    """How many simultaneous active instances of this companion the
+    character can have. 1 for every companion except Dancing Item once
+    Creative Crescendo applies (Bard, College of Creation, 14th level):
+    "you can have a number of animated objects from Animating
+    Performance equal to your Charisma modifier active at once ...
+    rather than just one." A negative/zero CHA modifier still gets at
+    least the base 1 Animating Performance always allows."""
+    if key == "dancing_item":
+        from .character import class_levels, subclasses
+        cl = class_levels(char)
+        subs = subclasses(char)
+        if cl.get("Bard", 0) >= 14 and "creation" in subs.get("Bard", "").lower():
+            return max(1, ability_mod(char, "CHA"))
+    return 1
+
+
+def count_active_companion_instances(key: str, active_summons: list) -> int:
+    """Count how many active_summoned_companions entries belong to this
+    template key — either the bare key itself (single-instance
+    companions) or an instance-suffixed "key#N" form (multi-instance
+    companions like Dancing Item once Creative Crescendo applies)."""
+    return sum(1 for a in active_summons if a == key or a.startswith(key + "#"))
+
+
 def get_summonable_but_inactive_companions(char: dict) -> list[str]:
     """Companions the character is class/subclass/level-eligible for,
-    tagged requires_summon_action, but hasn't actually summoned yet —
-    used by the UI to show a "Summon" prompt instead of the full stat
-    block card."""
+    tagged requires_summon_action, that still have room for another
+    active instance — used by the UI to show a "Summon" prompt
+    alongside (or instead of) the full stat block card. For ordinary
+    single-instance companions this is "hasn't summoned it yet"; for a
+    multi-instance-capable one (Dancing Item + Creative Crescendo)
+    it's "hasn't hit the simultaneous-instance cap yet", so the prompt
+    can still appear even with one already active."""
     from .character import class_levels, subclasses
     from dnd_app.data.statblocks import COMPANION_STATBLOCKS
     cl = class_levels(char)
     subs = subclasses(char)
-    active_summons = set(char.get("active_summoned_companions", []))
+    active_summons = char.get("active_summoned_companions", [])
     result = []
     for key, tmpl in COMPANION_STATBLOCKS.items():
         if not tmpl.get("requires_summon_action"):
             continue
-        if key in active_summons:
+        if count_active_companion_instances(key, active_summons) >= companion_max_simultaneous(key, char):
             continue
         cls_lvl = cl.get(tmpl["class_key"], 0)
         if cls_lvl < tmpl["min_level"]:
@@ -1464,7 +1503,11 @@ def get_available_companions(char: dict) -> list[str]:
     feature is unlocked:
     - Companions tagged requires_summon_action (Drake Companion,
       Dancing Item, Wildfire Spirit) are only included once actually
-      summoned — tracked in char["active_summoned_companions"].
+      summoned — tracked in char["active_summoned_companions"]. A
+      multi-instance-capable companion (Dancing Item, once Creative
+      Crescendo applies) contributes one list entry per currently
+      active instance, using an instance-suffixed "key#N" id, so the
+      UI builds one stat block card per instance instead of one total.
     - Companions tagged requires_active_infusion (Homunculus Servant)
       are only included while an active_infusions entry for that exact
       infusion exists — matching how it's really created (infusing a
@@ -1481,7 +1524,7 @@ def get_available_companions(char: dict) -> list[str]:
     from dnd_app.data.statblocks import COMPANION_STATBLOCKS, ELDRITCH_CANNON
     cl = class_levels(char)
     subs = subclasses(char)
-    active_summons = set(char.get("active_summoned_companions", []))
+    active_summons = char.get("active_summoned_companions", [])
     pending_replacement = set(char.get("companion_pending_replacement", []))
     active_infusion_names = {inf.get("infusion", "") for inf in char.get("active_infusions", [])}
     available = []
@@ -1492,7 +1535,16 @@ def get_available_companions(char: dict) -> list[str]:
         sub = subs.get(tmpl["class_key"], "").lower()
         if tmpl["subclass_match"] not in sub:
             continue
-        if tmpl.get("requires_summon_action") and key not in active_summons:
+        if tmpl.get("requires_summon_action"):
+            instances = [a for a in active_summons if a == key or a.startswith(key + "#")]
+            if not instances:
+                continue
+            req_infusion = tmpl.get("requires_active_infusion")
+            if req_infusion and req_infusion not in active_infusion_names:
+                continue
+            if key in pending_replacement:
+                continue
+            available.extend(instances)
             continue
         req_infusion = tmpl.get("requires_active_infusion")
         if req_infusion and req_infusion not in active_infusion_names:
@@ -1507,11 +1559,18 @@ def resolve_companion_statblock(key: str, char: dict) -> dict:
     """Compute the actual current numbers for one companion stat block,
     given this character's level/proficiency bonus/spellcasting stats.
     Returns a dict with the same shape as the template but with every
-    {formula} string already filled in with real numbers."""
+    {formula} string already filled in with real numbers.
+
+    key may be an instance-suffixed "template_key#N" id (multi-instance
+    companions like Dancing Item under Creative Crescendo) — the
+    template is looked up by its base key, and the returned
+    display_name gets a "#<n+1>" suffix so multiple active instances
+    are distinguishable in the UI."""
     from dnd_app.data.statblocks import COMPANION_STATBLOCKS, ELDRITCH_CANNON
     from .character import class_levels
 
-    tmpl = COMPANION_STATBLOCKS.get(key) or (ELDRITCH_CANNON if key == "eldritch_cannon" else None)
+    base_key, sep, instance_n = key.partition("#")
+    tmpl = COMPANION_STATBLOCKS.get(base_key) or (ELDRITCH_CANNON if base_key == "eldritch_cannon" else None)
     if not tmpl:
         return {}
     cls_name = tmpl["class_key"]
@@ -1546,6 +1605,8 @@ def resolve_companion_statblock(key: str, char: dict) -> dict:
 
     out = dict(tmpl)
     out["level"] = level
+    if sep and instance_n.isdigit():
+        out["display_name"] = f"{tmpl.get('display_name', base_key)} #{int(instance_n) + 1}"
     out["ac"] = _eval_bonus(tmpl.get("ac_formula", "")).lstrip("+") if tmpl.get("ac_formula") else ""
     if tmpl.get("hp_formula"):
         # Evaluate the arithmetic (formulas use only +, ×, and the
@@ -2376,7 +2437,8 @@ def update_all(char: dict) -> dict:
     # Merge computed resources with existing ones (preserve current values)
     existing_resources = {r["key"]: r for r in char.get("resources", [])}
     new_resources = aggregate_resources(cl, ability_scores, subs, char.get("_choices", {}),
-                                         char.get("optional_rules", {}))
+                                         char.get("optional_rules", {}),
+                                         char.get("edition", "2014"))
 
     # Racial resources — not tied to any class, so added here where the
     # full char dict (race/subrace) is available rather than inside

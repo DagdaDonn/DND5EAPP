@@ -2,9 +2,8 @@
 Immersive Spells (optional rule, default OFF): purely cosmetic, purely
 title-only flavor text for the spell list -- never touches the spell's
 real name, description, tooltip, or any casting mechanics, only what's
-shown on a SpellRow's title label. Three independent situations, each
-checked in order (first match wins) since a character is realistically
-only ever in one of them at a time:
+shown on a SpellRow's title label. Checked in order (first match wins)
+since a character is realistically only ever in one of these at a time:
 
 1. Wild Shaped, and not yet able to actually cast in beast form (no
    Beast Spells -- Circle of the Moon Druid, 18th level): a beast
@@ -18,8 +17,19 @@ only ever in one of them at a time:
    shorthand, single-word spells just get shouted, and anything else
    multi-word collapses to "SMASH!".
 
-3. Paladin with an Oath: every spell title is prefixed with a short
-   phrase themed to that Oath.
+3. Component Restrictions (a separate optional rule -- see
+   core/spell_components.py) actually blocking THIS specific spell
+   right now: Blinded blacks the title out (can't read what you can't
+   see), Gagged muffles it to a word-length-matched "mmmhmmhf", and
+   Restrained turns it into a straining "nngh" -- unlike situations 1
+   and 2 above, this only affects spells that individually need the
+   blocked sense/component, so it's checked per spell rather than as a
+   blanket override, and only when that same optional rule is also on
+   (the visual only ever shows for a spell that's genuinely, mechanically
+   blocked right now -- see spell_component_block_reason()).
+
+4. Warlock/Sorcerer/Cleric/Paladin: every spell title is prefixed with
+   a short phrase themed to that patron/origin/domain/Oath.
 """
 
 # ── 1. Wild Shape beast noise ────────────────────────────────────────────────
@@ -96,12 +106,16 @@ def _stretch_word(word: str, base_sound: str, stretch_idx: int) -> str:
     return result[:1].upper() + result[1:]
 
 
-def _wildshape_spell_title(spell_name: str, beast_name: str) -> str:
-    base_sound, stretch_idx = _get_beast_sound_profile(beast_name)
+def _stretch_all_words(spell_name: str, base_sound: str, stretch_idx: int) -> str:
     words = spell_name.split()
     if not words:
         return spell_name
     return " ".join(_stretch_word(w, base_sound, stretch_idx) for w in words)
+
+
+def _wildshape_spell_title(spell_name: str, beast_name: str) -> str:
+    base_sound, stretch_idx = _get_beast_sound_profile(beast_name)
+    return _stretch_all_words(spell_name, base_sound, stretch_idx)
 
 
 # ── 2. Barbarian Rage ────────────────────────────────────────────────────────
@@ -136,7 +150,29 @@ def _rage_spell_title(char: dict, spell_name: str) -> str:
     return "SMASH!"
 
 
-# ── 3. Thematic prefixes: Warlock patron, Sorcerer origin, Cleric domain,
+# ── 3. Component Restrictions: Blinded/Gagged/Restrained ────────────────────
+
+def _redact_spell_title(spell_name: str) -> str:
+    """Blinded, a sight-required spell, blocked right now: the title is
+    blacked out -- can't read what you can't see."""
+    return " ".join("█" * len(w) for w in spell_name.split())
+
+
+def _gagged_spell_title(spell_name: str) -> str:
+    """Gagged, a verbal-component spell, blocked right now: muffled to
+    a word-length-matched mumble, same mechanic as the Wild Shape beast
+    noise above."""
+    return _stretch_all_words(spell_name, "mmmhmmhf", 0)
+
+
+def _restrained_spell_title(spell_name: str) -> str:
+    """Restrained, a somatic-component spell, blocked right now: the
+    gesture doesn't complete -- a word-length-matched straining grunt,
+    same mechanic as the Wild Shape beast noise above."""
+    return _stretch_all_words(spell_name, "nngh", 0)
+
+
+# ── 4. Thematic prefixes: Warlock patron, Sorcerer origin, Cleric domain,
 #      Paladin Oath ─────────────────────────────────────────────────────────
 
 _WARLOCK_PATRON_PREFIXES = {
@@ -207,14 +243,17 @@ def _match_prefix(subclass_name: str, prefix_map: dict) -> str | None:
 
 # ── Orchestrator ─────────────────────────────────────────────────────────────
 
-def compute_display_spell_title(char: dict, spell_name: str) -> str:
-    """The text a SpellRow's title label should show for spell_name,
-    given the character's current state. Returns spell_name unchanged
-    unless the "Immersive Spells" optional rule is on and one of the
-    situations above applies. Checked in order -- a full override (can't
-    physically speak, or too enraged to do more than shout) outranks a
-    merely thematic prefix, and a character realistically only matches
-    one of these at a time."""
+def compute_display_spell_title(char: dict, spell: dict) -> str:
+    """The text a SpellRow's title label should show for this spell,
+    given the character's current state. Returns the real name
+    unchanged unless the "Immersive Spells" optional rule is on and one
+    of the situations above applies. Checked in order -- a full
+    override (can't physically speak, or too enraged to do more than
+    shout) outranks a per-spell block, which outranks a merely thematic
+    prefix; a character realistically only matches one of these at a
+    time, and the per-spell block only ever applies to spells that
+    individually need whatever's blocked."""
+    spell_name = spell["name"]
     if not char.get("optional_rules", {}).get("immersive_spells", False):
         return spell_name
 
@@ -229,9 +268,28 @@ def compute_display_spell_title(char: dict, spell_name: str) -> str:
     if "Rage" in char.get("active_effects", []):
         return _rage_spell_title(char, spell_name)
 
+    from dnd_app.core.spell_components import spell_component_block_reason
+    block_reason = spell_component_block_reason(char, spell)
+    if block_reason:
+        if block_reason.startswith("Blinded"):
+            return _redact_spell_title(spell_name)
+        if block_reason.startswith("Gagged"):
+            return _gagged_spell_title(spell_name)
+        if block_reason.startswith("Restrained"):
+            return _restrained_spell_title(spell_name)
+
     from dnd_app.core.character import subclasses
     subs = subclasses(char)
 
+    # A multiclass character (e.g. Paladin/Wizard) should only get the
+    # Oath prefix on their actual Paladin spells, not their Wizard
+    # ones too -- checked against the spell's own "classes" list (which
+    # classes can learn it at all), not just "does the character have
+    # any levels in this class." A non-Paladin who knows a Paladin
+    # spell only through some other source (a feat, a racial grant)
+    # correctly never reaches this at all, since subs.get(class_name)
+    # is only non-empty for classes the character actually has levels in.
+    spell_classes = spell.get("classes", [])
     for class_name, prefix_map in (
         ("Warlock", _WARLOCK_PATRON_PREFIXES),
         ("Sorcerer", _SORCERER_ORIGIN_PREFIXES),
@@ -239,7 +297,7 @@ def compute_display_spell_title(char: dict, spell_name: str) -> str:
         ("Paladin", _OATH_PREFIXES),
     ):
         sub = subs.get(class_name, "")
-        if sub:
+        if sub and class_name in spell_classes:
             prefix = _match_prefix(sub, prefix_map)
             if prefix:
                 return prefix + spell_name

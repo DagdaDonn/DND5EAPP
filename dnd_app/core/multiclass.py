@@ -326,12 +326,27 @@ def compute_all_spell_slots(class_levels: dict, subclasses: dict = None) -> dict
 
 def aggregate_resources(class_levels: dict, ability_scores: dict,
                         subclasses: dict = None, choices: dict = None,
-                        optional_rules: dict = None) -> list:
+                        optional_rules: dict = None, edition: str = "2014") -> list:
     """
     Compute all class resources for a multiclassed character.
     Returns list of resource dicts ready for the UI tracker.
-    """
-    from dnd_app.data.classes import CLASS_DICT
+
+    `edition` selects which rule edition's class resource DEFINITIONS to
+    read (2014 PHB vs. 2024 PHB) -- this was previously hardcoded to
+    always use the 2014 CLASS_DICT regardless of the character's actual
+    char["edition"], unlike builder.py/levelup_panel.py/widgets.py,
+    which already correctly branch on it elsewhere. That meant every
+    2024-edition character's class resource counters (Rage, Wild Shape,
+    Ki, Sorcery Points, Channel Divinity, Lay on Hands -- every
+    formula/by_level-driven resource in the game) were silently computed
+    from 2014-edition numbers the whole time, since the two editions'
+    class data files genuinely differ in places (e.g. 2024 Wild Shape is
+    a flat 2 uses with no by_level scaling or "Unlimited at 20" the way
+    2014's is) -- any place the two data files disagree was silently
+    always resolved in 2014's favor."""
+    from dnd_app.data.classes import CLASS_DICT as CLASS_DICT_2014
+    from dnd_app.data.classes_2024 import CLASS_DICT_2024
+    CLASS_DICT = CLASS_DICT_2024 if edition == "2024" else CLASS_DICT_2014
 
     if subclasses is None:
         subclasses = {}
@@ -399,7 +414,21 @@ def aggregate_resources(class_levels: dict, ability_scores: dict,
                 if die:
                     entry["die"] = die
 
-            if formula:    # NOT elif — die_by_level and formula are independent
+            # by_level (above) and formula both compute current_max --
+            # they're two alternate mechanisms for the same field, not
+            # independent like formula/die_by_level are (that pairing is
+            # legitimate: a formula-based current_max with a level-scaled
+            # die size, e.g. Lay on Hands' pool + no die vs. Sneak
+            # Attack's die-only progression). A resource declaring BOTH
+            # by_level and formula used to let formula silently win even
+            # when it was broken (Artificer's Infused Items: a bogus
+            # formula string that wasn't valid arithmetic threw and fell
+            # back to min_val's default of 1, clobbering the correct
+            # by_level-computed max) -- by_level now takes precedence
+            # when both are present, since it's the safer, non-eval
+            # mechanism and nothing legitimately needs formula to win
+            # that fight.
+            if formula and not by_level:
                 # Evaluate simple formulas via safe arithmetic (no eval)
                 try:
                     from dnd_app.core.safe_eval import safe_eval_arith
@@ -411,6 +440,15 @@ def aggregate_resources(class_levels: dict, ability_scores: dict,
                     f = f.replace("CON_mod", str(ability_mods.get("CON", 0)))
                     f = f.replace("STR_mod", str(ability_mods.get("STR", 0)))
                     f = f.replace("DEX_mod", str(ability_mods.get("DEX", 0)))
+                    # PB (proficiency bonus): several 2024 PHB features are
+                    # expressed directly in terms of it (e.g. Paladin's
+                    # Divine Sense, "a number of times equal to your
+                    # Proficiency Bonus") rather than an ability modifier
+                    # the way their 2014 equivalents were -- there was no
+                    # placeholder for this at all before, so a 2024-only
+                    # feature needing it had no correct way to express its
+                    # formula.
+                    f = f.replace("PB", str(pb))
                     val = max(1, int(safe_eval_arith(f)))
                     min_v = res.get("min_val", 1)
                     entry["current_max"] = max(min_v, val)
@@ -690,7 +728,7 @@ def _add_subclass_resources(resources: list, class_levels: dict,
         # of 1st level or higher (not a rest) — "LR" here just sets the
         # starting value; the player manually restores it via the
         # pool's own +/- control when that trigger happens.
-        if _has("Wizard", "abjuration"):
+        if _has("Wizard", "abjuration", "abjurer"):
             _add("Arcane Ward", "arcane_ward", "LR",
                  max(0, 2 * wiz_lvl + ability_mods.get("INT", 0)), "pool",
                  "Absorbs damage before it reaches your HP. Recharges (up to its max) by "
@@ -699,7 +737,7 @@ def _add_subclass_resources(resources: list, class_levels: dict,
         # Divination: Portent — 2 dice at 2nd level, 3 at 14th (Greater
         # Portent): "you roll three d20s for your Portent feature,
         # rather than two."
-        if _has("Wizard", "divination"):
+        if _has("Wizard", "divination", "diviner"):
             portent_dice = 3 if wiz_lvl >= 14 else 2
             _add("Portent", "portent", "LR",
                  portent_dice, "uses",
@@ -1087,16 +1125,26 @@ def sneak_attack_dice(rogue_levels: int) -> str:
 
 
 def get_saving_throw_profs(class_levels: dict) -> set:
-    """Return union of all saving throw proficiencies across classes."""
+    """Return saving throw proficiencies from the character's STARTING
+    class only. PHB p.164 (Multiclassing Proficiencies): saving throw
+    proficiency is deliberately NOT part of what a multiclass grants —
+    only the very first class taken at 1st level gives it. This
+    previously unioned save_profs across every class in class_levels,
+    incorrectly granting a multiclassed character proficiency in every
+    one of their classes' saves (e.g. a Fighter 1/Wizard 5 showing
+    proficient in INT/WIS saves from Wizard, on top of the correct
+    STR/CON from Fighter).
+
+    Relies on class_levels preserving insertion order matching
+    char["classes"] (true for every real caller — they all build it via
+    core.character.class_levels(char), a dict comprehension over that
+    list in order), so its first key is reliably the starting class."""
     from dnd_app.data.classes import CLASS_DICT
-    profs = set()
-    for cls_name, level in class_levels.items():
-        if level <= 0:
-            continue
-        cls = CLASS_DICT.get(cls_name)
-        if cls:
-            profs.update(cls.get("save_profs", []))
-    return profs
+    starting_class = next(iter(class_levels), None)
+    if not starting_class:
+        return set()
+    cls = CLASS_DICT.get(starting_class)
+    return set(cls.get("save_profs", [])) if cls else set()
 
 
 def get_armor_profs(class_levels: dict) -> str:

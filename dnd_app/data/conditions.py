@@ -41,6 +41,16 @@ CONDITIONS = {
         ],
         "source": "PHB p.290",
     },
+    "Gagged": {
+        "icon": "🤐",
+        "color": "#8a6d3b",
+        "effects": [
+            "A gagged creature can't speak and automatically fails any check or effect that requires speaking.",
+            "Spells requiring a verbal component can't be cast.",
+        ],
+        "source": "Homebrew — not an official condition; pairs with the "
+                   "\"Component Restrictions\" optional rule.",
+    },
     "Grappled": {
         "icon": "🤼",
         "color": "#c9921a",

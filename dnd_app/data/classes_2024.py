@@ -488,12 +488,12 @@ ALL_CLASSES_2024 = [
         resources=[
             dict(name="Second Wind", key="second_wind", reset="LR", track="uses",
                  by_level={1:1,4:2,8:3,12:4}),
-            dict(name="Action Surge", key="action_surge", reset="SR", track="uses",
+            dict(name="Action Surge", key="action_surge", reset="LR", track="uses",
                  by_level={2:1,17:2}),
             dict(name="Indomitable", key="indomitable", reset="LR", track="uses",
                  by_level={9:1,13:2,17:3}),
             dict(name="Superiority Dice (Battle Master)", key="sup_dice",
-                 reset="SR", track="current_max",
+                 reset="LR", track="current_max",
                  die_by_level={3:"d8",10:"d10",18:"d12"},
                  by_level={3:4,7:5,15:6}, subclass="Battle Master"),
         ],
@@ -547,7 +547,7 @@ ALL_CLASSES_2024 = [
         },
         subclasses=['Warrior of Mercy', 'Warrior of Shadow', 'Warrior of the Elements', 'Warrior of the Open Hand'],
         resources=[
-            dict(name="Focus Points (Ki)", key="ki", formula="level", reset="SR", track="current_max"),
+            dict(name="Focus Points (Ki)", key="ki", formula="level", reset="SR/LR", track="current_max"),
             dict(name="Martial Arts Die", key="martial_arts_die", track="info",
                  by_level={1:"d6",5:"d8",11:"d10",17:"d12"}),
         ],
@@ -600,7 +600,16 @@ ALL_CLASSES_2024 = [
             dict(name="Lay on Hands", key="loh", formula="5*level", reset="LR", track="pool"),
             dict(name="Channel Divinity", key="channel_div", reset="LR", track="uses",
                  by_level={2:2,10:3}, sr_recover=1),
-            dict(name="Divine Sense", key="divine_sense", formula="WIS_mod", reset="LR", track="uses"),
+            # 2024 PHB (this class's own feature text above, 1st level:
+            # "Prof mod uses/LR") changed this from 2014's "1 + CHA
+            # modifier" to a flat Proficiency Bonus -- was "WIS_mod",
+            # which doesn't match either the old or new rule and wasn't
+            # even a supported placeholder's correct use here (Paladin
+            # has no WIS-based features); silently floored to 1 use at
+            # every level via aggregate_resources()'s max(1, ...) formula
+            # floor, though this bug was unreachable before edition was
+            # threaded through (see aggregate_resources()'s edition param).
+            dict(name="Divine Sense", key="divine_sense", formula="PB", reset="LR", track="uses"),
             dict(name="Divine Smite (free cast)", key="smite_free", formula="1", reset="LR", track="uses"),
         ],
         level_choices={
@@ -809,7 +818,7 @@ ALL_CLASSES_2024 = [
         },
         subclasses=['Archfey Patron', 'Celestial Patron', 'Fiend Patron', 'Great Old One Patron', 'Undead Patron'],
         resources=[
-            dict(name="Pact Magic Slots", key="pact_slots", reset="SR", track="current_max",
+            dict(name="Pact Magic Slots", key="pact_slots", reset="SR/LR", track="current_max",
                  pact_level_by_level=WARLOCK_PACT_LEVEL_2024),
             dict(name="Magical Cunning", key="magical_cunning", formula="1", reset="LR", track="uses"),
             dict(name="Mystic Arcanum (6th)", key="arcanum_6", formula="1", reset="LR",

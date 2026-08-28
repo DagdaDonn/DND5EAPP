@@ -1066,14 +1066,12 @@ COMPANION_STATBLOCKS = {
         "source": "Bard (College of Creation), 6th level \u2014 via Animating Performance",
         "requires_summon_action": True,
         "summon_resource_key": "dancing_item_summon",
-        # NOTE: Creative Crescendo (14th level) lets the character have
-        # multiple Dancing Items active at once (CHA mod count) — this
-        # single-instance-per-key tracking model doesn't yet represent
-        # that; a 14th+ level College of Creation Bard is limited to
-        # tracking one Dancing Item's HP/active-state through this UI
-        # even though the real rule allows more. Known limitation, not
-        # silently wrong — the single-item case (the common one for
-        # most of the class's career) is handled correctly.
+        # Creative Crescendo (14th level): lets the character have a
+        # number of animated objects active at once equal to their CHA
+        # modifier, rather than just one. Handled via
+        # calculator.companion_max_simultaneous() and instance-suffixed
+        # "dancing_item#N" ids in char["active_summoned_companions"] —
+        # see get_available_companions()/_summon_companion().
         "size": "Large or smaller", "creature_type": "construct",
         "ac_formula": "16",
         "hp_formula": "10 + 5 \u00d7 {level}",

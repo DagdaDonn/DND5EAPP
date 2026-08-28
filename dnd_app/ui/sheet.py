@@ -47,6 +47,7 @@ from dnd_app.core.multiclass import (
 from dnd_app.core.builder import rebuild
 from dnd_app.core.controller import CharacterController
 from dnd_app.core.magic_items import concentration_save, start_concentration, drop_concentration
+from dnd_app.core.spell_components import spell_component_block_reason
 from dnd_app.core.save_load import (
     save_character, load_character, list_saved_characters, character_filename, validate_character,
 )
@@ -129,6 +130,15 @@ WILDSHAPE_BLOCKED_FEATURES = {
     "arcane shot", "magic arrow", "curving shot", "ever-ready shot",
     "kensei's shot",
 }
+
+# Combat-duration on/off active_effects toggles (Rage, Reckless Attack,
+# Bladesong, etc.) that share a resource pool -- using the resource
+# both flips the effect on and spends a use. Previously duplicated
+# verbatim in two different methods' local scope (each with its own
+# "must be kept in sync" comment); a rest handler needs the same set
+# too (see _short_rest()/_long_rest()), so this is now the one shared
+# definition all three read.
+RESOURCE_POOL_TOGGLES = {"Hybrid Transformation", "Rage", "Form of Dread", "Starry Form", "Reckless Attack", "Frenzy", "Sacred Weapon", "Invincible Conqueror", "Exalted Champion", "Peerless Athlete", "Hexblade's Curse", "Bladesong", "Radiant Soul (Aasimar)", "Necrotic Shroud", "Gem Flight", "Shifting", "Vow of Enmity", "Living Legend", "Mortal Bulwark", "Elder Champion", "Elemental Gift", "Writhing Tide", "Otherworldly Wings", "Trance of Order", "Umbral Form", "Ghost Walk", "Steps of Night", "Arms of the Astral Self", "Awakened Astral Self", "Giant's Might", "Aspect of the Wyrm", "Spirit Totem", "Radiant Consumption", "Maelstrom Aura"}
 
 ABILITIES = ["STR","DEX","CON","INT","WIS","CHA"]
 AB_FULL   = {"STR":"Strength","DEX":"Dexterity","CON":"Constitution",
@@ -626,6 +636,19 @@ class RestOptionsDialog(QDialog):
                 "kind": "eladrin_season",
                 "label": "Change Eladrin season",
                 "detail": "Changes which additional effect your Fey Step bonus action has.",
+            })
+        # Githyanki (MPMM)'s Astral Knowledge / Astral Elf's Astral Trance:
+        # both grant "proficiency in one skill and with one weapon or tool
+        # of your choice ... until the end of your next long rest" —
+        # re-chosen every long rest, not a one-time pick.
+        if self.rest_type == "long" and race in ("Githyanki (MPMM)", "Astral Elf") and \
+                char.get("_choices", {}).get("astral_knowledge_skill"):
+            trait_name = "Astral Knowledge" if race == "Githyanki (MPMM)" else "Astral Trance"
+            opts.append({
+                "kind": "astral_knowledge_swap",
+                "label": f"Re-choose {trait_name}'s skill and weapon/tool proficiencies",
+                "detail": "Changes which skill and which weapon or tool proficiency you currently "
+                          "have from this trait.",
             })
         # Pact Boon 1-hour rituals are available on short rest (and long rest), since a short rest is defined as being at least an hour.
         pact_choice = char.get("_choices", {}).get("warlock_pact_boon", [])
@@ -1458,7 +1481,7 @@ class CharacterSheet(QWidget):
             return
         from dnd_app.ui.immersive_spells import compute_display_spell_title
         for row in self._spell_rows:
-            row.set_display_name(compute_display_spell_title(self.char, row.spell["name"]))
+            row.set_display_name(compute_display_spell_title(self.char, row.spell))
 
     def _sync_infusions_tab(self):
         """Add/remove the Infusions tab as eligibility changes, and refresh
@@ -1525,9 +1548,17 @@ class CharacterSheet(QWidget):
                             dice_spent += 1
                             break
                 char["current_hp"] = min(mx, cur + healed)
-        # Reset SR resources
+        # Reset SR resources. Was ("SR","sr") only -- silently excluded
+        # every resource tagged the compound "SR/LR" (Hexblade's Curse,
+        # Misty Escape, Indestructible Life, Mutagens, Control Undead,
+        # Vow of Enmity, Favored by the Gods, Firbolg Magic, and now
+        # Wild Shape), which is a real, distinct value used elsewhere in
+        # this very file (RESET_COLORS above) and is the whole point of
+        # a prior "SR vs SR/LR" audit that retagged those 8 resources to
+        # it -- but that audit only fixed the TAG, not this loop, so
+        # none of them were actually resetting via the real Rest button.
         for r in char.get("resources", []):
-            if r.get("reset") in ("SR", "sr"):
+            if r.get("reset") in ("SR", "sr", "SR/LR"):
                 r["current"] = r.get("current_max") or r.get("max", 0)
         # Font of Inspiration (Bard 5+): Bardic Inspiration also recovers on
         # a short rest, even though its base resource is flagged LR-only.
@@ -1541,6 +1572,7 @@ class CharacterSheet(QWidget):
         # Relentless Rage's DC resets to 10 after a short or long rest
         char["_relentless_rage_uses"] = 0
         expired = self._clear_expired_active_effects(("short",))
+        expired += self._clear_active_toggles()
         update_all(char)
         self.ctrl.refresh()
         self._mark_dirty()
@@ -1565,9 +1597,12 @@ class CharacterSheet(QWidget):
         # depending on class layout.
         from dnd_app.core.calculator import restore_hit_dice_pool
         restore_hit_dice_pool(char)
-        # Reset all LR resources
+        # Reset all LR (and SR, and SR/LR) resources -- see the matching
+        # note in _short_rest() above; this loop was already broad
+        # enough to catch plain "SR" but still missed "SR/LR" the same
+        # way.
         for r in char.get("resources", []):
-            if r.get("reset") in ("LR", "lr", "SR", "sr"):
+            if r.get("reset") in ("LR", "lr", "SR", "sr", "SR/LR"):
                 r["current"] = r.get("current_max") or r.get("max", 0)
         # Reset death saves
         char["death_saves"] = {"successes": 0, "failures": 0}
@@ -1578,6 +1613,16 @@ class CharacterSheet(QWidget):
         # Reduce exhaustion
         char["exhaustion"] = max(0, char.get("exhaustion", 0) - 1)
         expired = self._clear_expired_active_effects(("short", "long"))
+        expired += self._clear_active_toggles()
+        # A long rest is 8 hours -- well beyond any spell's concentration
+        # duration -- so whatever was being concentrated on has long since
+        # ended by the time the rest completes. Wasn't cleared here
+        # before, so a stale "concentrating on X" indicator could persist
+        # indefinitely across rests with nothing left to justify it.
+        was_concentrating = self.char.get("concentration", {}).get("spell")
+        if was_concentrating:
+            drop_concentration(char)
+            expired.append(f"concentration on {was_concentrating}")
         rebuild(char); update_all(char)
         self.ctrl.refresh()
         self._mark_dirty()
@@ -1588,6 +1633,25 @@ class CharacterSheet(QWidget):
         else:
             self._toast(f"🌙 Long rest complete — HP, slots & resources restored\n"
                         f"{random_long_rest_dream()}")
+
+    def _clear_active_toggles(self) -> list[str]:
+        """Clear any RESOURCE_POOL_TOGGLES member (Rage, Reckless Attack,
+        Bladesong, Hexblade's Curse, etc.) still marked active in
+        active_effects when a rest completes. These are all
+        combat-duration on/off states -- by the time a short rest (at
+        least an hour, RAW) or long rest (8 hours) has actually
+        completed, every one of them would already have naturally ended
+        long before the rest even started, whether or not the player
+        remembered to manually toggle it off. Previously only each
+        toggle's own RESOURCE reset (uses remaining) was restored by a
+        rest; the on/off state itself was left stuck active indefinitely
+        (a level-up next session could still show "Rage: ON" from days
+        ago), which is a different bug from the resource not resetting."""
+        fx = self.char.get("active_effects", [])
+        cleared = [name for name in fx if name in RESOURCE_POOL_TOGGLES]
+        for name in cleared:
+            fx.remove(name)
+        return cleared
 
     def _clear_expired_active_effects(self, categories: tuple[str, ...]) -> list[str]:
         """Remove active_effects (mainly consumable potions) whose
@@ -1746,6 +1810,27 @@ class CharacterSheet(QWidget):
                 char.setdefault("_choices", {})["lunar_phase"] = [choice]
                 self._toast(f"🌙 Lunar phase changed to {choice}")
                 changed_anything = True
+
+        if "astral_knowledge_swap" in selected:
+            from dnd_app.ui.levelup_panel import ALL_SKILLS
+            from dnd_app.data.items import WEAPON_NAMES, ALL_TOOLS
+            race = char.get("species") or char.get("race", "")
+            trait_name = "Astral Knowledge" if race == "Githyanki (MPMM)" else "Astral Trance"
+            current_sk = char.get("_choices", {}).get("astral_knowledge_skill", [])
+            sk_choice, ok = QInputDialog.getItem(
+                self, trait_name, "New skill proficiency:", ALL_SKILLS,
+                ALL_SKILLS.index(current_sk[0]) if current_sk and current_sk[0] in ALL_SKILLS else 0, False)
+            if ok and sk_choice:
+                char.setdefault("_choices", {})["astral_knowledge_skill"] = [sk_choice]
+                wt_pool = WEAPON_NAMES + ALL_TOOLS
+                current_wt = char.get("_choices", {}).get("astral_knowledge_weapon_or_tool", [])
+                wt_choice, ok2 = QInputDialog.getItem(
+                    self, trait_name, "New weapon or tool proficiency:", wt_pool,
+                    wt_pool.index(current_wt[0]) if current_wt and current_wt[0] in wt_pool else 0, False)
+                if ok2 and wt_choice:
+                    char.setdefault("_choices", {})["astral_knowledge_weapon_or_tool"] = [wt_choice]
+                    self._toast(f"✨ {trait_name}: {sk_choice}, {wt_choice}")
+                    changed_anything = True
 
         if changed_anything:
             _rebuild(char); _update_all(char)
@@ -2362,6 +2447,9 @@ class CharacterSheet(QWidget):
         for i, cb in enumerate(self._death_fail):
             cb.setChecked(i < ds.get("failures", 0))
             cb.stateChanged.connect(self._on_death_save_changed)
+        if hasattr(self, "_death_status_lbl"):
+            self._death_status_lbl.setText(
+                self._death_status_text(ds.get("successes", 0), ds.get("failures", 0)))
         active = set(self.char.get("conditions", []))
         for cond, cb in self._cond_checks.items():
             cb.blockSignals(True)
@@ -2370,10 +2458,24 @@ class CharacterSheet(QWidget):
             cb.stateChanged.connect(lambda s, c=cond: self._on_condition_changed(c, bool(s)))
         self._death_cond_bound = True
 
+    @staticmethod
+    def _death_status_text(succ: int, fail: int) -> str:
+        if fail >= 3:
+            return "DEAD"
+        if succ >= 3:
+            return "STABLE"
+        if fail == 2:
+            return "1 more failure = death"
+        if succ >= 1 or fail >= 1:
+            return f"{succ} success, {fail} failure" + ("s" if fail != 1 else "")
+        return "Rolling to live or die"
+
     def _on_death_save_changed(self):
         succ = sum(1 for cb in self._death_success if cb.isChecked())
         fail = sum(1 for cb in self._death_fail if cb.isChecked())
         self.char["death_saves"] = {"successes": min(3, succ), "failures": min(3, fail)}
+        if hasattr(self, "_death_status_lbl"):
+            self._death_status_lbl.setText(self._death_status_text(succ, fail))
         if fail >= 3:
             self._show_death_screen()
         elif succ >= 3:
@@ -2704,6 +2806,9 @@ class CharacterSheet(QWidget):
             cb.blockSignals(True)
             cb.setChecked(i < ds.get("failures", 0))
             cb.blockSignals(False)
+        if hasattr(self, "_death_status_lbl"):
+            self._death_status_lbl.setText(
+                self._death_status_text(ds.get("successes", 0), ds.get("failures", 0)))
         if hasattr(self, "_cond_checks"):
             active = set(self.char.get("conditions", []))
             for cond, cb in self._cond_checks.items():
@@ -3388,28 +3493,67 @@ class CharacterSheet(QWidget):
         ctrl_row.addWidget(self._hp_amt); ctrl_row.addWidget(dmg_btn); ctrl_row.addWidget(heal_btn)
         ctrl_row.addStretch()
         hpcl.addLayout(ctrl_row)
-        # Death saves
-        self._death_saves_container = QWidget(); self._death_saves_container.setStyleSheet("background:transparent;")
+        # Death saves — a genuinely tense moment (0 HP, rolling to live or
+        # die) previously rendered as a single plain, borderless row of
+        # tiny 14px checkboxes with no visual weight at all, easy to miss
+        # entirely next to the rest of the app's card-based styling. Now
+        # its own alert-styled card (only shown at 0 HP to begin with, so
+        # it earns the attention) with bigger pips, a live status line,
+        # and per-pip tooltips explaining the actual rule.
+        self._death_saves_container = QFrame()
+        self._death_saves_container.setStyleSheet(
+            f"QFrame{{background:{qa(CRIMSON,0x14)};border:2px solid {qa(CRIMSON,0x66)};"
+            f"border-radius:8px;}}")
         self._death_saves_container.setVisible(False)
-        death_row = QHBoxLayout(self._death_saves_container)
-        death_row.setContentsMargins(0,2,0,0); death_row.setSpacing(6)
-        death_row.addWidget(_lbl("Death Saves:", TEXT2, FS_SMALL, bold=True, wrap=False))
+        dsl = QVBoxLayout(self._death_saves_container)
+        dsl.setContentsMargins(12,10,12,10); dsl.setSpacing(6)
+
+        ds_hdr = QHBoxLayout(); ds_hdr.setSpacing(8)
+        ds_hdr.addWidget(_lbl("\U0001f480  DEATH SAVING THROWS", CRIM2, FS_SMALL, bold=True, wrap=False))
+        ds_hdr.addStretch()
+        self._death_status_lbl = _lbl("", TEXT2, FS_TINY, bold=True, wrap=False)
+        ds_hdr.addWidget(self._death_status_lbl)
+        dsl.addLayout(ds_hdr)
+
+        pip_tip = ("Roll a d20 at the start of each of your turns while at 0 HP and "
+                   "taking no other action. 10 or higher: success. Below 10: failure. "
+                   "A natural 20 regains 1 HP instead; a natural 1 counts as two failures. "
+                   "3 successes: stable at 0 HP. 3 failures: dead.")
+        pips_row = QHBoxLayout(); pips_row.setSpacing(18)
+
+        succ_block = QVBoxLayout(); succ_block.setSpacing(4)
+        succ_block.addWidget(_lbl("SUCCESSES", GREEN2, FS_TINY, bold=True, wrap=False))
+        succ_pips = QHBoxLayout(); succ_pips.setSpacing(5)
         self._death_success = [QCheckBox() for _ in range(3)]
-        self._death_fail    = [QCheckBox() for _ in range(3)]
-        death_row.addWidget(_lbl("✓", GREEN2, FS_SMALL, wrap=False))
         for cb in self._death_success:
-            cb.setStyleSheet(f"QCheckBox::indicator{{width:14px;height:14px;border-radius:7px;"
-                             f"border:2px solid {GREEN};background:{BG};}}"
-                             f"QCheckBox::indicator:checked{{background:{GREEN2};}}")
-            death_row.addWidget(cb)
-        death_row.addSpacing(6)
-        death_row.addWidget(_lbl("✗", CRIM2, FS_SMALL, wrap=False))
+            cb.setFixedSize(24,24)
+            cb.setToolTip(pip_tip)
+            cb.setStyleSheet(
+                f"QCheckBox::indicator{{width:22px;height:22px;border-radius:11px;"
+                f"border:2px solid {GREEN};background:{BG};}}"
+                f"QCheckBox::indicator:hover{{border-color:{GREEN2};background:{qa(GREEN,0x22)};}}"
+                f"QCheckBox::indicator:checked{{background:{GREEN2};border-color:{GREEN2};}}")
+            succ_pips.addWidget(cb)
+        succ_block.addLayout(succ_pips)
+        pips_row.addLayout(succ_block)
+
+        fail_block = QVBoxLayout(); fail_block.setSpacing(4)
+        fail_block.addWidget(_lbl("FAILURES", CRIM2, FS_TINY, bold=True, wrap=False))
+        fail_pips = QHBoxLayout(); fail_pips.setSpacing(5)
+        self._death_fail = [QCheckBox() for _ in range(3)]
         for cb in self._death_fail:
-            cb.setStyleSheet(f"QCheckBox::indicator{{width:14px;height:14px;border-radius:7px;"
-                             f"border:2px solid {CRIMSON};background:{BG};}}"
-                             f"QCheckBox::indicator:checked{{background:{CRIM2};}}")
-            death_row.addWidget(cb)
-        death_row.addStretch()
+            cb.setFixedSize(24,24)
+            cb.setToolTip(pip_tip)
+            cb.setStyleSheet(
+                f"QCheckBox::indicator{{width:22px;height:22px;border-radius:11px;"
+                f"border:2px solid {CRIMSON};background:{BG};}}"
+                f"QCheckBox::indicator:hover{{border-color:{CRIM2};background:{qa(CRIMSON,0x22)};}}"
+                f"QCheckBox::indicator:checked{{background:{CRIM2};border-color:{CRIM2};}}")
+            fail_pips.addWidget(cb)
+        fail_block.addLayout(fail_pips)
+        pips_row.addLayout(fail_block)
+        pips_row.addStretch()
+        dsl.addLayout(pips_row)
         hpcl.addWidget(self._death_saves_container)
         top_lay.addWidget(hp_card, 4)
 
@@ -3481,7 +3625,7 @@ class CharacterSheet(QWidget):
         exhl.addStretch()
         ccl.addWidget(exh_row)
         self._cond_checks = {}
-        COND_NAMES = ["Blinded","Charmed","Deafened","Frightened",
+        COND_NAMES = ["Blinded","Charmed","Deafened","Frightened","Gagged",
                       "Grappled","Incapacitated","Invisible","Paralyzed",
                       "Petrified","Poisoned","Prone","Restrained","Stunned","Unconscious"]
         cond_grid = QGridLayout(); cond_grid.setSpacing(3)
@@ -4022,7 +4166,6 @@ class CharacterSheet(QWidget):
         # are driven by resource-pool checkboxes elsewhere and have no
         # EFFECT_TABLE entry of their own, but typing "Rage" here should
         # still work rather than being rejected.
-        RESOURCE_POOL_TOGGLES = {"Hybrid Transformation", "Rage", "Form of Dread", "Starry Form", "Reckless Attack", "Frenzy", "Sacred Weapon", "Invincible Conqueror", "Exalted Champion", "Peerless Athlete", "Hexblade's Curse", "Bladesong", "Radiant Soul (Aasimar)", "Necrotic Shroud", "Gem Flight", "Shifting", "Vow of Enmity", "Living Legend", "Mortal Bulwark", "Elder Champion", "Elemental Gift", "Writhing Tide", "Otherworldly Wings", "Trance of Order", "Umbral Form", "Ghost Walk", "Steps of Night", "Arms of the Astral Self", "Awakened Astral Self", "Giant's Might", "Aspect of the Wyrm", "Spirit Totem", "Radiant Consumption", "Maelstrom Aura"}
         valid_names = set(EFFECT_TABLE.keys()) | RESOURCE_POOL_TOGGLES
         name = None
         if typed in valid_names:
@@ -5186,6 +5329,15 @@ class CharacterSheet(QWidget):
         tmpl = COMPANION_STATBLOCKS.get(key)
         if not tmpl:
             return
+        from dnd_app.core.calculator import companion_max_simultaneous, count_active_companion_instances
+        active_now = self.char.get("active_summoned_companions", [])
+        if count_active_companion_instances(key, active_now) >= companion_max_simultaneous(key, self.char):
+            # Defensive cap check — the Summon button is only shown while
+            # under the cap (get_summonable_but_inactive_companions), but
+            # guard here too rather than trusting the UI alone, matching
+            # the resource-charge check just below.
+            self._toast(f"Already at the maximum number of active {tmpl['display_name']}s.")
+            return
         if tmpl.get("summon_uses_wild_shape"):
             if not self._spend_wildshape_use():
                 self._toast("No Wild Shape uses remaining — available again after a short or long rest.")
@@ -5199,12 +5351,25 @@ class CharacterSheet(QWidget):
                     return
                 if res is not None:
                     res["current"] = res.get("current", 1) - 1
+        from dnd_app.core.calculator import resolve_companion_statblock, companion_max_simultaneous
         active = self.char.setdefault("active_summoned_companions", [])
-        if key not in active:
-            active.append(key)
-        from dnd_app.core.calculator import resolve_companion_statblock
-        sb = resolve_companion_statblock(key, self.char)
-        self.char.setdefault("summon_hp_tracking", {})[f"companion_{key}"] = sb.get("hp", 1)
+        if companion_max_simultaneous(key, self.char) > 1:
+            # Multi-instance-capable (Dancing Item + Creative Crescendo):
+            # find the lowest unused instance index rather than always
+            # appending a new one, so a dismissed slot gets reused
+            # instead of instance numbers climbing indefinitely.
+            used = {int(a.split("#", 1)[1]) for a in active if a.startswith(key + "#")}
+            idx = 0
+            while idx in used:
+                idx += 1
+            instance_key = f"{key}#{idx}"
+            active.append(instance_key)
+        else:
+            instance_key = key
+            if key not in active:
+                active.append(key)
+        sb = resolve_companion_statblock(instance_key, self.char)
+        self.char.setdefault("summon_hp_tracking", {})[f"companion_{instance_key}"] = sb.get("hp", 1)
         self._mark_dirty()
         self._refresh_companions_tab()
         self._toast(f"\U0001f409 {tmpl['display_name']} summoned!")
@@ -5385,6 +5550,7 @@ class CharacterSheet(QWidget):
         # prompt card instead of the full stat block, since there's
         # nothing to show HP/AC for until it's actually been summoned.
         from dnd_app.data.statblocks import COMPANION_STATBLOCKS
+        from dnd_app.core.calculator import companion_max_simultaneous, count_active_companion_instances
         for key in summonable:
             tmpl = COMPANION_STATBLOCKS.get(key, {})
             sc = _card(TEAL+"33")
@@ -5398,8 +5564,20 @@ class CharacterSheet(QWidget):
                 res_key = tmpl.get("summon_resource_key")
                 res = next((r for r in self.char.get("resources", []) if r.get("key") == res_key), None)
                 uses_txt = f" ({res['current']}/{res['current_max']} uses left)" if res else ""
-            scl2.addWidget(_lbl(f"Not currently summoned.{uses_txt}", TEXT3, FS_SMALL))
-            summon_btn = QPushButton(f"Summon {tmpl.get('display_name', key)}")
+            # Multi-instance-capable companion with at least one already
+            # active (Dancing Item + Creative Crescendo) — the prompt
+            # still applies (there's room for another simultaneous
+            # instance), but "Not currently summoned" would be wrong.
+            active_n = count_active_companion_instances(key, self.char.get("active_summoned_companions", []))
+            cap = companion_max_simultaneous(key, self.char)
+            if active_n > 0:
+                status_txt = f"{active_n}/{cap} active.{uses_txt}"
+            else:
+                status_txt = f"Not currently summoned.{uses_txt}"
+            scl2.addWidget(_lbl(status_txt, TEXT3, FS_SMALL))
+            btn_label = f"Summon another {tmpl.get('display_name', key)}" if active_n > 0 \
+                else f"Summon {tmpl.get('display_name', key)}"
+            summon_btn = QPushButton(btn_label)
             summon_btn.clicked.connect(lambda checked=False, k=key: self._summon_companion(k))
             scl2.addWidget(summon_btn)
             self._companions_lay.addWidget(sc)
@@ -5514,7 +5692,11 @@ class CharacterSheet(QWidget):
                 hp_lbl_detail.setText(f"HP {v}/{max_hp}" + (f"  ({sb['hit_dice']})" if sb.get("hit_dice") else ""))
                 if v <= 0 and companion_key:
                     from dnd_app.data.statblocks import COMPANION_STATBLOCKS
-                    tmpl = COMPANION_STATBLOCKS.get(companion_key, {})
+                    # companion_key may be an instance-suffixed "key#N" id
+                    # (Dancing Item + Creative Crescendo) — look the
+                    # template up by its base key, same as
+                    # resolve_companion_statblock() does.
+                    tmpl = COMPANION_STATBLOCKS.get(companion_key.split("#", 1)[0], {})
                     if tmpl.get("requires_summon_action"):
                         self._toast(f"\U0001f480 {sb['display_name']} has fallen — re-summon it after a long rest.")
                         self._dismiss_companion(companion_key)
@@ -8900,7 +9082,7 @@ class CharacterSheet(QWidget):
             self._my_spells_lay.insertWidget(ins, hdr)
         from dnd_app.ui.immersive_spells import compute_display_spell_title
         row = SpellRow(spell, prepared, locked=is_bonus,
-                        display_name=compute_display_spell_title(self.char, spell["name"]))
+                        display_name=compute_display_spell_title(self.char, spell))
         from dnd_app.core.calculator import can_ritual_cast
         row.set_can_ritual(can_ritual_cast(self.char, spell))
         row.remove.connect(self._remove_spell_row)
@@ -8994,6 +9176,10 @@ class CharacterSheet(QWidget):
             self._toast(f"\U0001f43e Can't cast {spell['name']} while Wild Shaped — "
                         f"revert to your normal form first")
             return
+        block_reason = spell_component_block_reason(self.char, spell)
+        if block_reason:
+            self._toast(f"🔇 Can't cast {spell['name']} — {block_reason}")
+            return
         base_time = spell.get("casting_time", spell.get("cast_time", "1 action"))
         self._toast(f"📜 Cast {spell['name']} as a ritual — no spell slot used, "
                     f"but casting time is {base_time} + 10 minutes.")
@@ -9003,6 +9189,10 @@ class CharacterSheet(QWidget):
         if self.char.get("_wildshape_active") and not self._has_beast_spells():
             self._toast(f"\U0001f43e Can't cast {spell['name']} while Wild Shaped — "
                         f"revert to your normal form first")
+            return
+        block_reason = spell_component_block_reason(self.char, spell)
+        if block_reason:
+            self._toast(f"🔇 Can't cast {spell['name']} — {block_reason}")
             return
         lvl = spell["level"]
         is_cantrip = (lvl == 0)
@@ -11050,11 +11240,6 @@ class CharacterSheet(QWidget):
                 else:
                     def _use_ability(checked=False, _display=display,
                                      _desc=desc, _src=source, _b=bucket_name):
-                        # Local copy — the RESOURCE_POOL_TOGGLES set used
-                        # elsewhere in this class lives in a different,
-                        # unrelated method's scope and isn't visible here.
-                        # Must be kept in sync with that other definition.
-                        RESOURCE_POOL_TOGGLES = {"Hybrid Transformation", "Rage", "Form of Dread", "Starry Form", "Reckless Attack", "Frenzy", "Sacred Weapon", "Invincible Conqueror", "Exalted Champion", "Peerless Athlete", "Hexblade's Curse", "Bladesong", "Radiant Soul (Aasimar)", "Necrotic Shroud", "Gem Flight", "Shifting", "Vow of Enmity", "Living Legend", "Mortal Bulwark", "Elder Champion", "Elemental Gift", "Writhing Tide", "Otherworldly Wings", "Trance of Order", "Umbral Form", "Ghost Walk", "Steps of Night", "Arms of the Astral Self", "Awakened Astral Self", "Giant's Might", "Aspect of the Wyrm", "Spirit Totem", "Radiant Consumption", "Maelstrom Aura"}
                         key = _display.split('(')[0].strip().lower()
                         # Wild Shape blocks features that need a holy
                         # symbol/spellcasting focus in hand and/or speech —
@@ -11071,6 +11256,22 @@ class CharacterSheet(QWidget):
                             self._toast(f"\U0001f43e Can't use {_display} while Wild Shaped — "
                                         f"your beast form can't perform what it requires "
                                         f"(a held item, speech, an unarmed strike, or casting)")
+                            return
+                        # Wild Shape: unlike a flat toggle (Rage, Reckless
+                        # Attack), actually using this requires picking a
+                        # beast — something only the dedicated card (top of
+                        # this same Combat tab) can do. This generic Use
+                        # button used to fall through to the resource
+                        # fallback below, which would silently spend a use
+                        # and do nothing else: no beast chosen, no HP pool
+                        # switched, _wildshape_active left untouched — a
+                        # spent charge with no visible effect, which is
+                        # exactly what looked like "the counter doesn't
+                        # decrement" (a use WAS spent, just with nothing to
+                        # show for it). Redirects instead of guessing a beast.
+                        if key == "wild shape":
+                            self._toast("🐾 Use the Wild Shape card at the top of this tab to "
+                                        "pick a beast and transform")
                             return
                         # Reckless Attack: a real toggle rather than a
                         # one-off reminder. Doesn't consume a turn slot —
@@ -11289,6 +11490,23 @@ class CharacterSheet(QWidget):
                                             fx.append(_display)
                                         self._refresh_combat_weapons()
                                         self._refresh_effects_list()
+                                        # The Other tab's own "Active" checkbox
+                                        # for this same toggle calls
+                                        # ctrl.refresh() (deferred, same
+                                        # reason as there: not synchronously
+                                        # inside a signal handler) so that
+                                        # update_all() actually applies the
+                                        # effect's real mechanics -- AC,
+                                        # resistances, etc., all keyed off
+                                        # active_effects. This button used to
+                                        # skip that and only call the two
+                                        # narrow refreshers above, so using
+                                        # Rage (or any other toggle) from its
+                                        # action-tab card spent the resource
+                                        # and flipped active_effects, but
+                                        # never actually applied what turning
+                                        # it on is supposed to do.
+                                        QTimer.singleShot(0, self.ctrl.refresh)
                                     self._mark_dirty()
                                     self._mark_turn_used(_b)
                                     self._refresh_action_tabs()

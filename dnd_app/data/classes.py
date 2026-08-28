@@ -372,7 +372,16 @@ ALL_CLASSES = [
         },
         subclasses=["Alchemist","Armorer","Artillerist","Battle Smith"],
         resources=[
-            dict(name="Infused Items", key="infused_items", formula="infuse_by_level",
+            # Was formula="infuse_by_level" alongside by_level -- the two
+            # are NOT mutually exclusive in aggregate_resources() (the
+            # formula branch runs unconditionally after the by_level
+            # branch, deliberately "not elif" so formula-based resources
+            # can also use die_by_level), so this bogus formula string
+            # (not a valid arithmetic expression) threw during eval and
+            # silently overwrote the correct by_level-computed max with
+            # min_val's default of 1 -- every Artificer's Infused Items
+            # counter showed a flat "1/1" regardless of actual level.
+            dict(name="Infused Items", key="infused_items",
                  reset="LR", track="current_max",
                  by_level={2:2,6:3,10:4,14:5,18:6}),
         ],
@@ -568,7 +577,7 @@ ALL_CLASSES = [
             "Zeal Domain (Amonkhet) – martial fervor; bonus attacks, Divine Strike",
         ],
         resources=[
-            dict(name="Channel Divinity", key="channel_divinity", reset="SR", track="uses",
+            dict(name="Channel Divinity", key="channel_divinity", reset="SR/LR", track="uses",
                  by_level={2:1,6:2,18:3}),
             dict(name="Harness Divine Power", key="harness_divine_power", reset="LR", track="uses",
                  by_level={2:1,6:2,18:3}, optional=True),
@@ -685,13 +694,13 @@ ALL_CLASSES = [
             "Samurai (XGE) – Fighting Spirit extra attacks",
         ],
         resources=[
-            dict(name="Second Wind", key="second_wind", formula="1", reset="SR", track="uses"),
-            dict(name="Action Surge", key="action_surge", reset="SR", track="uses",
+            dict(name="Second Wind", key="second_wind", formula="1", reset="SR/LR", track="uses"),
+            dict(name="Action Surge", key="action_surge", reset="SR/LR", track="uses",
                  by_level={2:1,17:2}),
             dict(name="Indomitable", key="indomitable", reset="LR", track="uses",
                  by_level={9:1,13:2,17:3}),
             # Battle Master only
-            dict(name="Superiority Dice (BM)", key="sup_dice", reset="SR", track="current_max",
+            dict(name="Superiority Dice (BM)", key="sup_dice", reset="SR/LR", track="current_max",
                  by_level={3:4,7:5,10:6,15:6},
                  die_by_level={3:"d8",10:"d10",18:"d12"}, subclass="Battle Master"),
         ],
@@ -756,7 +765,7 @@ ALL_CLASSES = [
             "Way of the Sun Soul (SCAG/XGE) – radiant bolts; burning fan",
         ],
         resources=[
-            dict(name="Ki Points", key="ki", formula="level", reset="SR", track="current_max",
+            dict(name="Ki Points", key="ki", formula="level", reset="SR/LR", track="current_max",
                  available_at=2),
             dict(name="Martial Arts Die", key="martial_arts_die", track="info",
                  by_level={1:"d4",5:"d6",11:"d8",17:"d10"}),
@@ -820,7 +829,7 @@ ALL_CLASSES = [
         resources=[
             dict(name="Lay on Hands", key="loh", formula="5*level", reset="LR",
                  track="pool", note="Spend any amount; 5 pts to cure disease/poison"),
-            dict(name="Channel Divinity", key="channel_div", formula="1", reset="SR", track="uses",
+            dict(name="Channel Divinity", key="channel_div", formula="1", reset="SR/LR", track="uses",
                  available_at=3),
             dict(name="Harness Divine Power", key="harness_divine_power", reset="LR", track="uses",
                  by_level={3:1,7:2,15:3}, optional=True),
@@ -1066,7 +1075,7 @@ ALL_CLASSES = [
             "The Undying (SCAG) – immortality; undying nature",
         ],
         resources=[
-            dict(name="Pact Magic Slots", key="pact_slots", reset="SR", track="current_max",
+            dict(name="Pact Magic Slots", key="pact_slots", reset="SR/LR", track="current_max",
                  note="Slot level = see table",
                  pact_level_by_level=WARLOCK_PACT_LEVEL),
             dict(name="Mystic Arcanum (6th)", key="arcanum_6", formula="1", reset="LR",
@@ -1208,9 +1217,9 @@ ALL_CLASSES = [
             "Order of the Profane Soul – warlock-like patron pact",
         ],
         resources=[
-            dict(name="Blood Maledict", key="blood_maledict", reset="SR", track="uses",
+            dict(name="Blood Maledict", key="blood_maledict", reset="SR/LR", track="uses",
                  by_level={1:1,6:2,13:3,17:4}),
-            dict(name="Crimson Rite", key="crimson_rite", reset="SR", track="info",
+            dict(name="Crimson Rite", key="crimson_rite", reset="SR/LR", track="info",
                  note="Bonus action: take necrotic damage equal to one Hemocraft die roll (1d4 at low levels, scaling to 1d10) to activate a known elemental rite on a weapon you hold. Lasts until your next rest; hits with that weapon deal extra damage of the rite's type equal to your Hemocraft die."),
         ],
         level_choices={

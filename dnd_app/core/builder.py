@@ -342,6 +342,21 @@ def rebuild(char: dict) -> None:
         for wname in chosen_weapons:
             grants["weapon_profs"].append(wname)
 
+    # Githyanki (MPMM)'s Astral Knowledge / Astral Elf's Astral Trance:
+    # "proficiency ... with one weapon or tool of your choice ... until
+    # the end of your next long rest" — read fresh from _choices every
+    # rebuild, same reasoning as Weapon Master above, so a later re-pick
+    # (via RestOptionsDialog on a long rest) naturally replaces the old
+    # grant instead of accumulating.
+    astral_wt = char.get("_choices", {}).get("astral_knowledge_weapon_or_tool", [])
+    if astral_wt:
+        from dnd_app.data.items import WEAPON_NAMES, ALL_TOOLS
+        pick = astral_wt[0]
+        if pick in WEAPON_NAMES:
+            grants["weapon_profs"].append(pick)
+        elif pick in ALL_TOOLS:
+            grants["tool_profs"].append(pick)
+
     # ── Write grants back to char ─────────────────────────────────────────────
     char["_grants"] = grants
 
