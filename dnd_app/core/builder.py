@@ -722,6 +722,38 @@ def get_choices_needed(char: dict) -> list:
                         "label": f"Choose {lang_count} language(s) ({bg_name})",
                         "already_chosen": already,
                     })
+            # Some backgrounds (Haunted One, Investigator, Urban Bounty
+            # Hunter, ...) grant a *choice* of skills/tools rather than a
+            # fixed pair — unlike the fixed `skills`/`tools` lists every
+            # other background uses. choice_id deliberately ends in
+            # "_skill_profs"/"_tool_profs" so it flows through the exact
+            # same ChoiceWidget aggregation + apply_choice() pathway
+            # class-level skill/tool choices already use, rather than
+            # needing new dispatch logic.
+            sk_choice = bg.get("skill_choices")
+            if sk_choice:
+                already = choices_made.get("bg_skill_profs", [])
+                if len(already) < sk_choice.get("count", 1):
+                    needed.append({
+                        "id": "bg_skill_profs",
+                        "source": "background", "source_name": bg_name,
+                        "type": "skill_prof", "count": sk_choice.get("count", 1),
+                        "pool": sk_choice.get("pool"),
+                        "label": f"Choose {sk_choice.get('count', 1)} skill proficiencies ({bg_name})",
+                        "already_chosen": already,
+                    })
+            tl_choice = bg.get("tool_choices")
+            if tl_choice:
+                already = choices_made.get("bg_tool_profs", [])
+                if len(already) < tl_choice.get("count", 1):
+                    needed.append({
+                        "id": "bg_tool_profs",
+                        "source": "background", "source_name": bg_name,
+                        "type": "tool_prof", "count": tl_choice.get("count", 1),
+                        "pool": tl_choice.get("pool"),
+                        "label": f"Choose {tl_choice.get('count', 1)} tool proficiencies ({bg_name})",
+                        "already_chosen": already,
+                    })
 
     # ── Class choices ─────────────────────────────────────────────────────────
     for i, cls_entry in enumerate(classes):

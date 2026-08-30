@@ -710,6 +710,58 @@ def _spell_progression_tables_static():
     return None, None, None, prep_ab
 
 
+def _all_relevant_choice_ids(char_snapshot: dict) -> set:
+    """Every pending-choice id structurally relevant to this exact
+    character state, regardless of whether it's already been answered
+    (computed against a scratch copy with _choices cleared, so an
+    already-answered choice still shows up here). Union of every
+    choice-generating function the Choices tab actually combines.
+    Used to diff "before" vs "after" a race/background/class/subclass/
+    level change and prune any choice from the real character's
+    _choices that's no longer relevant — without this, changing away
+    from something never lets you make its choice differently, and can
+    leave an old choice's pool/value silently misapplied to whatever
+    replaced it."""
+    import copy
+    from dnd_app.core.builder import get_choices_needed
+    from dnd_app.ui.levelup_panel import (
+        _get_subclass_choices, _get_race_choices, _get_class_tool_choices,
+        _get_feat_choices, _get_dm_reward_choices, _get_optional_feature_choices,
+    )
+    scratch = copy.deepcopy(char_snapshot)
+    scratch["_choices"] = {}
+    all_choices = (get_choices_needed(scratch) + _get_subclass_choices(scratch)
+                   + _get_race_choices(scratch) + _get_class_tool_choices(scratch)
+                   + _get_feat_choices(scratch) + _get_dm_reward_choices(scratch)
+                   + _get_optional_feature_choices(scratch))
+    return {c["id"] for c in all_choices if "id" in c}
+
+
+# Choice ids from _get_race_choices()/get_choices_needed() that are keyed
+# generically (by choice TYPE, e.g. "race_skill_profs") rather than by the
+# specific race/background name — so _all_relevant_choice_ids()'s before/
+# after diff can't tell "still relevant" from "relevant to a DIFFERENT
+# race/background now, with a completely different pool, but the old
+# answer looks superficially complete". Astral Elf and Githyanki (MPMM)
+# happen to share the same two ids since they're mechanically identical.
+RACE_SCOPED_CHOICE_IDS = {
+    "race_skill_profs", "race_tool_profs", "race_skill_or_tool_profs",
+    "aasimar_revelation", "astral_knowledge_skill",
+    "astral_knowledge_weapon_or_tool", "eladrin_season", "human_extra_language",
+}
+BACKGROUND_SCOPED_CHOICE_IDS = {"bg_languages", "bg_skill_profs", "bg_tool_profs"}
+
+
+def _prune_stale_choices(char: dict, stale_ids: set) -> set:
+    """Remove the given choice ids from char["_choices"] if present.
+    Returns the ids actually removed."""
+    store = char.get("_choices", {})
+    removed = {cid for cid in stale_ids if cid in store}
+    for cid in removed:
+        store.pop(cid, None)
+    return removed
+
+
 class LevelUpMulticlassDialog(QDialog):
     """Unified Level Up / Multiclass panel (BG3-style) — always shows every
     class as a radio button: classes the character already has (labeled
@@ -2588,6 +2640,17 @@ class CharacterSheet(QWidget):
             from dnd_app.data.races import RACE_NAMES
             name, ok = QInputDialog.getItem(self, "Edit Race", "Species / Race:", RACE_NAMES, 0, False)
             if ok and name:
+                old_race = self.char.get("race", "")
+                if name != old_race:
+                    # Race-scoped choice ids are keyed generically by
+                    # choice TYPE ("race_skill_profs" etc.), not by which
+                    # race — cleared before the rebuild below so a picked
+                    # skill/tool/language from the OLD race doesn't get
+                    # silently misapplied to whatever the NEW race's own
+                    # (possibly completely different) choice pool is, and
+                    # the new race's own pending choice actually re-prompts
+                    # instead of looking "already answered".
+                    _prune_stale_choices(self.char, RACE_SCOPED_CHOICE_IDS)
                 self.ctrl.update_many({"race": name, "species": name, "subrace": ""})
                 self._refresh_stat_bar()
                 self._edit_identity("subrace")
@@ -2641,6 +2704,13 @@ class CharacterSheet(QWidget):
             from dnd_app.data.backgrounds import BACKGROUND_NAMES, get_background
             name, ok = QInputDialog.getItem(self, "Edit Background", "Background:", BACKGROUND_NAMES, 0, False)
             if ok and name:
+                old_bg = self.char.get("background", "")
+                if name != old_bg:
+                    # Same reasoning as the race-scoped clear above: bg_skill_profs/
+                    # bg_tool_profs/bg_languages are shared, generic ids used by
+                    # whichever background currently needs a choice, not
+                    # namespaced per background name.
+                    _prune_stale_choices(self.char, BACKGROUND_SCOPED_CHOICE_IDS)
                 self.ctrl.update("background", name)
                 # Changing background here needs the same follow-up
                 # prompts the creation wizard already runs for backgrounds
@@ -3032,10 +3102,6 @@ class CharacterSheet(QWidget):
     def _open_level_down(self):
         """Remove one level from an existing class."""
         from PySide6.QtWidgets import QInputDialog
-        from dnd_app.core.builder import rebuild, get_choices_needed
-        from dnd_app.core.calculator import update_all
-        from dnd_app.ui.levelup_panel import _get_subclass_choices, _get_race_choices, _get_class_tool_choices, _get_dm_reward_choices
-        import copy
         classes = self.char.get("classes", [])
         if not classes:
             return
@@ -3050,29 +3116,16 @@ class CharacterSheet(QWidget):
         if entry["level"] <= 1:
             QMessageBox.information(self, "Minimum", f"{cls_name} is already level 1."); return
 
-        # Diff the full set of structurally-relevant choice IDs (not just
-        # pending ones — a scratch copy with _choices cleared makes every
-        # relevant choice show up as "pending" regardless of whether it
-        # was already answered) before and after the level decrement, and
-        # clear any choice from the real character that's no longer valid
-        # at the new, lower level. Without this, delevelling silently kept
-        # every prior choice (Fighting Style, ASI, subclass picks, etc.)
-        # locked in forever, with no way to ever pick differently.
-        def _relevant_ids(char_snapshot):
-            scratch = copy.deepcopy(char_snapshot)
-            scratch["_choices"] = {}
-            all_choices = (get_choices_needed(scratch) + _get_subclass_choices(scratch)
-                           + _get_race_choices(scratch) + _get_class_tool_choices(scratch)
-                           + _get_dm_reward_choices(scratch))
-            return {c["id"] for c in all_choices if "id" in c}
-
-        old_ids = _relevant_ids(self.char)
+        # Diff the full set of structurally-relevant choice IDs before and
+        # after the level decrement, and clear any choice from the real
+        # character that's no longer valid at the new, lower level.
+        # Without this, delevelling silently kept every prior choice
+        # (Fighting Style, ASI, subclass picks, etc.) locked in forever,
+        # with no way to ever pick differently.
+        old_ids = _all_relevant_choice_ids(self.char)
         entry["level"] -= 1
-        new_ids = _relevant_ids(self.char)
-        removed_ids = old_ids - new_ids
-        choices_store = self.char.get("_choices", {})
-        for cid in removed_ids:
-            choices_store.pop(cid, None)
+        new_ids = _all_relevant_choice_ids(self.char)
+        _prune_stale_choices(self.char, old_ids - new_ids)
 
         self.ctrl.refresh()
         # self.ctrl.refresh() already triggers _populate_subclass_combo()
@@ -7050,7 +7103,23 @@ class CharacterSheet(QWidget):
 
             def _on_change(idx, cn=cname, cb=combo):
                 val = cb.itemData(idx) or ""
+                # Diff relevant choice ids before/after the subclass swap
+                # and clear anything no longer relevant — subclass-scoped
+                # choice ids (rune_knight_runes, kensei_weapons, lunar_phase,
+                # guidance_of_the_spirits_skill, ...) are each named for
+                # their specific subclass, so switching away from Rune
+                # Knight to Battle Master, say, would otherwise leave the
+                # old chosen runes permanently stuck with no way to ever
+                # pick differently, and no re-prompt for the new subclass's
+                # own choices.
+                from dnd_app.core.builder import rebuild as _rebuild
+                from dnd_app.core.calculator import update_all as _update_all
+                old_ids = _all_relevant_choice_ids(self.char)
                 set_subclass(self.char, cn, val)
+                new_ids = _all_relevant_choice_ids(self.char)
+                _prune_stale_choices(self.char, old_ids - new_ids)
+                _rebuild(self.char); _update_all(self.char)
+                self.ctrl.refresh()
                 self._rebuild_features()
                 self._refresh_stat_bar()
                 self._mark_dirty()

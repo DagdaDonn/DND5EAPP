@@ -2204,7 +2204,19 @@ def update_all(char: dict) -> dict:
     """
     cl = class_levels(char)
     subs = subclasses(char)
-    ability_scores = char["abilities"]
+    # Effective ability scores (base + ability_bonuses from ASI/racial
+    # ASI + magic_ability_bonuses from items + ability_overrides), not
+    # just the raw base char["abilities"] — this feeds aggregate_
+    # resources()'s ability-modifier formulas (Bardic Inspiration's
+    # CHA_mod, Hexblade's Curse, War Priest, Momentary Stasis, and
+    # every other ability-mod-driven resource in classes.py/
+    # classes_2024.py/_add_subclass_resources()), so a raw-base-only
+    # dict here meant an ASI, racial ASI, or item bonus to that ability
+    # never actually raised the resource's max uses. ignore_wildshape
+    # matches max-HP's own convention: a resource's max shouldn't
+    # fluctuate just because the character is currently Wild Shaped.
+    ability_scores = {ab: ability_score(char, ab, ignore_wildshape=True)
+                       for ab in ("STR", "DEX", "CON", "INT", "WIS", "CHA")}
     total = total_level(char)
 
     if total == 0:

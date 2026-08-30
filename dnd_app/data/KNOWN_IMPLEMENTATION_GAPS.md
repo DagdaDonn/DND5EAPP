@@ -9217,3 +9217,178 @@ effects regression: both 0 errors. Also directly constructed the real
 `_build_statblock_card()` widget for a Dancing Item instance to confirm
 the HP-spinbox handler closures (which read `companion_key` for the
 death-handling branch fixed above) don't crash.
+
+## Two user-reported bugs: ability score increases weren't reaching resource formulas, and 3 backgrounds had no skill/tool chooser
+
+**Bardic Inspiration (and every other ability-modifier-based resource)
+didn't scale when Charisma went up.** Traced this to `update_all()`
+building the `ability_scores` dict it hands to `aggregate_resources()`
+straight from `char["abilities"]` — the raw base scores only, not the
+effective score `ability_score()`/`ability_mod()` (the canonical,
+correct accessor used everywhere else) actually returns, which also
+folds in `ability_bonuses` (ASI choices, racial ASI), `magic_ability_bonuses`
+(item bonuses), and `ability_overrides`. Any resource whose `formula`
+references `CHA_mod`/`WIS_mod`/`INT_mod`/`CON_mod`/`STR_mod`/`DEX_mod`
+was silently using the character's un-bonused base ability score for
+its max-uses calculation — not just Bardic Inspiration, but every
+formula-driven resource across `classes.py`/`classes_2024.py` and
+`_add_subclass_resources()` (Hexblade's Curse, War Priest, Momentary
+Stasis, Flash of Genius, Arcane Jolt, Cavalier's Unwavering Mark, and
+more). Fixed by building `ability_scores` from `ability_score(char, ab,
+ignore_wildshape=True)` for all six abilities instead of reading
+`char["abilities"]` directly (`ignore_wildshape=True` matches max-HP's
+own established convention — a resource's max shouldn't fluctuate just
+because the character happens to be currently Wild Shaped).
+
+Verified directly: a level-4 Bard with CHA 16 (+3) shows 3 Bardic
+Inspiration uses; applying a +2 CHA ASI (the real player-facing path —
+`_choices["<class>_asi_N"] = ["asi:CHA:2"]`) correctly raises it to 4
+without resetting uses already spent; a +2 CHA magic item bonus
+(`magic_ability_bonuses`) does the same. Full 1194-combination
+class/subclass/level/edition sweep and 1190-item magic-item-effects
+regression: both 0 errors.
+
+**3 backgrounds silently granted zero real proficiencies instead of
+letting the player choose.** Every background in this app's data model
+assumed fixed (non-choice) skills/tools — correct for the overwhelming
+majority of real backgrounds, but Haunted One (CoS), Investigator
+(VRGtR), and Urban Bounty Hunter (SCAG) all genuinely offer the player
+a choice in their real rule text. That real text was already
+correctly *described* in this app's data (e.g. "Choose 2: Arcana,
+Investigation, Religion, or Survival"), but stored as a single literal
+string inside the `skills`/`tools` list — which then got applied
+completely literally as if it were an actual skill/tool name. A
+Haunted One character's `char["skills"]` ended up with a key literally
+named `"Choose 2: Arcana, Investigation, Religion, or Survival"` set
+to proficient, and none of the 4 real listed skills ever became
+proficient at all. Same shape of bug for Investigator's skills and
+Urban Bounty Hunter's skills *and* tools.
+
+Fixed by adding real `skill_choices`/`tool_choices` fields to the
+background data model (`{"count": N, "pool": [...]}`, mirroring the
+class-level `skill_choices`/`skill_count` pattern already used for
+class skill picks) and a new choice-card block in
+`get_choices_needed()`. Deliberately used `choice_id`s ending in
+`_skill_profs`/`_tool_profs` (`"bg_skill_profs"`/`"bg_tool_profs"`) so
+the pick flows through `ChoiceWidget._on_confirmed()`'s existing
+aggregation dispatch unchanged — no new application logic needed, just
+the missing card. Converted all 3 backgrounds' already-correct
+descriptive text into real structured pools rather than guessing new
+content.
+
+**Also found, fixed as a smaller version of the same bug**: House
+Agent (ERLW) has the identical "placeholder text applied as a literal
+tool name" problem, but its real grant depends on which Dragonmarked
+House the character belongs to — a two-tier choice (pick a House,
+then that House's own fixed 2-tool list) this app has no "House"
+concept to hang a chooser off of at all. Rather than build a new
+character-model concept to solve one background, emptied its bogus
+`tools` list so it stops granting a fake proficiency — no grant is
+more honest than a wrong one. Left as a known, explicitly narrower
+limitation than the other 3 (which are now fully fixed with a real
+chooser).
+
+Verified: all 4 background fixes confirmed via the real
+`ChoiceWidget._on_confirmed()` UI-layer dispatch (not just the
+core `apply_choice()` fallback, which — a separate, smaller,
+not-user-reported gap noted here rather than fixed — only mirrors the
+skill-aggregation branch, not the tool one; irrelevant to this fix
+since these choice_ids are handled by `_on_confirmed()` directly, but
+worth knowing about for any future caller that calls `apply_choice()`
+directly instead of going through the real choice-card UI). Swept all
+99 backgrounds through `rebuild()`/`get_choices_needed()`: 0 errors.
+Full 1194-combination class/subclass/level/edition sweep and 1190-item
+magic-item-effects regression: both 0 errors.
+
+## Stale choices left hanging on race/background/subclass change and delevel, plus the background choice fix's own missing wiring
+
+User asked directly whether the background skill/tool chooser fix
+actually reached the "Edit Background" button on the Choices tab
+(post-creation background swap), not just the initial creation-time
+pending-choice card — it didn't. Investigating that turned up the same
+gap for race and subclass, and an incomplete version of an
+already-shipped fix for delevelling.
+
+**The core problem**: several `_choices` keys are *generic*, keyed by
+choice *type* rather than by the specific race/background/subclass
+that currently needs them — `race_skill_profs`/`race_tool_profs`/
+`race_skill_or_tool_profs`/`astral_knowledge_skill`/etc. are shared
+across every race that ever needs that shape of choice; `bg_skill_
+profs`/`bg_tool_profs`/`bg_languages` likewise across backgrounds.
+Swapping race or background via the Choices tab's "Edit Race"/"Edit
+Background" dialogs changed the character's race/background value but
+never touched `_choices` at all. Two distinct symptoms from the same
+root cause: (1) a skill/tool/language picked for the *old*
+race/background stayed recorded as if it were a valid answer for the
+*new* one, even though the new one's pool of options is usually
+completely different — the pending-choice card wouldn't even
+re-appear, since `len(already_chosen) >= count` looked satisfied; (2)
+for the temporary, dynamically-checked Astral Knowledge/Astral Trance
+mechanic specifically, switching to a different race left the old
+skill proficiency and weapon/tool grant permanently active, since
+nothing ever cleared the `_choices` value it reads live.
+
+Subclass combo changes had the identical shape of problem for
+subclass-scoped choice ids (`rune_knight_runes`, `kensei_weapons`,
+`lunar_phase`, `guidance_of_the_spirits_skill`, `four_elements_
+disciplines`, and more) — switching away from Rune Knight to Battle
+Master left the old chosen runes stuck in `_choices` forever, and (a
+separate but adjacent bug) the subclass-combo change handler never
+called `rebuild()`/`update_all()` at all, only refreshed the Features
+tab's *display* — so subclass-driven resources (Giant's Might, Kensei
+weapons, etc.) never actually recomputed either, only the text did.
+
+Delevelling (`_open_level_down()`) already had a real fix for this
+exact class of bug from earlier in this session — diff the full set of
+structurally-relevant choice ids before and after the level decrement
+(computed against a scratch character copy with `_choices` cleared, so
+already-answered choices still show up in the diff), and prune
+anything no longer relevant. But its own list of choice-generating
+functions to include in that diff was incomplete — missing
+`_get_feat_choices()` and `_get_optional_feature_choices()` — so a
+feat's own sub-choice (Elemental Adept's damage type, Skilled's skill
+picks, etc.) or an optional class feature's choice (Canny, Primal
+Knowledge) could still survive a delevel that should have invalidated
+it.
+
+**Fixed by extracting the delevel handler's diffing logic into two
+shared, module-level helpers** (`_all_relevant_choice_ids()`,
+`_prune_stale_choices()`) in `sheet.py`, now completed with the 2
+missing choice-generating functions, and reused for the subclass
+combo's change handler (which now also calls `rebuild()`/`update_all()`
+for real, not just a display refresh). For race and background
+specifically — where the diffing approach can't distinguish "still
+relevant" from "relevant to a *different* race/background now, with a
+different pool" — added two explicit, enumerated sets
+(`RACE_SCOPED_CHOICE_IDS`, `BACKGROUND_SCOPED_CHOICE_IDS`) that are
+unconditionally cleared whenever the race/background value actually
+changes, applied *before* the resulting rebuild so the stale value
+can't get re-applied to the new race/background even transiently.
+
+**Known, deliberate limitation, consistent with how the rest of this
+app already works**: clearing a stale `_choices` entry stops it from
+being treated as "answered" and stops any choice-driven effect that's
+computed *dynamically* from the live `_choices` value (Astral
+Knowledge/Trance's skill check, bonus spell grants, etc.) — but for
+choices applied the *standard* way (`char["skills"][skill] = 2`,
+matching every class/feat/race skill grant in the entire app), the
+skill proficiency itself doesn't retroactively un-grant, since
+`char["skills"]` is a permanent, monotonically-increasing store that
+nothing in this codebase downgrades automatically (the "Reset Manual
+Changes" button exists specifically because of this). Verified this is
+consistent, not a new gap introduced here: switching Investigator
+(Insight/Perception picked) to Haunted One correctly clears the choice
+record and re-prompts for Haunted One's own (different) skill pool,
+but the old Insight proficiency itself remains until a manual reset —
+exactly matching how an ASI reassignment or a removed feat already
+behaves everywhere else in this app.
+
+Verified directly: background swap (Investigator → Haunted One)
+correctly clears the stale choice record and re-prompts for the new
+background's own pool; race swap (Githyanki (MPMM) → Human) correctly
+clears Astral Knowledge's choice AND its dynamically-computed skill
+bonus drops back to baseline immediately; subclass swap (Rune Knight →
+Battle Master) correctly clears the chosen runes and actually
+recomputes resources, not just display text. Full 1194-combination
+class/subclass/level/edition sweep, 1190-item magic-item-effects
+regression, and 508-combination companions sweep: all 0 errors.

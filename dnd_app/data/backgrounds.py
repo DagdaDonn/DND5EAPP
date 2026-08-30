@@ -11,12 +11,20 @@ Date: 2026-08-20
 
 def bg(name, skills, tools=None, languages=0, feature="", feature_desc="",
        source="PHB 2014", origin_feat=None, equipment="", notes="",
-       feat_choices=None):
+       feat_choices=None, skill_choices=None, tool_choices=None):
+    """skill_choices/tool_choices: {"count": N, "pool": [...]} for the
+    handful of backgrounds that grant a *choice* of skill/tool
+    proficiencies rather than a fixed pair (Haunted One, Investigator,
+    Urban Bounty Hunter, ...) — leave `skills`/`tools` empty (or holding
+    only the fixed portion) for those, since get_background_skills()/
+    get_background_tools() apply skills/tools directly and unconditionally."""
     return dict(name=name, skills=skills, tools=tools or [], languages=languages,
                 feature=feature, feature_desc=feature_desc,
                 source=source, origin_feat=origin_feat,
                 equipment=equipment, notes=notes,
-                feat_choices=list(feat_choices) if feat_choices else [])
+                feat_choices=list(feat_choices) if feat_choices else [],
+                skill_choices=dict(skill_choices) if skill_choices else None,
+                tool_choices=dict(tool_choices) if tool_choices else None)
 
 
 
@@ -219,7 +227,8 @@ ALL_BACKGROUNDS = [
        equipment="Fishing tackle, net, favorite fishing lure or wading boots, traveler's clothes, 10 gp"),
 
     bg("Haunted One", source="CoS",
-       skills=["Choose 2: Arcana, Investigation, Religion, or Survival"],
+       skills=[],
+       skill_choices={"count": 2, "pool": ["Arcana", "Investigation", "Religion", "Survival"]},
        languages=2,
        feature="Heart of Darkness",
        feature_desc="Those who look into your eyes can see that you have faced unimaginable "
@@ -235,7 +244,15 @@ ALL_BACKGROUNDS = [
 
     bg("House Agent", source="ERLW",
        skills=["Investigation", "Persuasion"],
-       tools=["Choose two from your House's Tool Proficiencies table"],
+       # Real tool grant depends on which Dragonmarked House the
+       # character belongs to (see `notes`) — a two-tier choice (house,
+       # then that house's own fixed 2-tool list) this app has no
+       # concept of "House" to hang a chooser off of, unlike the flat
+       # skill_choices/tool_choices mechanism used elsewhere in this
+       # file. Left empty rather than applying the placeholder text as
+       # a literal (bogus) tool proficiency name — no grant is better
+       # than a wrong one; a real chooser needs a House field first.
+       tools=[],
        feature="House Connections",
        feature_desc="You can always get food and lodging for yourself and your friends at a house "
                     "enclave. When the house assigns you a mission, it will usually provide the "
@@ -253,7 +270,8 @@ ALL_BACKGROUNDS = [
              "vehicles-land)."),
 
     bg("Investigator", source="VRGtR",
-       skills=["Choose 2: Insight, Investigation, or Perception"],
+       skills=[],
+       skill_choices={"count": 2, "pool": ["Insight", "Investigation", "Perception"]},
        tools=["Disguise kit", "Thieves' tools"],
        feature="Official Inquiry",
        feature_desc="You're experienced at gaining access to people and places to get the "
@@ -349,8 +367,10 @@ ALL_BACKGROUNDS = [
        equipment="Fancy leather vest or leather boots, common clothes, 15 gp"),
 
     bg("Urban Bounty Hunter", source="SCAG",
-       skills=["Choose 2: Deception, Insight, Persuasion, Stealth"],
-       tools=["Choose 2: gaming set, musical instrument, thieves' tools"],
+       skills=[],
+       skill_choices={"count": 2, "pool": ["Deception", "Insight", "Persuasion", "Stealth"]},
+       tools=[],
+       tool_choices={"count": 2, "pool": ["Gaming set", "Musical instrument", "Thieves' tools"]},
        feature="Ear to the Ground",
        feature_desc="Your work as a bounty hunter in urban environments has left you with an extensive network of contacts in cities — informants, fixers, and people who owe you favors. Through this network you can get in touch with someone in any city you spend at least a day in who knows something about any major criminal or wanted individual you're pursuing. The quality and completeness of information depends on how much coin you're willing to spend.",
        equipment="Clothes appropriate to duties, 20 gp"),
