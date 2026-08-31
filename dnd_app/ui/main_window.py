@@ -183,6 +183,30 @@ class SettingsDialog(QDialog):
         acl.addLayout(font_row)
         root.addWidget(app_card)
 
+        # ── Advancement: milestone vs. tracked XP ──────────────────────────
+        adv_card = QFrame(); adv_card.setStyleSheet(
+            f"QFrame{{background:{SURF};border:1px solid {qa(GOLD,0x33)};border-radius:10px;}}")
+        advl = QVBoxLayout(adv_card); advl.setContentsMargins(14,12,14,14); advl.setSpacing(8)
+        advl.addWidget(_lbl("ADVANCEMENT", GOLD2, FS_SMALL, bold=True))
+
+        adv_row = QHBoxLayout()
+        adv_row.addWidget(_lbl("Leveling:", TEXT2, FS_BODY))
+        self._leveling_combo = QComboBox()
+        self._leveling_combo.addItem("Milestone (DM decides when you level up)", "milestone")
+        self._leveling_combo.addItem("Experience Points (XP)", "xp")
+        cur_mode = char.char.get("leveling_mode", "milestone") if char else "milestone"
+        idxl = self._leveling_combo.findData(cur_mode)
+        if idxl >= 0:
+            self._leveling_combo.setCurrentIndex(idxl)
+        adv_row.addWidget(self._leveling_combo, 1)
+        advl.addLayout(adv_row)
+        advl.addWidget(_lbl(
+            "XP mode adds an experience tracker to the header and the "
+            "Choices tab, and flags your character as ready to level up "
+            "once you cross the next threshold — leveling up itself is "
+            "still a manual click, same as milestone.", TEXT3, FS_TINY))
+        root.addWidget(adv_card)
+
         # ── Character Rules, Tasha's Cauldron Options, and DM Secrets are
         # three separate cards (previously one long "OPTIONAL RULES" card
         # of 10 checkboxes, which had gotten too crowded to scan) — split
@@ -386,6 +410,7 @@ class SettingsDialog(QDialog):
     def _on_done(self):
         sheet = getattr(self.app_window, "_sheet", None)
         if sheet:
+            sheet.char["leveling_mode"] = self._leveling_combo.currentData()
             sheet.char.setdefault("optional_rules", {})
             sheet.char["optional_rules"]["feat_prereqs"] = self._feat_prereq_cb.isChecked()
             sheet.char["optional_rules"]["multiclass_ability_reqs"] = self._multiclass_cb.isChecked()

@@ -89,6 +89,7 @@ class BigStatBox(QFrame):
 class AbilityBlock(QFrame):
     """One ability score block: name / score / modifier."""
     changed = Signal(str, int)   # (ability, new_score)
+    roll_requested = Signal(str)  # (ability) -- raw ability check, d20 + mod
 
     def __init__(self, ab, score=10, editable=True, parent=None):
         super().__init__(parent)
@@ -134,6 +135,23 @@ class AbilityBlock(QFrame):
         self._mod_lbl = h(sign(mod), TEAL2 if mod >= 0 else CRIM2, FS_TITLE, bold=True, align=Qt.AlignCenter)
         lay.addWidget(self._mod_lbl)
 
+        # 🎲 roll button — raw ability check (d20 + mod, no proficiency).
+        # Only on the sheet's read-only blocks (editable=False): the
+        # wizard's blocks (editable=True) are mid-creation, still being
+        # assigned, so there's nothing real yet to roll. Same button
+        # style/role as the Skills/Saves rows' roll buttons.
+        self._roll_btn = None
+        if not editable:
+            self._roll_btn = QPushButton("🎲")
+            self._roll_btn.setFixedHeight(22)
+            self._roll_btn.setToolTip(f"Roll {ab} check ({sign(mod)})")
+            self._roll_btn.setStyleSheet(
+                f"QPushButton{{background:transparent;border:1px solid {BORDER};"
+                f"border-radius:5px;font-size:{FS_SMALL}px;padding:0px;min-height:0px;}}"
+                f"QPushButton:hover{{background:{qa(TEAL,0x33)};border-color:{TEAL};}}")
+            self._roll_btn.clicked.connect(lambda checked=False: self.roll_requested.emit(self.ab))
+            lay.addWidget(self._roll_btn)
+
     def set_score(self, v):
         if self._editable:
             self._score_spin.blockSignals(True)
@@ -146,6 +164,8 @@ class AbilityBlock(QFrame):
         self._mod_lbl.setStyleSheet(
             f"color:{TEAL2 if mod >= 0 else CRIM2};font-size:{FS_TITLE}px;font-weight:700;background:transparent;"
         )
+        if self._roll_btn:
+            self._roll_btn.setToolTip(f"Roll {self.ab} check ({sign(mod)})")
 
     def value(self):
         return self._score_spin.value() if self._editable else int(self._score_lbl.text())

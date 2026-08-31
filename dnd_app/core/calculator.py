@@ -2197,6 +2197,57 @@ def compute_max_hp(char: dict) -> int:
     return hp + tough_bonus
 
 
+def preview_level_gain(char: dict, cls_name: str, is_new: bool) -> dict:
+    """Pure preview of what gaining a level in `cls_name` would grant —
+    HP and spell-slot deltas — without mutating `char`. Used by the
+    Level Up / Multiclass dialog's "What You'll Get" panel so a player
+    can see the numbers before committing, rather than only the class's
+    static per-level feature list.
+
+    `is_new` marks a brand-new multiclass entry (added at level 1)
+    rather than an existing class going up one level. Only computes HP
+    and spell slots — feature text is already handled separately by the
+    dialog from CLASS_DICT's per-level feature list.
+
+    Returns {"hp_gain", "hp_before", "hp_after", "slot_deltas",
+    "pact_before", "pact_after"}. slot_deltas is a list of
+    (spell_level, delta) for every spell level whose max slots change;
+    pact_before/after are the Warlock pact slot dicts (count/level) or
+    None, since those live outside the standard spell_slots array."""
+    import copy
+    from dnd_app.data.classes import CLASS_DICT
+
+    hp_before = compute_max_hp(char)
+    cur_cl, cur_subs = class_levels(char), subclasses(char)
+    cur_slot_info = compute_all_spell_slots(cur_cl, cur_subs)
+
+    hyp = copy.deepcopy(char)
+    if is_new:
+        hd = CLASS_DICT.get(cls_name, {}).get("hit_die", 8)
+        hyp.setdefault("classes", []).append(
+            {"class": cls_name, "level": 1, "subclass": "", "hit_die": hd})
+    else:
+        for entry in hyp.get("classes", []):
+            if entry.get("class") == cls_name:
+                entry["level"] = min(20, entry.get("level", 1) + 1)
+                break
+
+    hp_after = compute_max_hp(hyp)
+    new_cl, new_subs = class_levels(hyp), subclasses(hyp)
+    new_slot_info = compute_all_spell_slots(new_cl, new_subs)
+
+    cur_slots, new_slots = cur_slot_info["spell_slots"], new_slot_info["spell_slots"]
+    slot_deltas = [(lvl + 1, new_slots[lvl] - cur_slots[lvl])
+                   for lvl in range(9) if new_slots[lvl] != cur_slots[lvl]]
+
+    return {
+        "hp_gain": hp_after - hp_before, "hp_before": hp_before, "hp_after": hp_after,
+        "slot_deltas": slot_deltas,
+        "pact_before": cur_slot_info.get("warlock_slots"),
+        "pact_after": new_slot_info.get("warlock_slots"),
+    }
+
+
 def update_all(char: dict) -> dict:
     """
     Recompute all derived stats and update the character dict.

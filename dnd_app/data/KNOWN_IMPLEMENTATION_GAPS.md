@@ -9516,3 +9516,277 @@ wrapping, and the corrected slots-expended value. Existing
 suites re-run clean after these changes (they don't exercise
 `pdf_export.py` directly, but confirm nothing else in the app
 regressed).
+
+## Experience-point leveling: a real alternative to milestone
+
+User asked for an XP-based leveling option — the app previously only
+supported milestone leveling (the DM manually clicks "Level Up"
+whenever they decide); `char["experience"]` existed as a field (and
+was already shown in the text/PDF exports) but had no way to be edited
+and nothing read it to gate anything.
+
+Added `leveling_mode` ("milestone" or "xp", defaulting to milestone so
+existing saves are unaffected) as a Settings → Advancement toggle.
+Building on that: `xp_for_level()`/`xp_progress()` in `character.py`
+implement the standard PHB XP-by-level table (identical in 2014 and
+2024) and compute progress toward the character's *next* level —
+deliberately keyed off `total_level(char)`, not off whatever level the
+raw XP total alone would imply, so a huge XP surplus never reads as
+"skip levels", only ever as "ready for the one level right above where
+you actually are" (mirrors how the game actually works — you still
+level up one at a time).
+
+In XP mode, two things appear, both driven by the same `xp_progress()`
+call and kept in sync via the existing `_refresh_xp_tracker()` →
+`_refresh_stat_bar()` path (so they update through every existing
+controller-notify channel — manual edits, Settings toggling the mode,
+saves loading, etc. — for free, no new plumbing needed): a golden XP
+pill in the header stat bar (current/next-threshold XP plus a progress
+bar), and a fuller "🌟 EXPERIENCE" card in the Choices tab with the
+same bar, an "Add XP" spinbox + button for the normal end-of-session
+"add what the DM awarded" workflow, and a "✎ Set Total" button (via
+`QInputDialog`) for outright corrections/imports. Once accumulated XP
+crosses the next threshold, both the pill and the card visibly flag
+"ready to level up" (gold border, status text) and the header pill
+becomes clickable, opening the existing Level Up / Multiclass dialog
+directly — this only ever surfaces eligibility, it does not auto-level;
+the DM/player still clicks through the same level-up flow as before,
+same as milestone mode. In milestone mode both widgets stay hidden
+(not removed — a mode switch never needs a UI rebuild).
+
+Verified: `xp_for_level()`/`xp_progress()` against the full table
+(level 1 floor, level 20 cap that's never "eligible", a huge-surplus
+character correctly gated to just the next level, a classless
+level-0 character not crashing) with direct assertions. Bound the
+real `_refresh_xp_tracker`, `_on_add_xp`, and `_on_set_total_xp`
+methods onto a fake sheet (same `types.MethodType`-style pattern used
+elsewhere this session for headless PySide6 testing) wired through a
+real `CharacterController` subscription — confirmed milestone mode
+hides both widgets, XP mode populates them correctly, crossing the
+threshold flips the eligible state/toast/click-to-level-up wiring, and
+`_on_set_total_xp` correctly overwrites the total. Also exercised
+`SettingsDialog` itself (extending the PySide6 stub's `QComboBox` with
+real item/index/data bookkeeping, since the existing stub's plain dummy
+object couldn't support `findData`/`currentIndex` comparisons) to
+confirm the leveling-mode combo round-trips through `_on_done` into
+`char["leveling_mode"]`. Confirmed `migrate_character()` backfills
+`leveling_mode: "milestone"` onto pre-existing saves that predate this
+field. Full 1194-combination class/subclass/level/edition sweep and
+1190-item magic-item-effects regression: both still 0 errors after
+these changes.
+
+## XP tracker: a big enough award can carry over multiple levels
+
+Follow-up to XP-based leveling above. User pointed out a real gap: a
+big enough one-time XP award (or importing a total from another
+tracker) can jump past more than one level's threshold at once, and
+that's supposed to carry over — you don't lose the surplus, you just
+level up more than once. The tracker was only ever computing "eligible
+for the next level: yes/no", with no notion of *how many* were owed.
+
+Added `xp_implied_level()` (highest level, 1-20, whose XP threshold
+the current total has met) and a new `levels_due` field on
+`xp_progress()`'s return dict — `min(xp_implied_level(xp), 20) -
+total_level(char)`, so it's still hard-gated to levels actually owed
+from the character's real current level, never further than the raw
+XP total supports. When more than one level is due, the header pill,
+its tooltip, the Choices-tab status line, and the `_on_add_xp` toast
+all say "Ready to level up ×N!" instead of the generic phrasing;
+exactly one level due still reads as the plain "Ready to level up!"
+(no "×1" noise). Also fixed the eligible-state text to stop showing a
+"current / next-single-level-threshold" fraction once multiple levels
+are owed (e.g. "20,000 / 900 XP" was technically accurate but reads as
+broken) — it now shows the plain XP total instead once the surplus
+has already blown past that single-level number.
+
+Verified: `xp_implied_level()`/`levels_due` against the real PHB
+table (a level-2 character sitting on 20,000 XP correctly computes
+`levels_due=4`, matching level 6 being the highest threshold ≤20,000);
+extended the existing bound-method XP tests to assert the ×N phrasing
+appears in the pill tooltip, the status label, and the toast for a
+multi-level jump, and does NOT appear for an exact single-level
+threshold. Full 1194/1190-combination regression suites re-run clean.
+
+## "What you'll get" level-up preview, plus a Choices tab visual pass
+
+User asked for a preview of HP/features/spell slots before committing
+to a level-up (especially useful now that XP mode can flag several
+levels due at once — the existing Level Up / Multiclass dialog already
+had a "WHAT YOU'LL GET" panel, but it only listed the class's static
+per-level feature *names* from `CLASS_DICT`, nothing about the actual
+numbers), plus a general visual review of the Choices tab.
+
+Added `preview_level_gain(char, cls_name, is_new)` to `calculator.py`:
+a pure function (never mutates `char`) that deep-copies the character,
+applies the hypothetical level (existing class +1, or a new multiclass
+entry at level 1), and diffs `compute_max_hp()` and
+`compute_all_spell_slots()` before/after — reusing the exact same
+functions the real level-up path uses, so the preview can't drift from
+what actually happens. Returns the HP delta and a list of
+`(spell_level, delta)` slot changes, plus Warlock pact-slot
+before/after (pact slots live outside the standard `spell_slots` array
+so needed separate handling). Wired into
+`LevelUpMulticlassDialog._on_pick()` via two small helpers:
+`_append_level_preview()` appends "HP: +6 (max 26 → 32, includes CON
++2)" and "Spell slots: +2 Lv3" lines; `_append_xp_surplus_note()`
+checks `xp_progress()` and, when in XP mode with more than one level
+already owed, adds "🌟 You have enough XP for N levels right now —
+this uses 1, leaving N-1 more to take right after" — since this dialog
+still only ever applies one level per confirm (same as milestone), the
+note exists so the surplus doesn't read as lost.
+
+While in there, reviewed the Choices tab (`_build_tab_choices`) as a
+whole and fixed three real inconsistencies: (1) the Optional Class
+Features card (both here and its Features-tab counterpart) had its
+title/border color hardcoded as a literal `#E8A020`/`#55E8A020`
+instead of the `AMBER` theme constant — meaning it was a frozen
+snapshot of ONE theme's amber value and didn't shift color on the
+other 13 themes like every other card does; confirmed by checking
+`theme.py`'s `AMBER` value actually differs per theme (`#e89828`,
+`#8e5708`, `#f8a828`, etc.) — now uses `AMBER`/`qa(AMBER,0x55)`.
+(2) The Identity card crammed its title and all 4 edit buttons into a
+single `QHBoxLayout` row, the only card in the tab not following the
+title-row-then-content pattern the Class Manager and Experience cards
+both use — restructured to match. (3) Those 4 buttons ("Race",
+"Subrace", "Ancestry", "Background") always showed the same generic
+label regardless of what was actually set, so a returning player
+glancing at the tab couldn't tell what their race/background even was
+without clicking through each one — added `_refresh_identity_buttons()`
+(wired into `_refresh_stat_bar()`, same pattern as the XP tracker) so
+they now read e.g. "✎ Race: Human" / "✎ Background: Soldier", falling
+back to the bare label when unset. Also replaced a duplicate
+ancestry-visibility check that lived separately in `_refresh_stat_bar`
+with a single call into the new method. Bumped the Choices tab
+splitter's default top-pane height (220→280px) so all 3 top cards fit
+without initial clipping when XP mode is on — costs milestone-mode
+characters nothing, since a hidden Experience card doesn't consume
+splitter space, it just leaves more of that room for the existing
+trailing stretch.
+
+Verified: swept `preview_level_gain()` across every class/subclass/
+level combination in both editions, including previewing a
+multiclass-into-every-other-class for each (13,930 calls) — 0 errors.
+Built the real `LevelUpMulticlassDialog` end-to-end through the
+headless PySide6 stub (extending the stub's `QComboBox` and `QLabel`
+with real state — a plain dummy widget silently discards `setText()`,
+so this was necessary to actually read back the rendered panel text)
+and confirmed the HP/spell-slot/XP-surplus lines render correctly for
+a real level-up-in-progress character with 2 XP levels owed.
+`_refresh_identity_buttons()` tested directly for the empty, set, and
+Dragonborn-ancestry-visible cases. Full 1194/1190-combination
+regression suites, the XP-tracker tests, and the stale-choices tests
+all re-run clean after these changes.
+
+## Rest preview dialog, and a genuine gap closed: ability-check rolling
+
+Two of the "what's still worth adding" ideas floated earlier this
+session, both actually built this time — a rest preview matching the
+level-up preview's "look before you commit" pattern, and click-to-roll
+for ability checks. Investigated first and confirmed skills and saves
+already had 🎲 roll buttons (`_quick_roll_toast`, whose own docstring
+even already said "skills / saves / abilities / initiative" — the
+"abilities" part of that promise was never actually wired up), and
+rests applied immediately with no preview at all, only a toast after
+the fact.
+
+**Rest preview**: `_short_rest()`/`_long_rest()` now open a
+`RestPreviewDialog` (styled to match `LevelUpMulticlassDialog`/
+`RestOptionsDialog` — GOLD2 title, a TEAL-accented "WHAT THIS WILL DO"
+card, gold Confirm button) before touching any character state;
+cancelling leaves the character completely untouched. Built two new
+non-mutating preview methods, `_preview_short_rest()`/
+`_preview_long_rest()`, deliberately as plain filters over current
+state — the exact same conditions the real apply logic checks right
+after — rather than a parallel simulation, so the preview can't drift
+out of sync with what actually happens next. The one piece that isn't
+a simple filter (`restore_hit_dice_pool()`'s cross-die-type
+distribution math for long rest) is previewed by running that same
+real function on a throwaway copy of just the hit-dice/classes data,
+same "reuse, don't reimplement" principle as `preview_level_gain`.
+Short rest's preview necessarily stops short of an exact HP number
+(healing depends on how many hit dice the player chooses to spend,
+asked right after confirming, unchanged from before) but lists hit
+dice available, every resource that will reset, Pact Magic slots, and
+which active effects/toggles (Rage, Bladesong, etc.) will fade. Long
+rest's preview is fully deterministic: HP restored, temp HP lost, hit
+dice restored, every LR/SR resource, spell slots by level, exhaustion
+reduction, death saves clearing, and concentration ending.
+
+**Ability-check rolling**: added a 🎲 roll button to `AbilityBlock`
+(`shared.py`) — same visual/behavioral pattern as the Skills/Saves
+rows' roll buttons — gated to `editable=False` only, since the
+wizard's own `AbilityBlock` instances (`editable=True`) are mid-
+creation with nothing real yet to roll. Added a `roll_requested`
+signal so `shared.py` (used by both `sheet.py` and `wizard.py`) stays
+decoupled from `sheet.py`'s `_quick_roll_toast`; wired in
+`_build_tab_abilities()`.
+
+Verified: swept both preview methods across every class/subclass/
+level/edition combination plus a 3-class multiclass character (hit
+dice pooled across d6/d8/d10) and a completely fresh character with
+nothing to reset — 798 combinations, 0 errors. Directly tested
+non-mutation (the preview genuinely never touches `char`), the actual
+cancel-vs-confirm gate (built a fake `RestPreviewDialog` returning a
+controlled result and confirmed cancelling leaves `current_hp`
+untouched while confirming applies the real rest), and
+`RestPreviewDialog._build_lines()`'s text output for both rest types
+against hand-built preview data. For the ability-check roller,
+confirmed the roll button exists only on `editable=False` blocks and
+that emitting `roll_requested` reaches `_quick_roll_toast` with the
+correct ability modifier. Along the way, upgraded the headless
+PySide6 test stub itself: `Signal(...)`-produced connections now
+actually store and invoke callbacks (previously silently inert),
+`QDialog.Accepted`/`.Rejected`-style class attributes are now cached
+per-name so repeated access returns the same object (needed for an
+`exec() != QDialog.Accepted` comparison to ever be simulatable), and
+`QComboBox`/`QLabel`/`QAbstractSpinBox` gained real or missing
+support — all of which should make future UI-logic tests in this
+session's style easier, not just this feature's. Full 1194/1190
+regression suites re-run clean.
+
+## Rest preview follow-up: merged with the existing options dialog
+
+User caught a real UX regression the rest preview above introduced: a
+long rest already opened `RestOptionsDialog` afterward for anything
+reconfigurable on that rest (unpreparing spells, an Armorer's Arcane
+Armor model, Eladrin season, pact rituals, and half a dozen other
+subclass/racial re-picks). Adding a SECOND confirm dialog before the
+rest, on top of that existing one after it, meant a prepared caster
+now saw two back-to-back "are you sure" popups for one Long Rest
+click — exactly the kind of friction the preview was supposed to
+reduce, not add.
+
+Fixed by merging them: `RestOptionsDialog._build_options()` (the list
+of what's currently reconfigurable) is now a `@staticmethod` taking
+`(char, rest_type)` directly, so it can be computed without
+constructing a `RestOptionsDialog` at all. `RestPreviewDialog` now
+takes that list as an `options` param and renders it as a second
+"ALSO RECONFIGURE?" checkbox card right below the preview, with one
+shared Confirm button. `_offer_rest_options()` (which used to open its
+own dialog after the rest completed) is now `_apply_rest_options()`,
+taking the selection straight from the merged dialog and doing only
+the applying — its own big per-option if/elif chain (unprepare
+spells, Armorer model swap, Arcane Recovery, Eladrin season, pact
+rituals, Guidance of the Spirits, Whispers of the Dead, lunar phase,
+Astral Knowledge/Trance) is completely unchanged, just no longer
+gated behind its own separate dialog. `RestOptionsDialog` itself stays
+in the codebase (unused directly now, but kept rather than deleted —
+its name is referenced by a dozen comments elsewhere as the mechanism
+name for "swappable via a rest", and rewriting all of those for a
+pure rename wasn't worth the churn).
+
+Verified none of `_build_options()`'s availability checks (spells
+prepared, Armorer subclass, racial choice already made, etc.) read any
+state the rest-reset logic itself mutates (HP, hit dice, resource
+`current` values, spell slots used, exhaustion, death saves) — so
+computing the reconfigure list BEFORE the rest applies, instead of
+after, can't change which options show up. Extended the rest-preview
+tests: confirmed the merged dialog receives a non-empty options list
+for a prepared caster, and that confirming with a reconfigure option
+checked applies BOTH the rest AND that option in the same pass (e.g.
+`spells_prepared` actually clears when "Unprepare all spells" is
+checked alongside a Long Rest confirm) — a single dialog, not two.
+Updated an existing scratch test (`RestOptionsDialog._build_options`'s
+Githyanki/Astral Elf coverage) to the new static-method call signature
+and confirmed it still passes. Full 1194/1190/798 regression suites
+re-run clean.

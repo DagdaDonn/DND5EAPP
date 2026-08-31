@@ -554,7 +554,7 @@ class RestOptionsDialog(QDialog):
         self.setWindowTitle(f"{'Long' if rest_type == 'long' else 'Short'} Rest Options")
         self.setMinimumSize(480, 300)
         self.setStyleSheet(f"QDialog{{background:{BG};}}")
-        self._options = self._build_options()
+        self._options = RestOptionsDialog._build_options(char, rest_type)
         self._checks = {}
 
         root = QVBoxLayout(self); root.setContentsMargins(20,18,20,18); root.setSpacing(10)
@@ -587,13 +587,18 @@ class RestOptionsDialog(QDialog):
         btn_row.addWidget(skip_btn); btn_row.addWidget(confirm_btn)
         root.addLayout(btn_row)
 
-    def _build_options(self):
-        char = self.char
+    @staticmethod
+    def _build_options(char, rest_type):
+        """Static so RestPreviewDialog can reuse this exact list without
+        needing a RestOptionsDialog instance — this class stays the
+        documented name/reference for "what's reconfigurable on a rest"
+        (see the many comments elsewhere pointing to it), it just no
+        longer needs to be constructed to compute the list."""
         opts = []
         # Unprepare all spells — any prepared caster, long rest only (this
         # is the normal way of re-choosing prepared spells: 1 minute per
         # spell level during a long rest, PHB p.201-202).
-        if self.rest_type == "long":
+        if rest_type == "long":
             _, _, _, prep_ab = _spell_progression_tables_static()
             if any(cn in prep_ab for cn in {c["class"] for c in char.get("classes", [])}):
                 if char.get("spells_prepared"):
@@ -618,7 +623,7 @@ class RestOptionsDialog(QDialog):
         # "when you finish a short rest"), once per day (checked via the
         # resource added in update_all), only if there's actually
         # something expended to recover.
-        if self.rest_type == "short":
+        if rest_type == "short":
             arcane_recovery_res = next(
                 (r for r in char.get("resources", []) if r.get("key") == "arcane_recovery"), None)
             if arcane_recovery_res and arcane_recovery_res.get("current", 0) > 0:
@@ -631,7 +636,7 @@ class RestOptionsDialog(QDialog):
                     })
         # Eladrin season changes only on a long rest ("you can change your chosen season after a long rest").
         race = char.get("species") or char.get("race", "")
-        if self.rest_type == "long" and "eladrin" in race.lower() and char.get("_choices", {}).get("eladrin_season"):
+        if rest_type == "long" and "eladrin" in race.lower() and char.get("_choices", {}).get("eladrin_season"):
             opts.append({
                 "kind": "eladrin_season",
                 "label": "Change Eladrin season",
@@ -641,7 +646,7 @@ class RestOptionsDialog(QDialog):
         # both grant "proficiency in one skill and with one weapon or tool
         # of your choice ... until the end of your next long rest" —
         # re-chosen every long rest, not a one-time pick.
-        if self.rest_type == "long" and race in ("Githyanki (MPMM)", "Astral Elf") and \
+        if rest_type == "long" and race in ("Githyanki (MPMM)", "Astral Elf") and \
                 char.get("_choices", {}).get("astral_knowledge_skill"):
             trait_name = "Astral Knowledge" if race == "Githyanki (MPMM)" else "Astral Trance"
             opts.append({
@@ -676,7 +681,7 @@ class RestOptionsDialog(QDialog):
                           "the previous amulet.",
             })
         # Guidance of the Spirits (Bard, College of Spirits) resets on a long rest only. Whispers of the Dead (Rogue, Phantom) resets on either rest type.
-        if self.rest_type == "long" and char.get("_choices", {}).get("guidance_of_the_spirits_skill"):
+        if rest_type == "long" and char.get("_choices", {}).get("guidance_of_the_spirits_skill"):
             opts.append({
                 "kind": "guidance_spirits_swap",
                 "label": "Swap Guidance of the Spirits' skill",
@@ -688,7 +693,7 @@ class RestOptionsDialog(QDialog):
                 "label": "Channel a different Whispers of the Dead proficiency",
                 "detail": "Changes which skill or tool proficiency you currently have from this feature.",
             })
-        if self.rest_type == "long" and char.get("_choices", {}).get("lunar_phase"):
+        if rest_type == "long" and char.get("_choices", {}).get("lunar_phase"):
             opts.append({
                 "kind": "lunar_phase_swap",
                 "label": "Change your Lunar Embodiment phase",
@@ -698,6 +703,117 @@ class RestOptionsDialog(QDialog):
 
     def get_selected(self):
         return [kind for kind, cb in self._checks.items() if cb.isChecked()]
+
+
+class RestPreviewDialog(QDialog):
+    """Shows exactly what a Short/Long Rest is about to restore/reset —
+    HP, hit dice, spell slots, resources — before it's applied, instead
+    of the rest silently happening with only a toast confirming it
+    afterward. Purely informational (Confirm/Cancel); the real apply
+    logic in CharacterSheet._short_rest()/_long_rest() is unchanged and
+    only runs once this dialog is confirmed. `preview` is built by
+    CharacterSheet._preview_short_rest()/_preview_long_rest() — plain
+    filters over current character state, not a simulation, so this
+    can't drift from what those methods actually do next.
+
+    `options` (from RestOptionsDialog._build_options()) folds in the
+    "anything you'd like to reconfigure on this rest" checklist that
+    used to be its own separate popup shown AFTER the rest completed —
+    two back-to-back confirm dialogs for the same action was exactly
+    the kind of friction this preview dialog was supposed to cut down
+    on, not add to. One dialog, one Confirm, and get_selected() below
+    is read the same way RestOptionsDialog.get_selected() always was."""
+
+    def __init__(self, rest_type: str, preview: dict, options: list, parent=None):
+        super().__init__(parent)
+        self.rest_type = rest_type
+        self._options = options
+        self._checks = {}
+        label = "Short Rest" if rest_type == "short" else "Long Rest"
+        icon = "⏸" if rest_type == "short" else "🌙"
+        self.setWindowTitle(label)
+        self.setMinimumWidth(440)
+        self.setStyleSheet(f"QDialog{{background:{BG};}}")
+        root = QVBoxLayout(self); root.setContentsMargins(20,18,20,18); root.setSpacing(12)
+        root.addWidget(_lbl(f"{icon}  {label}", GOLD2, FS_HEAD, bold=True))
+
+        card = _card(qa(TEAL,0x44)); cl = QVBoxLayout(card)
+        cl.setContentsMargins(14,12,14,14); cl.setSpacing(4)
+        cl.addWidget(_lbl("WHAT THIS WILL DO", TEAL2, FS_SMALL, bold=True))
+        cl.addWidget(_lbl("\n".join(self._build_lines(rest_type, preview)), TEXT, FS_BODY, wrap=True))
+        root.addWidget(card)
+
+        if options:
+            opt_card = _card(qa(INDIGO,0x44)); ol = QVBoxLayout(opt_card)
+            ol.setContentsMargins(14,12,14,14); ol.setSpacing(6)
+            ol.addWidget(_lbl("ALSO RECONFIGURE?", IND2, FS_SMALL, bold=True))
+            ol.addWidget(_lbl("Check anything you'd like to change as part of this rest.",
+                               TEXT3, FS_TINY, wrap=True))
+            for opt in options:
+                cb = QCheckBox(opt["label"])
+                cb.setToolTip(opt.get("detail", ""))
+                ol.addWidget(cb)
+                self._checks[opt["kind"]] = cb
+            root.addWidget(opt_card)
+
+        btn_row = QHBoxLayout(); btn_row.addStretch()
+        cancel_btn = QPushButton("Cancel"); cancel_btn.setFixedHeight(34)
+        cancel_btn.clicked.connect(self.reject)
+        confirm_btn = QPushButton(f"Confirm {label}"); confirm_btn.setFixedHeight(34)
+        confirm_btn.setStyleSheet(
+            f"QPushButton{{background:{qa(GOLD,0x33)};border:2px solid {GOLD};border-radius:6px;"
+            f"color:{GOLD2};font-weight:700;padding:4px 20px;}}"
+            f"QPushButton:hover{{background:{GOLD};color:{BG};}}")
+        confirm_btn.clicked.connect(self.accept)
+        btn_row.addWidget(cancel_btn); btn_row.addWidget(confirm_btn)
+        root.addLayout(btn_row)
+
+    def get_selected(self):
+        return [kind for kind, cb in self._checks.items() if cb.isChecked()]
+
+    @staticmethod
+    def _build_lines(rest_type: str, preview: dict) -> list:
+        lines = []
+        if rest_type == "short":
+            if preview["hp"] >= preview["max_hp"]:
+                lines.append(f"HP: already full ({preview['max_hp']})")
+            elif preview["hit_dice_available"] > 0:
+                lines.append(f"HP: {preview['hp']}/{preview['max_hp']}  —  "
+                              f"{preview['hit_dice_available']} hit dice available, "
+                              f"you'll choose how many to spend next")
+            else:
+                lines.append(f"HP: {preview['hp']}/{preview['max_hp']}  —  no hit dice remaining")
+        else:
+            heal = preview["max_hp"] - preview["hp"]
+            if heal > 0:
+                lines.append(f"HP: {preview['hp']} → {preview['max_hp']} (full heal, +{heal})")
+            else:
+                lines.append(f"HP: already full ({preview['max_hp']})")
+            if preview["temp_hp"] > 0:
+                lines.append(f"Temporary HP: {preview['temp_hp']} → 0 (lost)")
+            if preview["hit_dice_restored"] > 0:
+                lines.append(f"Hit Dice: +{preview['hit_dice_restored']} restored")
+            if preview["exhaustion"] > 0:
+                lines.append(f"Exhaustion: level {preview['exhaustion']} → {preview['exhaustion_after']}")
+            if preview["death_reset"]:
+                lines.append("Death saves: cleared")
+            if preview["was_concentrating"]:
+                lines.append(f"Concentration on {preview['was_concentrating']}: will end")
+
+        if preview.get("slot_levels_reset"):
+            levels = ", ".join(f"Lv{lvl}" for lvl in preview["slot_levels_reset"])
+            lines.append(f"Spell slots restored: {levels}")
+        if preview.get("pact_restore"):
+            lines.append("Pact Magic slots: restored")
+        if preview.get("resets"):
+            lines.append("")
+            lines.append("Resources restored:")
+            lines.extend(f"  • {name}: {cur} → {tgt}" for name, cur, tgt in preview["resets"])
+        if preview.get("fading"):
+            lines.append("")
+            lines.append("Will fade/end:")
+            lines.extend(f"  • {n}" for n in preview["fading"])
+        return lines
 
 
 def _spell_progression_tables_static():
@@ -1009,6 +1125,43 @@ class LevelUpMulticlassDialog(QDialog):
                   ("STR", "DEX", "CON", "INT", "WIS", "CHA")}
         return check_multiclass_prereq(class_name, scores)
 
+    def _append_level_preview(self, lines, cls_name, is_new):
+        """Appends the HP/spell-slot numbers this pick would actually
+        grant — the class's static feature-name list above already says
+        WHAT you get, this says how much, so a player can weigh the
+        choice (e.g. multiclassing for a feature vs. staying single-class
+        for the bigger HP/slot jump) before committing."""
+        from dnd_app.core.calculator import preview_level_gain
+        try:
+            preview = preview_level_gain(self.char, cls_name, is_new)
+        except Exception:
+            return  # cosmetic preview only — never block leveling on it
+        lines.append("")
+        con_mod = ability_mod(self.char, "CON")
+        lines.append(f"HP: +{preview['hp_gain']} (max {preview['hp_before']} → {preview['hp_after']}, "
+                     f"includes CON {sign(con_mod)})")
+        if preview["slot_deltas"]:
+            slot_bits = ", ".join(
+                f"{'+' if d > 0 else ''}{d} Lv{lvl}" for lvl, d in preview["slot_deltas"])
+            lines.append(f"Spell slots: {slot_bits}")
+        pact_before, pact_after = preview["pact_before"], preview["pact_after"]
+        if pact_after and pact_after != pact_before:
+            lines.append(f"Pact Magic: {pact_after['count']} slot(s) at level {pact_after['level']}")
+
+    def _append_xp_surplus_note(self, lines):
+        """If the character is in XP leveling mode and already has enough
+        XP for more than one level, says so — this dialog only ever
+        applies one level at a time (same as milestone), so the note
+        makes clear the surplus isn't lost, just not auto-applied."""
+        if self.char.get("leveling_mode", "milestone") != "xp":
+            return
+        from dnd_app.core.character import xp_progress
+        due = xp_progress(self.char)["levels_due"]
+        if due > 1:
+            lines.append("")
+            lines.append(f"🌟 You have enough XP for {due} levels right now — "
+                          f"this uses 1, leaving {due - 1} more to take right after.")
+
     def _on_pick(self, cls_name):
         if getattr(self, "_init_in_progress", False):
             return
@@ -1040,6 +1193,7 @@ class LevelUpMulticlassDialog(QDialog):
                 lines.append("")
                 lines.append("No new features at this level (ASI/subclass features may "
                               "still appear at specific levels — check the Features tab).")
+            self._append_level_preview(lines, cls_name, is_new=False)
         else:
             if hasattr(self, "_confirm_btn"):
                 self._confirm_btn.setEnabled(True)
@@ -1049,12 +1203,14 @@ class LevelUpMulticlassDialog(QDialog):
             if feats:
                 lines.append("Gains at level 1:")
                 lines.extend(f"  • {f}" for f in feats)
+            self._append_level_preview(lines, cls_name, is_new=True)
             lines.append("")
             lines.append(f"Hit Die: d{cdata.get('hit_die', 8)}")
             lines.append(
                 "Multiclassing grants only partial proficiencies (per the 2014 PHB "
                 "multiclassing table) — not the full starting proficiency list a "
                 "level 1 character of this class would normally get.")
+        self._append_xp_surplus_note(lines)
         self._details_lbl.setText("\n".join(lines))
 
         # Known-spell swap — standard casters (Bard/Sorcerer/Warlock/
@@ -1567,11 +1723,103 @@ class CharacterSheet(QWidget):
     def _mark_dirty(self):
         self._dirty = True
 
+    def _preview_short_rest(self) -> dict:
+        """Non-mutating preview of what _short_rest() is about to do,
+        for the confirm dialog shown before it runs. These are plain
+        filters over current state -- the exact same conditions
+        _short_rest() itself checks right after -- not a simulation, so
+        there's no separate logic to drift out of sync."""
+        char = self.char
+        hd_model = char.get("hit_dice", {})
+        hit_dice_available = sum(d.get("remaining", 0) for d in hd_model.values())
+        cur, mx = char.get("current_hp", 0), char.get("max_hp", 0)
+
+        resets = []
+        for r in char.get("resources", []):
+            if r.get("reset") in ("SR", "sr", "SR/LR"):
+                target = r.get("current_max") or r.get("max", 0)
+                if r.get("current", 0) != target:
+                    resets.append((r.get("name", "?"), r.get("current", 0), target))
+        from dnd_app.core.character import class_levels as _cls_lvls_sr
+        if _cls_lvls_sr(char).get("Bard", 0) >= 5:
+            for r in char.get("resources", []):
+                if "bardic inspiration" in str(r.get("name", "")).lower():
+                    target = r.get("current_max") or r.get("max", 0)
+                    if r.get("current", 0) != target:
+                        resets.append((r.get("name", "?"), r.get("current", 0), target))
+
+        pact_restore = char.get("pact_slots_used", 0) > 0
+        from dnd_app.core.effects import EFFECT_TABLE
+        fading = [n for n in char.get("active_effects", [])
+                  if EFFECT_TABLE.get(n, {}).get("duration_category") == "short"
+                  or n in RESOURCE_POOL_TOGGLES]
+        return {
+            "hp": cur, "max_hp": mx, "hit_dice_available": hit_dice_available,
+            "resets": resets, "pact_restore": pact_restore, "fading": fading,
+        }
+
+    def _preview_long_rest(self) -> dict:
+        """Non-mutating preview of what _long_rest() is about to do —
+        same reasoning as _preview_short_rest(), except hit-dice
+        recovery isn't a simple filter (restore_hit_dice_pool()
+        distributes across die types), so that one piece runs the real
+        pool math on a throwaway copy of just the hit-dice/classes data
+        rather than re-deriving the distribution logic here."""
+        char = self.char
+        cur, mx = char.get("current_hp", 0), char.get("max_hp", 0)
+        temp_hp = char.get("temp_hp", 0)
+
+        import copy
+        from dnd_app.core.calculator import restore_hit_dice_pool
+        hd_before = char.get("hit_dice", {})
+        scratch = {"hit_dice": copy.deepcopy(hd_before), "classes": char.get("classes", [])}
+        hit_dice_restored = restore_hit_dice_pool(scratch)
+
+        resets = []
+        for r in char.get("resources", []):
+            if r.get("reset") in ("LR", "lr", "SR", "sr", "SR/LR"):
+                target = r.get("current_max") or r.get("max", 0)
+                if r.get("current", 0) != target:
+                    resets.append((r.get("name", "?"), r.get("current", 0), target))
+
+        slots_used = char.get("spell_slots_used", [0] * 9)
+        slot_levels_reset = [i + 1 for i, v in enumerate(slots_used) if v > 0]
+        pact_restore = char.get("pact_slots_used", 0) > 0
+
+        death_saves = char.get("death_saves", {})
+        death_reset = death_saves.get("successes", 0) > 0 or death_saves.get("failures", 0) > 0
+
+        exhaustion = char.get("exhaustion", 0)
+        was_concentrating = char.get("concentration", {}).get("spell")
+
+        from dnd_app.core.effects import EFFECT_TABLE
+        fading = [n for n in char.get("active_effects", [])
+                  if EFFECT_TABLE.get(n, {}).get("duration_category") in ("short", "long")
+                  or n in RESOURCE_POOL_TOGGLES]
+
+        return {
+            "hp": cur, "max_hp": mx, "temp_hp": temp_hp,
+            "hit_dice_restored": hit_dice_restored,
+            "resets": resets, "slot_levels_reset": slot_levels_reset,
+            "pact_restore": pact_restore, "death_reset": death_reset,
+            "exhaustion": exhaustion, "exhaustion_after": max(0, exhaustion - 1),
+            "was_concentrating": was_concentrating, "fading": fading,
+        }
+
     def _short_rest(self):
-        """Short rest: optionally spend hit dice to heal, reset SR resources."""
+        """Short rest: preview what it'll restore/reset, then optionally
+        spend hit dice to heal, reset SR resources."""
         from dnd_app.core.calculator import update_all
         import random
         char = self.char
+
+        preview = self._preview_short_rest()
+        options = RestOptionsDialog._build_options(char, "short")
+        dlg = RestPreviewDialog("short", preview, options, self)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        selected_options = dlg.get_selected()
+
         # Offer hit-dice spending if any remain and HP is below max
         hd_model = char.get("hit_dice", {})
         total_remaining = sum(d.get("remaining", 0) for d in hd_model.values())
@@ -1628,7 +1876,7 @@ class CharacterSheet(QWidget):
         update_all(char)
         self.ctrl.refresh()
         self._mark_dirty()
-        self._offer_rest_options("short")
+        self._apply_rest_options(selected_options)
         if dice_spent:
             self._toast(f"⏸ Short rest: spent {dice_spent} hit dice, healed {healed} HP")
         else:
@@ -1637,10 +1885,19 @@ class CharacterSheet(QWidget):
             self._toast(f"⏸ Faded: {', '.join(expired)}")
 
     def _long_rest(self):
-        """Long rest: full HP, all resources reset, reduce exhaustion by 1."""
+        """Long rest: preview what it'll restore/reset, then full HP,
+        all resources reset, reduce exhaustion by 1."""
         from dnd_app.core.calculator import update_all
         from dnd_app.core.builder import rebuild
         char = self.char
+
+        preview = self._preview_long_rest()
+        options = RestOptionsDialog._build_options(char, "long")
+        dlg = RestPreviewDialog("long", preview, options, self)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        selected_options = dlg.get_selected()
+
         # Restore HP
         char["current_hp"] = char.get("max_hp", 0)
         char["temp_hp"] = 0
@@ -1678,7 +1935,7 @@ class CharacterSheet(QWidget):
         rebuild(char); update_all(char)
         self.ctrl.refresh()
         self._mark_dirty()
-        self._offer_rest_options("long")
+        self._apply_rest_options(selected_options)
         from dnd_app.ui.flavor_text import random_long_rest_dream
         if expired:
             self._toast(f"🌙 Faded: {', '.join(expired)}")
@@ -1720,17 +1977,17 @@ class CharacterSheet(QWidget):
             fx.remove(n)
         return removed
 
-    def _offer_rest_options(self, rest_type: str):
-        """Opens RestOptionsDialog after finishing a rest, and applies
-        whichever rest-changeable options the player actually selected.
-        Replaces the earlier Armorer-only prompt — that's now one option
-        among however many the dialog finds applicable."""
-        dlg = RestOptionsDialog(self.char, rest_type, self)
-        if not dlg._options:
-            return  # nothing to offer, don't bother showing an empty dialog
-        if dlg.exec() != QDialog.Accepted:
-            return
-        selected = dlg.get_selected()
+    def _apply_rest_options(self, selected: list):
+        """Applies whichever rest-changeable options the player checked
+        in RestPreviewDialog's "ALSO RECONFIGURE?" section (built from
+        RestOptionsDialog._build_options()). Used to be its own separate
+        popup shown AFTER the rest completed — folded into the single
+        preview-and-confirm dialog shown BEFORE the rest applies, so
+        confirming a rest is only ever one dialog, not two back to back.
+        A checked option that needs a specific new value (which model,
+        which skill, etc.) still asks via its own QInputDialog below —
+        that's an unavoidable, expected follow-up for picking a value,
+        not the same kind of redundant second confirm this replaced."""
         if not selected:
             return
         char = self.char
@@ -2109,6 +2366,13 @@ class CharacterSheet(QWidget):
         self._sb_spd  = self._make_stat_pill("Speed", "—", TEXT)
         for pill in [self._sb_ac, self._sb_hp, self._sb_init, self._sb_prof, self._sb_spd]:
             sl.addWidget(pill)
+        # XP pill — only shown when Settings → Advancement is set to
+        # "Experience Points"; hidden (not removed) for milestone
+        # characters so toggling the setting doesn't need a UI rebuild.
+        # Clickable to jump straight to Level Up once eligible (see
+        # _refresh_xp_tracker, which wires/unwires the click handler).
+        self._sb_xp = self._make_xp_pill()
+        sl.addWidget(self._sb_xp)
         # Right-click AC / Speed for a breakdown of what contributes to them
         self._sb_ac.contextMenuEvent = lambda e: self._show_breakdown_popup(
             "Armor Class", get_ac_breakdown(self.char), str(get_ac(self.char)), e.globalPos())
@@ -2187,6 +2451,28 @@ class CharacterSheet(QWidget):
         l.addWidget(val); l.addWidget(ttl)
         f._val = val; return f
 
+    def _make_xp_pill(self):
+        """Wider gold pill for the header: "XP" title, a "2,450 / 6,500"
+        value line, and a slim progress bar underneath tracking distance
+        to the next level. Built once in _build_ui; _refresh_xp_tracker
+        fills it in and toggles visibility/eligibility styling."""
+        f = QFrame(); f.setStyleSheet(f"QFrame{{background:{SURF};border:2px solid {qa(GOLD,0x55)};border-radius:10px;}}")
+        f.setFixedHeight(52); f.setMinimumWidth(150)
+        l = QVBoxLayout(f); l.setContentsMargins(10,4,10,4); l.setSpacing(2)
+        top = QHBoxLayout(); top.setSpacing(6)
+        val = _lbl("—", GOLD2, FS_BODY, bold=True, align=Qt.AlignCenter, wrap=False)
+        top.addWidget(val, 1)
+        l.addLayout(top)
+        bar = QProgressBar(); bar.setRange(0,100); bar.setValue(0)
+        bar.setTextVisible(False); bar.setFixedHeight(6)
+        bar.setStyleSheet(
+            f"QProgressBar{{background:{SURF2};border:none;border-radius:3px;}}"
+            f"QProgressBar::chunk{{border-radius:3px;background:{GOLD};}}")
+        l.addWidget(bar)
+        ttl = _lbl("XP", TEXT3, FS_TINY, align=Qt.AlignCenter, wrap=False)
+        l.addWidget(ttl)
+        f._val = val; f._bar = bar; return f
+
     # ══ TAB 1: ABILITY SCORES & SAVES ══════════════════════════════════════════
     def _build_tab_abilities(self):
         tab = QScrollArea(); tab.setWidgetResizable(True)
@@ -2199,6 +2485,8 @@ class CharacterSheet(QWidget):
         self._ab_blocks = {}
         for ab in ABILITIES:
             blk = AbilityBlock(ab, ability_score(self.char, ab), editable=False)
+            blk.roll_requested.connect(
+                lambda a: self._quick_roll_toast(f"{AB_FULL[a]} check", ability_mod(self.char, a)))
             ab_row.addWidget(blk); self._ab_blocks[ab] = blk
         ab_row.addStretch()
         abcl.addLayout(ab_row)
@@ -2492,6 +2780,35 @@ class CharacterSheet(QWidget):
     def _on_inspiration_toggled(self, on: bool):
         self.ctrl.update("inspiration", on, rebuild_char=False)
         self._mark_dirty()
+
+    def _on_add_xp(self):
+        """Add the entered amount to the running XP total — the normal
+        end-of-session workflow (add whatever the DM awarded), as opposed
+        to _on_set_total_xp which overwrites the total outright for
+        corrections/imports."""
+        amount = self._xp_add_spin.value()
+        if amount <= 0:
+            return
+        new_total = self.char.get("experience", 0) + amount
+        self.ctrl.update("experience", new_total, rebuild_char=False)
+        self._xp_add_spin.setValue(0)
+        self._mark_dirty()
+        from dnd_app.core.character import xp_progress
+        prog = xp_progress(self.char)
+        if prog["eligible"]:
+            due = prog["levels_due"]
+            suffix = "ready to level up!" if due <= 1 else f"ready to level up ×{due}!"
+            self._toast(f"🌟 +{amount:,} XP — {suffix}")
+        else:
+            self._toast(f"+{amount:,} XP")
+
+    def _on_set_total_xp(self):
+        current = self.char.get("experience", 0)
+        new_val, ok = QInputDialog.getInt(
+            self, "Set Total XP", "Total experience points:", current, 0, 999999999, 1)
+        if ok:
+            self.ctrl.update("experience", new_val, rebuild_char=False)
+            self._mark_dirty()
 
     def _show_skill_prof_menu(self, skill_name, global_pos):
         from PySide6.QtWidgets import QMenu
@@ -7946,13 +8263,72 @@ class CharacterSheet(QWidget):
 
         layout.addWidget(cls_card)
 
+        # ── Experience Points card — only visible in XP leveling mode
+        # (Settings → Advancement); populated/hidden by _refresh_xp_tracker,
+        # which also drives the header's XP pill from the same data. ──────
+        self._xp_card = QFrame()
+        self._xp_card.setStyleSheet(f"QFrame{{background:{SURF};border:1px solid {qa(GOLD,0x44)};border-radius:10px;}}")
+        xp_cl = QVBoxLayout(self._xp_card); xp_cl.setContentsMargins(12, 8, 12, 8); xp_cl.setSpacing(6)
+
+        xp_title_row = QHBoxLayout()
+        xp_title_row.addWidget(_lbl("🌟  EXPERIENCE", GOLD2, FS_SMALL, bold=True))
+        xp_title_row.addStretch()
+        self._xp_total_lbl = _lbl("0 XP", GOLD2, FS_SMALL, bold=True)
+        xp_title_row.addWidget(self._xp_total_lbl)
+        xp_cl.addLayout(xp_title_row)
+
+        self._xp_bar = QProgressBar(); self._xp_bar.setRange(0, 100); self._xp_bar.setValue(0)
+        self._xp_bar.setTextVisible(False); self._xp_bar.setFixedHeight(8)
+        self._xp_bar.setStyleSheet(
+            f"QProgressBar{{background:{SURF2};border:none;border-radius:4px;}}"
+            f"QProgressBar::chunk{{border-radius:4px;background:{GOLD};}}")
+        xp_cl.addWidget(self._xp_bar)
+
+        self._xp_status_lbl = _lbl("", TEXT3, FS_SMALL, bold=True)
+        xp_cl.addWidget(self._xp_status_lbl)
+
+        xp_add_row = QHBoxLayout(); xp_add_row.setSpacing(6)
+        xp_add_row.addWidget(_lbl("Add XP:", TEXT2, FS_SMALL))
+        self._xp_add_spin = QSpinBox()
+        self._xp_add_spin.setRange(0, 999999); self._xp_add_spin.setSingleStep(50)
+        self._xp_add_spin.setButtonSymbols(QAbstractSpinBox.NoButtons)
+        self._xp_add_spin.setStyleSheet(
+            f"QSpinBox{{background:{SURF2};border:1px solid {BORDER};border-radius:5px;"
+            f"color:{TEXT};padding:2px 6px;min-width:70px;}}")
+        xp_add_row.addWidget(self._xp_add_spin)
+        xp_add_btn = QPushButton("+ Add")
+        xp_add_btn.setStyleSheet(
+            f"QPushButton{{background:{qa(GOLD,0x22)};border:1px solid {qa(GOLD,0x66)};border-radius:6px;"
+            f"color:{GOLD2};font-weight:700;padding:3px 12px;}}"
+            f"QPushButton:hover{{background:{qa(GOLD,0x44)};border-color:{GOLD};}}")
+        xp_add_btn.clicked.connect(self._on_add_xp)
+        xp_add_row.addWidget(xp_add_btn)
+        xp_add_row.addStretch()
+        xp_set_btn = QPushButton("✎ Set Total")
+        xp_set_btn.setToolTip("Directly correct the total, rather than adding an award")
+        xp_set_btn.setStyleSheet(
+            f"QPushButton{{background:{SURF2};border:1px solid {BORDER};border-radius:6px;"
+            f"color:{TEXT2};font-weight:700;padding:3px 12px;}}"
+            f"QPushButton:hover{{background:{SURF3};color:{TEXT};}}")
+        xp_set_btn.clicked.connect(self._on_set_total_xp)
+        xp_add_row.addWidget(xp_set_btn)
+        xp_cl.addLayout(xp_add_row)
+
+        layout.addWidget(self._xp_card)
+
         # ── Identity / Character Config card ─────────────────────────────────
+        # Title-row-then-content matches the Class Manager/Experience cards
+        # above it (was previously a single QHBoxLayout cramming the title
+        # and all 4 buttons onto one line) — consistent card anatomy across
+        # the whole top pane, and gives the buttons room to show their
+        # current value (see _refresh_identity_buttons) without crowding.
         id_card = QFrame()
         id_card.setStyleSheet(f"QFrame{{background:{SURF};border:1px solid {qa(TEAL,0x33)};border-radius:10px;}}")
-        id_cl = QHBoxLayout(id_card); id_cl.setContentsMargins(12,8,12,8); id_cl.setSpacing(8)
+        id_cl = QVBoxLayout(id_card); id_cl.setContentsMargins(12,8,12,8); id_cl.setSpacing(6)
         id_cl.addWidget(_lbl("🧬  IDENTITY", TEAL2, FS_SMALL, bold=True))
-        id_cl.addSpacing(4)
+        id_btn_row = QHBoxLayout(); id_btn_row.setSpacing(8)
         self._identity_btns = {}
+        self._identity_btn_labels = {}
         for label, slot, color in [
             ("Race",       "race",       TEAL),
             ("Subrace",    "subrace",    TEAL),
@@ -7966,14 +8342,13 @@ class CharacterSheet(QWidget):
                 f"color:{color};font-size:{FS_TINY}px;font-weight:700;padding:2px 10px;}}"
                 f"QPushButton:hover{{background:{qa(color,0x44)};border-color:{color};}}")
             b.clicked.connect(lambda checked=False, s=slot: self._edit_identity(s))
-            id_cl.addWidget(b)
+            id_btn_row.addWidget(b)
             self._identity_btns[slot] = b
-        id_cl.addStretch()
+            self._identity_btn_labels[slot] = label
+        id_btn_row.addStretch()
+        id_cl.addLayout(id_btn_row)
         layout.addWidget(id_card)
-        # Hide Ancestry unless Dragonborn
-        if "ancestry" in self._identity_btns:
-            self._identity_btns["ancestry"].setVisible(
-                self.char.get("race","") == "Dragonborn")
+        self._refresh_identity_buttons()
         layout.addStretch()
 
         # ── Bottom pane: LevelUpPanel + Optional Class Features ───────────────
@@ -7992,10 +8367,10 @@ class CharacterSheet(QWidget):
 
         # ── Optional Class Features (TCoE) ────────────────────────────────
         opt_card = _card()
-        opt_card.setStyleSheet(f"QFrame{{background:{SURF};border:1px solid #55E8A020;border-radius:10px;}}")
+        opt_card.setStyleSheet(f"QFrame{{background:{SURF};border:1px solid {qa(AMBER,0x55)};border-radius:10px;}}")
         opt_lay = QVBoxLayout(opt_card); opt_lay.setContentsMargins(14,12,14,14); opt_lay.setSpacing(6)
         opt_lay.addWidget(_lbl("✦  OPTIONAL CLASS FEATURES  —  Tasha's Cauldron of Everything",
-                               "#E8A020", FS_SMALL, bold=True))
+                               AMBER, FS_SMALL, bold=True))
         opt_lay.addWidget(_lbl("Toggle alternate features for your classes. Discuss with your DM first.",
                                TEXT3, FS_SMALL))
         self._opt_feat_checks = {}
@@ -8008,10 +8383,13 @@ class CharacterSheet(QWidget):
         splitter.addWidget(top_half)
         splitter.addWidget(bottom_half)
         self._choices_top_half = top_half
-        # Roughly a third for the class/identity cards, two-thirds for
-        # the scrollable choices list — the splitter handle can be
-        # dragged to any ratio, same as the Combat tab.
-        splitter.setSizes([220, 460])
+        # Enough for all 3 top cards (Class Manager, Experience, Identity)
+        # without initial clipping when XP leveling mode is on — a hidden
+        # Experience card (milestone mode) doesn't consume this space, it
+        # just leaves more room for the addStretch() below it, so this
+        # default doesn't cost milestone characters anything. The splitter
+        # handle can still be dragged to any ratio, same as the Combat tab.
+        splitter.setSizes([280, 460])
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         outer.addWidget(splitter, 1)
@@ -9939,7 +10317,7 @@ class CharacterSheet(QWidget):
                         _tag=f"(replaces {_rep})" if _rep else "(TCoE optional)"
                         _items.append(f"[Lv{_ul}]  {_f['name']} {_tag}")
             if _items:
-                self._add_feature_section(f"✦ Optional — {_cn}","#E8A020",_items,badge_color="#E8A020")
+                self._add_feature_section(f"✦ Optional — {_cn}",AMBER,_items,badge_color=AMBER)
 
         # ── DM-Granted Feats Browser ─────────────────────────────────────────
         from dnd_app.data.feats import ALL_FEATS, get_feat as _get_feat
@@ -10590,10 +10968,7 @@ class CharacterSheet(QWidget):
         for btn in self.findChildren(QPushButton):
             if "Ancestry" in btn.text():
                 btn.setVisible(self.char.get("race","") == "Dragonborn")
-        # Sync identity buttons in choices tab if present
-        if hasattr(self, "_identity_btns") and "ancestry" in self._identity_btns:
-            self._identity_btns["ancestry"].setVisible(
-                self.char.get("race","") == "Dragonborn")
+        self._refresh_identity_buttons()
         self._sb_prof._val.setText(sign(pb))
         _spd_parts = [f"{spd} ft"]
         if fly:  _spd_parts.append(f"✈ {fly}")
@@ -10605,6 +10980,87 @@ class CharacterSheet(QWidget):
             sub = c.get("subclass","")
             cls_parts.append(f"{c['class']} {c['level']}" + (f" ({sub})" if sub else ""))
         self._class_summary.setText("  ·  ".join(cls_parts))
+        self._refresh_xp_tracker()
+
+    def _refresh_xp_tracker(self):
+        """Updates both the header XP pill and the Choices-tab XP tracker
+        card (if built) from char["experience"]/leveling_mode. Called from
+        _refresh_stat_bar, so it stays in sync with every other
+        controller-driven refresh — including the Settings dialog's
+        leveling-mode toggle, which goes through sheet.ctrl.refresh()."""
+        from dnd_app.core.character import xp_progress
+        xp_mode = self.char.get("leveling_mode", "milestone") == "xp"
+        prog = xp_progress(self.char)
+        eligible = prog["eligible"]
+        levels_due = prog["levels_due"]
+        # A big enough XP award can cover more than one level at once —
+        # that's supposed to carry over (same as it does at the table),
+        # so say how many are actually owed rather than just "ready".
+        ready_phrase = "Ready to level up!" if levels_due <= 1 else f"Ready to level up ×{levels_due}!"
+
+        # Once more than one level is owed, "current / next-single-level
+        # threshold" reads as broken (the total is already miles past
+        # that number) — show the plain total instead of a fraction.
+        xp_line = f"{prog['xp']:,} XP" if levels_due > 1 else f"{prog['xp']:,} / {prog['next']:,}"
+
+        if hasattr(self, "_sb_xp"):
+            self._sb_xp.setVisible(xp_mode)
+            if xp_mode:
+                self._sb_xp._val.setText(xp_line)
+                self._sb_xp._bar.setValue(prog["pct"])
+                border = GOLD if eligible else qa(GOLD,0x55)
+                self._sb_xp.setStyleSheet(f"QFrame{{background:{SURF};border:2px solid {border};border-radius:10px;}}")
+                if eligible:
+                    self._sb_xp.setCursor(Qt.PointingHandCursor)
+                    self._sb_xp.mousePressEvent = lambda e: self._open_level_up_or_multiclass()
+                    self._sb_xp.setToolTip(f"{prog['xp']:,} XP — {ready_phrase} Click to level up.")
+                else:
+                    self._sb_xp.setCursor(Qt.ArrowCursor)
+                    self._sb_xp.mousePressEvent = lambda e: None
+                    remaining = prog["next"] - prog["xp"]
+                    self._sb_xp.setToolTip(f"{prog['xp']:,} / {prog['next']:,} XP — {remaining:,} XP to next level")
+
+        if hasattr(self, "_xp_card"):
+            self._xp_card.setVisible(xp_mode)
+            if xp_mode:
+                self._xp_total_lbl.setText(f"{prog['xp']:,} XP")
+                self._xp_bar.setValue(prog["pct"])
+                if prog["level"] >= 20:
+                    self._xp_status_lbl.setText("Max level")
+                    self._xp_status_lbl.setStyleSheet(f"color:{TEXT3};font-size:{FS_SMALL}px;font-weight:700;")
+                elif eligible:
+                    self._xp_status_lbl.setText(f"🌟 {ready_phrase} ({xp_line} XP)" if levels_due <= 1
+                                                 else f"🌟 {ready_phrase} ({xp_line})")
+                    self._xp_status_lbl.setStyleSheet(f"color:{GOLD2};font-size:{FS_SMALL}px;font-weight:700;")
+                else:
+                    remaining = prog["next"] - prog["xp"]
+                    self._xp_status_lbl.setText(f"{prog['xp']:,} / {prog['next']:,} XP  ·  {remaining:,} to next level")
+                    self._xp_status_lbl.setStyleSheet(f"color:{TEXT3};font-size:{FS_SMALL}px;font-weight:700;")
+
+    def _refresh_identity_buttons(self):
+        """Shows the CURRENTLY set value on each Choices-tab Identity
+        button (e.g. "✎  Race: Human") instead of a bare generic label —
+        previously you had to click through each one to see what was
+        already set. Also drives Ancestry's visibility (Dragonborn only),
+        replacing what used to be a separate, easy-to-forget duplicate of
+        this same check. Called from _refresh_stat_bar, so it stays in
+        sync with every controller-driven refresh."""
+        if not hasattr(self, "_identity_btns"):
+            return
+        values = {
+            "race": self.char.get("race", ""),
+            "subrace": self.char.get("subrace", ""),
+            "ancestry": self.char.get("draconic_ancestry", ""),
+            "background": self.char.get("background", ""),
+        }
+        for slot, label in getattr(self, "_identity_btn_labels", {}).items():
+            btn = self._identity_btns.get(slot)
+            if not btn:
+                continue
+            val = values.get(slot, "")
+            btn.setText(f"✎  {label}: {val}" if val else f"✎  {label}")
+        if "ancestry" in self._identity_btns:
+            self._identity_btns["ancestry"].setVisible(self.char.get("race", "") == "Dragonborn")
 
     def _update_save_advantage_badge(self, ab: str):
         """Sync one saving throw's advantage indicator badge to current
