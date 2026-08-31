@@ -1921,6 +1921,67 @@ class CharacterSheet(QWidget):
                 rebuild(self.char); update_all(self.char)
                 self.ctrl.refresh()
 
+    def _export_dialog(self):
+        """Export the character for a DM to review or as a personal
+        quick-reference cheat sheet — separate from the JSON save format,
+        which round-trips back into the app but isn't meant for a human
+        to read directly. Two formats: a plain-text summary (stats,
+        skills, proficiencies, senses, weapons, resources, spells, magic
+        items, full action/bonus-action/reaction/passive list), or the
+        official WotC fillable PDF sheet filled in with this character's
+        real data."""
+        options = [
+            "Official character sheet (PDF)",
+            "Plain text summary (.txt)",
+        ]
+        choice, ok = QInputDialog.getItem(
+            self, "Export Character", "Format:", options, 0, False)
+        if not ok:
+            return
+        if choice.startswith("Official"):
+            self._export_pdf_dialog()
+        else:
+            self._export_text_dialog()
+
+    def _export_text_dialog(self):
+        from PySide6.QtWidgets import QFileDialog
+        from dnd_app.core.save_load import export_character_text
+        import os
+        name = self.char.get("name", "Unknown").strip() or "Unknown"
+        default_path = os.path.join(os.path.expanduser("~"), f"{name} - Character Sheet.txt")
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Character Sheet", default_path, "Text Files (*.txt)")
+        if not path:
+            return
+        text = export_character_text(self.char)
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+            self._toast(f"📄 Exported to {os.path.basename(path)}")
+        except OSError as e:
+            QMessageBox.warning(self, "Export Failed", f"Could not write file:\n{e}")
+
+    def _export_pdf_dialog(self):
+        from PySide6.QtWidgets import QFileDialog
+        from dnd_app.core.pdf_export import export_official_pdf, TEMPLATE_PATH
+        import os
+        if not os.path.exists(TEMPLATE_PATH):
+            QMessageBox.warning(
+                self, "Export Failed",
+                f"The official character sheet template is missing:\n{TEMPLATE_PATH}")
+            return
+        name = self.char.get("name", "Unknown").strip() or "Unknown"
+        default_path = os.path.join(os.path.expanduser("~"), f"{name} - Character Sheet.pdf")
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Character Sheet (PDF)", default_path, "PDF Files (*.pdf)")
+        if not path:
+            return
+        try:
+            export_official_pdf(self.char, path)
+            self._toast(f"📄 Exported to {os.path.basename(path)}")
+        except Exception as e:
+            QMessageBox.warning(self, "Export Failed", f"Could not write PDF:\n{e}")
+
 
     def confirm_leave(self) -> bool:
         """Prompt to save before leaving sheet. Returns True if safe to leave."""
@@ -2023,11 +2084,14 @@ class CharacterSheet(QWidget):
             f"QPushButton:hover{{border-color:{GOLD};color:{GOLD2};}}")
         hl.addWidget(self._insp_btn)
 
-        # Save / Load
-        for label, fn, color in [("💾","self._save",TEAL),("📂","self._load_dialog",INDIGO)]:
-            fn_ref = self._save if label=="💾" else self._load_dialog
+        # Save / Load / Export
+        for label, fn_ref, tooltip, color in [
+            ("💾", self._save, "Save", TEAL),
+            ("📂", self._load_dialog, "Load", INDIGO),
+            ("📄", self._export_dialog, "Export character sheet (for a DM, or as a cheat sheet)", GOLD),
+        ]:
             b=QPushButton(label); b.setFixedSize(32,32)
-            b.setToolTip("Save" if label=="💾" else "Load")
+            b.setToolTip(tooltip)
             b.setStyleSheet(f"QPushButton{{background:{qa(color,0x22)};border:1px solid {qa(color,0x55)};border-radius:7px;font-size:15px;padding:0;}}QPushButton:hover{{background:{qa(color,0x44)};border-color:{color};}}")
             b.clicked.connect(fn_ref); hl.addWidget(b)
 

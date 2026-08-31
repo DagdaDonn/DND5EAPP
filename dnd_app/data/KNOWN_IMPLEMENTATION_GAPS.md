@@ -9392,3 +9392,127 @@ Battle Master) correctly clears the chosen runes and actually
 recomputes resources, not just display text. Full 1194-combination
 class/subclass/level/edition sweep, 1190-item magic-item-effects
 regression, and 508-combination companions sweep: all 0 errors.
+
+## Character sheet export — wired up and substantially expanded
+
+User asked how to export the character sheet for a DM to review, or
+as a personal cheat sheet. Investigated and found `export_character_
+text()` already existed in `save_load.py` (name/class/race/background,
+ability scores, AC/HP/initiative/etc., saves, skills, feats, spell
+slots, concentration, notes) — but it was never called from anywhere
+in the app. No button, no menu item, nothing. A fully-built function
+with zero way to actually reach it.
+
+Wired it up: a new 📄 button next to the existing Save/Load buttons in
+the sheet's header toolbar, opening a save-file dialog defaulting to
+`"{name} - Character Sheet.txt"` in the user's home directory (kept
+deliberately separate from the `~/.dnd_characters` JSON save
+directory — a save file round-trips back into the app, this is a
+plain-text handout meant to leave it).
+
+Also substantially expanded what the export actually contains, since a
+DM reviewing a sheet or a player using it as a table quick-reference
+needs more than base stats. Added: proficiencies (languages, armor,
+weapons, tools) and senses; active conditions and exhaustion; a
+simplified weapon summary (to-hit and damage per equipped weapon,
+parsing any `+N` magic suffix via the same `parse_magic_suffix()` the
+rest of the app already uses, honestly labeled as simplified since it
+doesn't chase every situational toggle/effect the live Combat tab
+does); resources with current/max and reset type (filtering out
+resources that compute to a non-positive max — a by_level resource
+with no threshold met yet at the character's current level, e.g.
+Indomitable before 9th — since a "0/0, not actually available yet" row
+is clutter on what's meant to be a clean reference, not a real
+finding); hit dice; spell slots (including pact slots); known/prepared
+spells grouped by level; magic items with attunement/equipped status;
+and the character's full action-economy list (Action/Bonus
+Action/Reaction/Passive) via the existing, already-tested
+`build_action_abilities()` — genuinely the most DM-relevant section,
+since it answers "what can this character actually do" in one place,
+which nothing else in this app assembles into a single view. Wrapped
+that section in a try/except: it's the single largest, most
+class-specific bit of the whole export, and a rare edge case there
+shouldn't cost the player the rest of an otherwise-successful export.
+Also fixed a small pre-existing formatting bug in the skills line
+(dangling trailing space when a skill has no proficiency marker or
+advantage/disadvantage tag) while already in this function.
+
+Verified directly: a full sample character's exported text end-to-end,
+and the real `_export_text_dialog()` UI method (file dialog → write →
+toast), both via the headless PySide6 stub since this environment has
+no Qt install. Swept `export_character_text()` across all 796
+class/subclass/level/edition combinations (both editions, every class,
+every subclass, levels 1/5/11/20, with equipped weapons and an
+attuned magic item on every one): 0 errors. Full 1194-combination
+class/subclass/level/edition sweep and 1190-item magic-item-effects
+regression: both clean.
+
+## Official character sheet PDF export
+
+User offered WotC's official free fillable 2014 PHB character sheet
+PDF and asked what could be done with it. Built a second export
+option — `dnd_app/core/pdf_export.py` — that fills the real 3-page
+form with a character's actual data instead of only offering the
+plain-text summary above. The 📄 toolbar button now opens a format
+picker ("Official character sheet (PDF)" / "Plain text summary
+(.txt)") rather than going straight to text.
+
+The template's own form-field IDs are largely opaque/auto-generated
+(e.g. "Check Box 23", "Spells 1046") and not in visual page order, so
+the mapping from field ID to sheet position had to be derived rather
+than guessed: fields were extracted, sorted by their PDF `rect`
+bounding box (bucketed into columns by x-position, sorted by
+descending y within each column), and cross-checked against the
+sheet's known fixed visual layout (alphabetical skills, STR through
+CHA save order, successes-then-failures death saves, a 3-column
+per-spell-level grid using the "SlotsTotal" header fields as
+level-section boundaries, each spell name paired with its nearest
+same-row "prepared" checkbox within a small y-tolerance). Confirmed
+against rendered page images rather than trusting the sort blind.
+Fills: identity/class/level (subclass deliberately left out of the
+cramped ClassLevel field and put in Features and Traits instead, see
+below); ability scores/mods; saves and skills with proficiency
+checkboxes; AC/initiative/speed/HP/hit dice/death saves; up to 3
+equipped weapons plus an Attacks & Spellcasting overflow block for the
+rest; proficiencies/languages/senses; equipment and currency;
+personality/ideals/bonds/flaws; features & traits (prefixed with each
+class's subclass, since the header field couldn't fit it); page 2
+backstory/allies/treasure/appearance boxes; and full spellcasting
+(ability/DC/attack bonus, slot totals, slots *expended* per level, and
+every known spell per level with its prepared checkbox — checked for
+every spell for classes that don't have a separate "known vs
+prepared" split, and checked against `spells_prepared` for the ones
+that do).
+
+Three real bugs found and fixed via visual re-rendering (not just the
+regression sweep, which only proves "doesn't crash," not "looks
+right"): (1) the template's own field ID says "SlotsRemaining" but the
+label actually printed on the page next to it reads "SLOTS EXPENDED"
+— a genuine mismatch in WotC's own file — so the code needs to write
+the *used* count there, not `max - used`; caught by rendering a test
+character with slots used and seeing the wrong number under the right
+label. (2) Initial fill called pypdf's `set_need_appearances_writer
+(True)`, which tells PDF viewers to discard pypdf's own correctly-
+sized appearance streams and regenerate from the field's inherited
+auto-size `/DA`, producing oversized text in every multi-line box —
+removed entirely, with a comment at the call site explaining why it's
+deliberately absent. (3) With that auto-size behavior gone, pypdf's
+own text layout only wraps on literal `\n` already in the string, no
+automatic width-based wrapping, so long personality/backstory/equipment
+text was overflowing its box — added manual pre-wrapping
+(`_wrap_multiline()`) using a per-field width table and an approximate
+average-character-width heuristic, plus a smaller explicit font size
+for the narrow weapon-name/attack/damage/ClassLevel fields that were
+clipping their content at the default size.
+
+Verified: `export_official_pdf()` swept across all 796
+class/subclass/level/edition combinations (equipped weapons, an
+attuned magic item, known/cantrip/prepared spells, spell slots with
+some used, a feat, and long personality text on every one) — 0 errors.
+Re-rendered filled test PDFs to page images after each of the three
+fixes above and visually confirmed correct text size, correct
+wrapping, and the corrected slots-expended value. Existing
+796-combination text-export sweep and the 1194/1190/508 regression
+suites re-run clean after these changes (they don't exercise
+`pdf_export.py` directly, but confirm nothing else in the app
+regressed).
