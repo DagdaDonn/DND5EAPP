@@ -1,7 +1,7 @@
 """
 Fill the official WotC 5E fillable character sheet PDF (2014 PHB, the
 free 3-page "5E_CharacterSheet_Fillable.pdf" WotC distributes for
-personal use — bundled at dnd_app/assets/5E_CharacterSheet_Fillable.pdf)
+personal use — bundled at dnd_app/data/5E_CharacterSheet_Fillable.pdf)
 with a character's real, computed data.
 
 Field-name mapping was reverse-engineered once from the template's own
@@ -18,8 +18,8 @@ Author: Ethan O'Brien
 import os
 import textwrap
 
-ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
-TEMPLATE_PATH = os.path.join(ASSETS_DIR, "5E_CharacterSheet_Fillable.pdf")
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+TEMPLATE_PATH = os.path.join(DATA_DIR, "5E_CharacterSheet_Fillable.pdf")
 
 # ── Page 1: saving throw proficiency checkboxes, in STR/DEX/CON/INT/WIS/CHA order ──
 SAVE_CHECKBOXES = {
@@ -220,7 +220,7 @@ def _weapon_summary(char: dict, wname: str):
     """(to_hit_str, damage_str) for one equipped weapon name, same
     simplified logic as save_load.export_character_text()'s weapon
     section — doesn't chase every situational toggle/effect."""
-    from dnd_app.data.items import WEAPON_DICT
+    from dnd_app.data.phbCommon.items import WEAPON_DICT
     from .magic_items import parse_magic_suffix
     from .calculator import get_weapon_attack_bonus
 
@@ -424,7 +424,7 @@ def _detect_spell_class(char: dict) -> str:
     """The class name _detect_spell_ability() would derive its answer
     from — same iteration/special-casing, just returning the class name
     instead of the ability, for the sheet's "Spellcasting Class" field."""
-    from dnd_app.data.classes import CLASS_DICT
+    from dnd_app.data.phb2014.classes import CLASS_DICT
     for c in char.get("classes", []):
         cls_name = c["class"]
         sub = c.get("subclass", "").lower()
@@ -440,7 +440,7 @@ def _detect_spell_class(char: dict) -> str:
 
 def _fill_spells(char, values, text, check):
     from .calculator import class_levels, get_spell_save_dc, get_spell_attack_bonus, _detect_spell_ability
-    from dnd_app.data.spells import get_spell
+    from dnd_app.data.phbCommon.spells import get_spell
 
     cl = class_levels(char)
     primary_caster = _detect_spell_class(char)

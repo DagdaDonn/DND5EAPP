@@ -14,7 +14,8 @@ Date: 2026-08-20
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QColor
-from .theme import *
+from dnd_app.ui.style.theme import *
+from ..shared import h as _h, _btn
 from dnd_app.core.builder import (
     get_choices_needed, apply_choice, rebuild,
     get_background_skills, get_race_skills, get_race_asi,
@@ -91,15 +92,14 @@ RACE_SKILL_CHOICES = {
                   "label": "Ancestral Legacy (Reborn): choose 2 skill proficiencies"},
 }
 
-SOURCE_COLORS = {"race": TEAL2, "background": GOLD, "class": IND2, "subclass": PURP2}
-
-
 def _lbl(text, color=TEXT, bold=False, size=FS_BODY, align=Qt.AlignLeft, wrap=True):
-    w = QLabel(text)
-    w.setStyleSheet(f"color:{color};font-size:{size}px;{'font-weight:700;' if bold else ''}")
-    w.setAlignment(align)
-    if wrap: w.setWordWrap(True)
-    return w
+    # Thin wrapper, not a straight alias: this file's own (bold, size)
+    # positional order is swapped from shared.py's h() (size, bold) —
+    # at least one call site here relies on that exact order — so a
+    # direct `_lbl = h` would silently reinterpret an existing
+    # positional call's arguments. Delegating still removes the
+    # duplicate QLabel-building logic without touching any call site.
+    return _h(text, color, size, bold, align, wrap)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -116,7 +116,12 @@ class ChoiceWidget(QFrame):
         self._confirmed = len(self._selected) >= choice_info.get("count", 1)
         self._count = choice_info.get("count", 1)
 
-        bg = SOURCE_COLORS.get(choice_info.get("source", "class"), IND2)
+        # Built fresh per widget, not a module-level dict: a dict literal
+        # at module scope is evaluated exactly once, at this module's
+        # first import, so it would freeze to whichever theme was active
+        # at app startup and never pick up a later theme switch.
+        source_colors = {"race": TEAL2, "background": GOLD, "class": IND2, "subclass": PURP2}
+        bg = source_colors.get(choice_info.get("source", "class"), IND2)
         self.setStyleSheet(
             f"QFrame{{background:{SURF2};border:1px solid {qa(bg,0x44)};"
             f"border-left:3px solid {bg};border-radius:6px;}}"
@@ -175,11 +180,15 @@ class ChoiceWidget(QFrame):
         if self._count > 1 and not self._confirmed:
             self._confirm_btn = QPushButton(f"✓  Confirm  ({len(self._selected)}/{self._count} selected)")
             self._confirm_btn.setFixedHeight(40)
+            base_ss = _btn("", bg, variant="cta", radius=8, bg_alpha=0x22,
+                            hover_text="white", font_size=FS_BODY, padding="6px 14px").styleSheet()
+            # The shared factory's normal hover rule fires even while
+            # disabled; split it into ":hover:enabled" here to preserve
+            # this button's own disabled-state styling, which _btn()
+            # doesn't model.
+            base_ss = base_ss.replace("QPushButton:hover{", "QPushButton:hover:enabled{")
             self._confirm_btn.setStyleSheet(
-                f"QPushButton{{background:{qa(bg,0x22)};border:2px solid {bg};"
-                f"border-radius:8px;color:{bg};font-weight:700;font-size:{FS_BODY}px;padding:6px 14px;}}"
-                f"QPushButton:hover:enabled{{background:{bg};color:white;}}"
-                f"QPushButton:disabled{{background:{SURF};color:{TEXT3};border-color:{BORDER};}}") 
+                base_ss + f"QPushButton:disabled{{background:{SURF};color:{TEXT3};border-color:{BORDER};}}")
             self._confirm_btn.setEnabled(len(self._selected) >= self._count)
             self._confirm_btn.clicked.connect(self._on_confirm)
             self._lay.addWidget(self._confirm_btn)
@@ -241,7 +250,7 @@ class ChoiceWidget(QFrame):
 
     # ── Tool proficiency chooser ──────────────────────────────────
     def _build_tool_chooser(self):
-        from dnd_app.data.items import ALL_TOOLS
+        from dnd_app.data.phbCommon.items import ALL_TOOLS
         pool = self.choice_info.get("pool") or ALL_TOOLS
         # Also gray out weapons the character is already proficient with —
         # relevant when this pool is a mixed weapon-or-tool pool (see
@@ -288,7 +297,17 @@ class ChoiceWidget(QFrame):
                 self._selected.remove(value)
         if hasattr(self, "_status"):
             self._status.setText(self._status_text())
-        if len(self._selected) == self._count:
+        # Same rule as the generic checkbox handler (_on_check) below:
+        # reaching the required count only ENABLES the Confirm button for
+        # a multi-select chooser -- it doesn't submit on its own. Only a
+        # genuinely single-item choice (_count == 1) has nothing left to
+        # confirm, so that's the only case that auto-submits. This chooser
+        # was previously auto-submitting the moment the count was reached
+        # regardless of _count, silently skipping the Confirm button/step
+        # for any multi-select tool/weapon-or-tool choice.
+        if self._confirm_btn:
+            self._confirm_btn.setEnabled(len(self._selected) >= self._count)
+        if self._count == 1 and len(self._selected) == 1:
             self._set_confirmed()
             self.choice_confirmed.emit(self.choice_info["id"], list(self._selected))
 
@@ -313,7 +332,12 @@ class ChoiceWidget(QFrame):
     def _on_lang_change(self):
         sel = [c.currentText() for c in self._lang_combos if c.currentText() != "— Choose —"]
         self._selected = sel
-        if len(sel) == self._count:
+        # Same rule as _on_check/_on_tool_check: only a single-language
+        # choice has nothing left to confirm and can auto-submit; a
+        # multi-language choice just enables Confirm.
+        if self._confirm_btn:
+            self._confirm_btn.setEnabled(len(sel) >= self._count)
+        if self._count == 1 and len(sel) == 1:
             self._set_confirmed()
             self.choice_confirmed.emit(self.choice_info["id"], sel)
 
@@ -424,7 +448,7 @@ class ChoiceWidget(QFrame):
         ff = QVBoxLayout(self._feat_frame); ff.setSpacing(4); ff.setContentsMargins(0,0,0,0)
         feat_hdr = QHBoxLayout()
         feat_hdr.addWidget(_lbl("Choose Feat:", TEXT2, size=FS_BODY, bold=True, wrap=False))
-        from dnd_app.data.feats import ALL_FEATS
+        from dnd_app.data.phbCommon.feats import ALL_FEATS
         self._feat_search = QLineEdit(); self._feat_search.setPlaceholderText("Search feats…")
         self._feat_search.setStyleSheet(
             f"QLineEdit{{background:{SURF2};border:1px solid {BORDER2};border-radius:5px;"
@@ -493,7 +517,7 @@ class ChoiceWidget(QFrame):
         self._selected = []
         self._selected.append(f"feat:{feat_name}")
 
-        from dnd_app.data.feats import get_feat
+        from dnd_app.data.phbCommon.feats import get_feat
         fdata = get_feat(feat_name) or {}
         fixed_asi = fdata.get("asi") or {}
         flex_asi = fdata.get("asi_flex") or []
@@ -694,7 +718,7 @@ class ChoiceWidget(QFrame):
         pool = self.choice_info.get("pool") or []
         if not pool:
             # Generate from invocation list if no pool (shouldn't happen but safe)
-            from dnd_app.data.classes import ELDRITCH_INVOCATIONS
+            from dnd_app.data.phb2014.classes import ELDRITCH_INVOCATIONS
             pool = ELDRITCH_INVOCATIONS
         self._skill_cbs = {}
         scroll = QScrollArea(); scroll.setWidgetResizable(True)
@@ -732,7 +756,7 @@ class ChoiceWidget(QFrame):
         self._lay.addWidget(scroll, 1)
 
     def _build_invocation_chooser(self):
-        from dnd_app.data.classes import ELDRITCH_INVOCATIONS
+        from dnd_app.data.phb2014.classes import ELDRITCH_INVOCATIONS
         search = QLineEdit(); search.setPlaceholderText(f"Search invocations… ({self._count} required)")
         search.setStyleSheet(f"border:1px solid {BORDER};border-radius:4px;padding:3px 6px;background:{BG};color:{TEXT};")
         self._lay.addWidget(search)
@@ -764,7 +788,7 @@ class ChoiceWidget(QFrame):
 
     # ── Battle Master maneuver chooser ────────────────────────────
     def _build_maneuver_chooser(self):
-        from dnd_app.data.classes import BATTLE_MASTER_MANEUVERS
+        from dnd_app.data.phb2014.classes import BATTLE_MASTER_MANEUVERS
         from dnd_app.core.calculator import get_superiority_die
         import re as _re_sd
         sd = get_superiority_die(self.char)
@@ -799,7 +823,7 @@ class ChoiceWidget(QFrame):
 
     # ── Artificer Infusion chooser ────────────────────────────────
     def _build_infusion_chooser(self):
-        from dnd_app.data.classes import ARTIFICER_INFUSIONS
+        from dnd_app.data.phb2014.classes import ARTIFICER_INFUSIONS
         from dnd_app.core.calculator import get_infusion_min_level, class_levels
         art_lvl = class_levels(self.char).get("Artificer", 0)
         # Only shows infusions the character actually qualifies for by
@@ -815,7 +839,7 @@ class ChoiceWidget(QFrame):
         scroll.setStyleSheet(f"QScrollArea{{background:{BG};border:1px solid {BORDER};border-radius:4px;}}")
         inner = QWidget(); inner.setStyleSheet(f"background:{BG};")
         vl = QVBoxLayout(inner); vl.setSpacing(2); vl.setContentsMargins(4,4,4,4)
-        from dnd_app.data.magic_items import get_magic_item
+        from dnd_app.data.phbCommon.magic_items import get_magic_item
         self._inf_cbs = {}
         for inf in eligible_infusions:
             cb = QCheckBox(inf)
@@ -844,7 +868,7 @@ class ChoiceWidget(QFrame):
 
     # ── Magical Secrets spell chooser ─────────────────────────────
     def _build_spell_chooser_generic(self):
-        from dnd_app.data.spells import ALL_SPELLS
+        from dnd_app.data.phbCommon.spells import ALL_SPELLS
         # Restrict to choice_info["pool"] when provided (e.g. Blessed
         # Warrior/Druidic Warrior's specific cantrip list) — falls back to
         # every spell in the game when no pool is given, preserving the
@@ -885,7 +909,7 @@ class ChoiceWidget(QFrame):
                 name = it.data(Qt.UserRole) or ""
                 ok = not q or q in name.lower()
                 if lvl != "All Levels":
-                    from dnd_app.data.spells import get_spell
+                    from dnd_app.data.phbCommon.spells import get_spell
                     sp = get_spell(name)
                     ok = ok and sp and ((lvl=="Cantrip" and sp["level"]==0) or
                                         (lvl.startswith("Level") and sp["level"]==int(lvl[-1])))
@@ -910,7 +934,12 @@ class ChoiceWidget(QFrame):
             return
         self._selected = sel
         self._update_status()
-        if len(sel) == self._count:
+        # Same rule as _on_check/_on_tool_check/_on_lang_change: Magical
+        # Secrets is a multi-select choice (2+ spells) so reaching the
+        # count only enables Confirm, it doesn't submit on its own.
+        if self._confirm_btn:
+            self._confirm_btn.setEnabled(len(sel) >= self._count)
+        if self._count == 1 and len(sel) == 1:
             self._set_confirmed()
             self.choice_confirmed.emit(self.choice_info["id"], sel)
 
@@ -1141,7 +1170,7 @@ class LevelUpPanel(QWidget):
 
     def __init__(self, char_ref, parent=None):
         super().__init__(parent)
-        from dnd_app.ui.theme import sync_globals as _sg; _sg(globals())
+        from dnd_app.ui.style.theme import sync_globals as _sg; _sg(globals())
         self.char = char_ref
         self._outer = QVBoxLayout(self)
         self._outer.setContentsMargins(0,0,0,0)
@@ -1188,8 +1217,8 @@ class LevelUpPanel(QWidget):
 
     def _refresh_features(self):
         """Rebuild the class features timeline."""
-        from dnd_app.data.classes import CLASS_DICT
-        from dnd_app.data.classes_2024 import CLASS_DICT_2024
+        from dnd_app.data.phb2014.classes import CLASS_DICT
+        from dnd_app.data.phb2024.classes_2024 import CLASS_DICT_2024
         while self._features_lay.count():
             item = self._features_lay.takeAt(0)
             if item.widget(): item.widget().deleteLater()
@@ -1310,7 +1339,7 @@ class LevelUpPanel(QWidget):
 
         # ── Mixed skill-or-tool proficiencies (e.g. Skilled) ────────────────
         elif choice_id.endswith("_skill_or_tool_profs"):
-            from dnd_app.data.items import ALL_TOOLS as _all_tools
+            from dnd_app.data.phbCommon.items import ALL_TOOLS as _all_tools
             skill_names = set(ALL_SKILLS)
             skill_part = [s for s in selected if s in skill_names]
             for skill in skill_part:
@@ -1469,6 +1498,14 @@ class LevelUpPanel(QWidget):
         elif choice_id == "blood_hunter_mutagens":
             self.char.setdefault("_choices", {})[choice_id] = selected
 
+        # ── Death Domain: Reaper bonus necromancy cantrip ───────────────────
+        elif choice_id == "death_domain_reaper_cantrip":
+            # Just record the pick — get_bonus_spells() reads it back in on
+            # the rebuild() below, adding it to spells_known/spells_prepared
+            # as a proper bonus spell (doesn't count against cantrip cap),
+            # the same path every other domain's bonus spells use.
+            self.char.setdefault("_choices", {})[choice_id] = selected
+
         elif choice_id.startswith("bard_magical_secrets") or choice_id.startswith("bard_lore_secrets") or choice_id.startswith("mystic_arcanum_"):
             # Add chosen spells to spells_known
             for sp_name in selected:
@@ -1550,7 +1587,7 @@ def _get_subclass_choices(char):
             key = "whispers_of_the_dead_prof"
             already = made.get(key, [])
             if not already:
-                from dnd_app.data.feature_ui_interactions import TOOLS as ALL_TOOLS
+                from dnd_app.data.phbCommon.feature_ui_interactions import TOOLS as ALL_TOOLS
                 choices.append({
                     "id": key, "source": "subclass", "source_name": "Whispers of the Dead",
                     "type": "skill_or_tool_prof", "count": 1, "pool": ALL_SKILLS + ALL_TOOLS,
@@ -1563,7 +1600,7 @@ def _get_subclass_choices(char):
         # of the corresponding level once each. Same kind of gap as
         # Eldritch Invocations and Pact Boon — genuinely missing.
         if cname == "Warlock":
-            from dnd_app.data.spells import spells_for_class_at_level
+            from dnd_app.data.phbCommon.spells import spells_for_class_at_level
             ARCANUM_LEVELS = {11: 6, 13: 7, 15: 8, 17: 9}
             for char_lvl, spell_lvl in ARCANUM_LEVELS.items():
                 if clvl >= char_lvl:
@@ -1603,7 +1640,7 @@ def _get_subclass_choices(char):
             key = "pact_of_the_tome_cantrips"
             already = made.get(key, [])
             if len(already) < 3:
-                from dnd_app.data.spells import ALL_SPELLS
+                from dnd_app.data.phbCommon.spells import ALL_SPELLS
                 pool = sorted({s["name"] for s in ALL_SPELLS if s.get("level", 0) == 0})
                 choices.append({
                     "id": key, "source": "class", "source_name": "Pact of the Tome",
@@ -1624,7 +1661,7 @@ def _get_subclass_choices(char):
             key = "book_of_ancient_secrets_rituals"
             already = made.get(key, [])
             if len(already) < 2:
-                from dnd_app.data.spells import ALL_SPELLS
+                from dnd_app.data.phbCommon.spells import ALL_SPELLS
                 pool = sorted({s["name"] for s in ALL_SPELLS if s.get("level") == 1 and s.get("ritual")})
                 choices.append({
                     "id": key, "source": "class", "source_name": "Book of Ancient Secrets",
@@ -1645,7 +1682,7 @@ def _get_subclass_choices(char):
             already = char.get("eldritch_invocations", [])
             remaining = max(0, total_needed - len(already))
             if remaining > 0:
-                from dnd_app.data.classes import ELDRITCH_INVOCATIONS
+                from dnd_app.data.phb2014.classes import ELDRITCH_INVOCATIONS
                 import re
                 known_cantrips = char.get("cantrips_known", []) + char.get("spells_known", [])
                 has_eldritch_blast = any("eldritch blast" in c.lower() for c in known_cantrips)
@@ -1895,7 +1932,7 @@ def _get_subclass_choices(char):
                     cantrip_key = f"{cname}_{other_class.lower()}_cantrips"
                     cantrip_already = made.get(cantrip_key, [])
                     if len(cantrip_already) < 2:
-                        from dnd_app.data.spells import ALL_SPELLS
+                        from dnd_app.data.phbCommon.spells import ALL_SPELLS
                         cantrips = sorted({s["name"] for s in ALL_SPELLS
                                            if s.get("level") == 0 and other_class in s.get("classes", [])})
                         choices.append({"id": cantrip_key, "source": "class",
@@ -2058,6 +2095,23 @@ def _get_subclass_choices(char):
                     "count": 2, "pool": LANGUAGES,
                     "label": "Blessings of Knowledge: choose 2 languages",
                     "already_chosen": already_lang})
+
+        # ── Cleric Death Domain: Reaper bonus necromancy cantrip (Lv1) ──────────
+        # Real text: "you learn one necromancy cantrip of your choice from
+        # any class's spell list" — doesn't count against cantrips known,
+        # handled the same way as other domain bonus spells (get_bonus_spells()
+        # reads this choice back in so it survives rebuild()).
+        if cname == "Cleric" and "death domain" in sub.lower() and clvl >= 1:
+            already = made.get("death_domain_reaper_cantrip", [])
+            if not already:
+                from dnd_app.data.phbCommon.spells import ALL_SPELLS
+                necro_cantrips = [s["name"] for s in ALL_SPELLS
+                                   if s["level"] == 0 and s.get("school", "").lower() == "necromancy"]
+                choices.append({"id": "death_domain_reaper_cantrip", "source": "subclass",
+                    "source_name": "Death Domain", "type": "magical_secrets",
+                    "count": 1, "pool": necro_cantrips,
+                    "label": "Reaper: choose 1 necromancy cantrip from any class's spell list",
+                    "already_chosen": already})
 
         # ── Cleric Strength Domain (Amonkhet): Acolyte of Strength (Lv1) ────────
         if cname == "Cleric" and "strength domain" in sub.lower() and clvl >= 1:
@@ -2228,7 +2282,7 @@ def _get_subclass_choices(char):
         # correct level, since the real rule specifies spells "from your
         # spellbook," not any spell of that level from the full class list.
         if cname == "Wizard" and clvl >= 18:
-            from dnd_app.data.spells import SPELL_DICT
+            from dnd_app.data.phbCommon.spells import SPELL_DICT
             known_names = char.get("spells_known", [])
             for spell_lvl, key in ((1, "wizard_spell_mastery_1"), (2, "wizard_spell_mastery_2")):
                 already = made.get(key, [])
@@ -2248,7 +2302,7 @@ def _get_subclass_choices(char):
                         "already_chosen": already,
                     })
         if cname == "Wizard" and clvl >= 20:
-            from dnd_app.data.spells import SPELL_DICT
+            from dnd_app.data.phbCommon.spells import SPELL_DICT
             known_names = char.get("spells_known", [])
             key = "wizard_signature_spells"
             already = made.get(key, [])
@@ -2338,7 +2392,7 @@ def _get_feat_choices(char):
         key = "feat_skilled_skill_or_tool_profs"
         already = made.get(key, [])
         if len(already) < 3:
-            from dnd_app.data.items import ALL_TOOLS
+            from dnd_app.data.phbCommon.items import ALL_TOOLS
             choices.append({
                 "id": key, "source": "feat", "source_name": "Skilled",
                 "type": "skill_or_tool_prof", "count": 3,
@@ -2370,7 +2424,7 @@ def _get_feat_choices(char):
                     max_lvl = i + 1
             if char.get("pact_slots_max", 0) > 0:
                 max_lvl = max(max_lvl, char.get("pact_slot_level", 0))
-            from dnd_app.data.spells import ALL_SPELLS
+            from dnd_app.data.phbCommon.spells import ALL_SPELLS
             pool = sorted({s["name"] for s in ALL_SPELLS
                            if 1 <= s.get("level", 0) <= max_lvl
                            and ("Druid" in s.get("classes", []) or "Wizard" in s.get("classes", []))})
@@ -2385,7 +2439,7 @@ def _get_feat_choices(char):
         key = "feat_weapon_master_weapons"
         already = made.get(key, [])
         if len(already) < 4:
-            from dnd_app.data.items import SIMPLE_MELEE, SIMPLE_RANGED, MARTIAL_MELEE, MARTIAL_RANGED
+            from dnd_app.data.phbCommon.items import SIMPLE_MELEE, SIMPLE_RANGED, MARTIAL_MELEE, MARTIAL_RANGED
             weapon_pool = [w[0] for w in (SIMPLE_MELEE + SIMPLE_RANGED + MARTIAL_MELEE + MARTIAL_RANGED)]
             choices.append({
                 "id": key, "source": "feat", "source_name": "Weapon Master",
@@ -2398,7 +2452,7 @@ def _get_feat_choices(char):
         key = "feat_artificer_initiate_tool_profs"
         already = made.get(key, [])
         if len(already) < 1:
-            from dnd_app.data.items import ARTISAN_TOOLS
+            from dnd_app.data.phbCommon.items import ARTISAN_TOOLS
             choices.append({
                 "id": key, "source": "feat", "source_name": "Artificer Initiate",
                 "type": "tool_prof", "count": 1,
@@ -2441,7 +2495,7 @@ def _get_feat_choices(char):
         key = "feat_ritual_caster_spells"
         already = made.get(key, [])
         if len(already) < 2:
-            from dnd_app.data.spells import ALL_SPELLS
+            from dnd_app.data.phbCommon.spells import ALL_SPELLS
             pool = sorted({s["name"] for s in ALL_SPELLS if s.get("level") == 1 and s.get("ritual")
                           and any(cn in s.get("classes", []) for cn in ("Cleric", "Druid", "Wizard"))})
             choices.append({
@@ -2464,7 +2518,7 @@ def _get_feat_choices(char):
             })
 
     if "Prodigy" in all_feats:
-        from dnd_app.data.items import ALL_TOOLS
+        from dnd_app.data.phbCommon.items import ALL_TOOLS
         key_skill = "feat_prodigy_skill_profs"
         already_skill = made.get(key_skill, [])
         if len(already_skill) < 1:
@@ -2535,7 +2589,7 @@ def _get_feat_choices(char):
         key = "feat_martial_adept_maneuvers"
         already = made.get(key, [])
         if len(already) < 2:
-            from dnd_app.data.classes import BATTLE_MASTER_MANEUVERS
+            from dnd_app.data.phb2014.classes import BATTLE_MASTER_MANEUVERS
             choices.append({
                 "id": key, "source": "feat", "source_name": "Martial Adept",
                 "type": "maneuver", "count": 2 - len(already),
@@ -2547,7 +2601,7 @@ def _get_feat_choices(char):
         key = "feat_metamagic_adept_options"
         already = made.get(key, [])
         if len(already) < 2:
-            from dnd_app.data.classes import METAMAGIC
+            from dnd_app.data.phb2014.classes import METAMAGIC
             choices.append({
                 "id": key, "source": "feat", "source_name": "Metamagic Adept",
                 "type": "metamagic", "count": 2 - len(already),
@@ -2559,7 +2613,7 @@ def _get_feat_choices(char):
         key = "feat_eldritch_adept_invocation"
         already = made.get(key, [])
         if len(already) < 1:
-            from dnd_app.data.classes import ELDRITCH_INVOCATIONS
+            from dnd_app.data.phb2014.classes import ELDRITCH_INVOCATIONS
             import re
             is_warlock = char.get("class") == "Warlock" or any(
                 c.get("class") == "Warlock" for c in char.get("classes", []))
@@ -2629,7 +2683,7 @@ def _get_optional_feature_choices(char):
     # entirely): 2 separate choice instances since 3rd and 10th level
     # are independent grants, not one combined choice. Uses Barbarian's
     # real 1st-level skill pool rather than a hardcoded guess.
-    from dnd_app.data.classes import CLASS_DICT
+    from dnd_app.data.phb2014.classes import CLASS_DICT
     barb_lvl = sum(c.get("level", 0) for c in char.get("classes", []) if c.get("class") == "Barbarian")
     primal_on = (made.get("optional_features", {}).get("Primal Knowledge", False)
                  or char.get("optional_rules", {}).get("primal_knowledge", False))
@@ -2763,7 +2817,7 @@ def _get_race_choices(char):
             })
         already_wt = made.get("astral_knowledge_weapon_or_tool", [])
         if not already_wt:
-            from dnd_app.data.items import WEAPON_NAMES, ALL_TOOLS
+            from dnd_app.data.phbCommon.items import WEAPON_NAMES, ALL_TOOLS
             choices.append({
                 "id": "astral_knowledge_weapon_or_tool", "source": "race", "source_name": race,
                 "type": "weapon_or_tool_prof", "count": 1, "pool": WEAPON_NAMES + ALL_TOOLS,
@@ -2808,7 +2862,7 @@ def _get_race_choices(char):
     is_high_elf = race == "Elf" and "high" in subrace.lower()
     is_high_half_elf = race == "Half-Elf" and "high" in subrace.lower()
     if is_high_elf or is_high_half_elf:
-        from dnd_app.data.spells import ALL_SPELLS
+        from dnd_app.data.phbCommon.spells import ALL_SPELLS
         wiz_cantrips = sorted({s["name"] for s in ALL_SPELLS
                                 if s.get("level") == 0 and "Wizard" in s.get("classes", [])})
         key = "race_wizard_cantrip"
@@ -2834,7 +2888,7 @@ def _get_race_choices(char):
         matched_class = next((cls for key, cls in MERFOLK_CANTRIP_CLASS.items()
                                if key in subrace.lower()), None)
         if matched_class:
-            from dnd_app.data.spells import ALL_SPELLS
+            from dnd_app.data.phbCommon.spells import ALL_SPELLS
             cantrips = sorted({s["name"] for s in ALL_SPELLS
                                 if s.get("level") == 0 and matched_class in s.get("classes", [])})
             key = "race_merfolk_cantrip"
@@ -2914,7 +2968,7 @@ def _get_class_tool_choices(char):
     Herbalism kit, Artificer's Thieves'/Tinker's tools) are granted
     automatically via get_class_tool_profs() in builder.py and don't
     need a choice card at all."""
-    from dnd_app.data.items import ALL_TOOLS, ARTISAN_TOOLS, INSTRUMENT_TOOLS
+    from dnd_app.data.phbCommon.items import ALL_TOOLS, ARTISAN_TOOLS, INSTRUMENT_TOOLS
     choices = []
     made = char.get("_choices", {})
     class_names = [c.get("class", "") for c in char.get("classes", [])]

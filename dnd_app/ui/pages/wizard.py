@@ -17,17 +17,18 @@ Date: 2026-08-20
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt, Signal, QTimer, QSize
 from PySide6.QtGui import QFont
-from .theme import *
-from .shared import *
+from dnd_app.ui.style.theme import *
+from ..shared import *
+from ..shared import _btn
 from dnd_app.core.character import new_character, add_class, ability_score, ability_mod, get_class_entry, set_subclass
 from dnd_app.core.builder import rebuild, get_choices_needed, apply_choice
 from dnd_app.core.multiclass import check_multiclass_prereq
-from dnd_app.data.races import ALL_RACES, RACE_NAMES, RACE_DICT, get_race
-from dnd_app.data.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
-from dnd_app.data.backgrounds import ALL_BACKGROUNDS, BACKGROUND_NAMES, get_background
-from dnd_app.data.feats import ALL_FEATS
-from dnd_app.data.spells import ALL_SPELLS, spells_for_class, get_spell
-from dnd_app.data.items import ARMOR, ALL_WEAPONS, ADVENTURING_GEAR, SIMPLE_MELEE, SIMPLE_RANGED, MARTIAL_MELEE, MARTIAL_RANGED
+from dnd_app.data.phb2014.races import ALL_RACES, RACE_NAMES, RACE_DICT, get_race
+from dnd_app.data.phb2014.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
+from dnd_app.data.phbCommon.backgrounds import ALL_BACKGROUNDS, BACKGROUND_NAMES, get_background
+from dnd_app.data.phbCommon.feats import ALL_FEATS
+from dnd_app.data.phbCommon.spells import ALL_SPELLS, spells_for_class, get_spell
+from dnd_app.data.phbCommon.items import ARMOR, ALL_WEAPONS, ADVENTURING_GEAR, SIMPLE_MELEE, SIMPLE_RANGED, MARTIAL_MELEE, MARTIAL_RANGED
 
 ABILITIES = ["STR","DEX","CON","INT","WIS","CHA"]
 AB_FULL = {"STR":"Strength","DEX":"Dexterity","CON":"Constitution",
@@ -36,12 +37,8 @@ AB_FULL = {"STR":"Strength","DEX":"Dexterity","CON":"Constitution",
 STANDARD_ARRAY = [15, 14, 13, 12, 10, 8]
 POINT_BUY_COSTS = {8:0,9:1,10:2,11:3,12:4,13:5,14:7,15:9}
 
-# Spell-granting races
-def _lbl(text, color=TEXT, size=FS_BODY, bold=False, wrap=True, align=Qt.AlignLeft):
-    w = QLabel(text); w.setWordWrap(wrap); w.setAlignment(align)
-    s = f"color:{color};font-size:{size}px;background:transparent;"
-    if bold: s += "font-weight:700;"
-    w.setStyleSheet(s); return w
+# Same shape/param order as shared.py's h() — safe direct alias.
+_lbl = h
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -53,7 +50,7 @@ class CharacterWizard(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        from dnd_app.ui.theme import sync_globals as _sg; _sg(globals())
+        from dnd_app.ui.style.theme import sync_globals as _sg; _sg(globals())
         self.char = new_character()
         self._step = 0
         self._steps = []
@@ -145,17 +142,15 @@ class CharacterWizard(QWidget):
             # reported "button does nothing" issue without a live PySide6
             # install to test against.
             import traceback, os
+            from dnd_app.ui.shared import write_diagnostic_log
             tb = traceback.format_exc()
-            try:
-                with open(os.path.join(os.path.expanduser("~"), "mimic_crash_log.txt"), "w") as f:
-                    f.write(tb)
-            except Exception:
-                pass
+            log_path = write_diagnostic_log("mimic_crash_log.txt", tb)
             dlg = QMessageBox(self)
             dlg.setIcon(QMessageBox.Critical)
             dlg.setWindowTitle("Character Build Failed")
             dlg.setText("Something went wrong finalizing your character. The details below "
-                        "(also saved to mimic_crash_log.txt in your home folder) will help fix this.")
+                        + (f"(also saved to {log_path}) " if log_path else "")
+                        + "will help fix this.")
             dlg.setDetailedText(tb)
             dlg.exec()
             return
@@ -182,7 +177,7 @@ class CharacterWizard(QWidget):
 class Step1Race(QWidget):
     def __init__(self, char, parent=None):
         super().__init__(parent)
-        from dnd_app.ui.theme import sync_globals as _sg; _sg(globals())
+        from dnd_app.ui.style.theme import sync_globals as _sg; _sg(globals())
         self.char = char
         root = QHBoxLayout(self); root.setContentsMargins(24,24,24,24); root.setSpacing(20)
 
@@ -348,7 +343,7 @@ class Step1Race(QWidget):
         if hasattr(self, "_anc_widget"):
             self._anc_widget.setVisible(is_dragonborn)
             if is_dragonborn:
-                from dnd_app.data.races import DRACONIC_ANCESTRY, ANCESTRY_BY_SUBRACE
+                from dnd_app.data.phb2014.races import DRACONIC_ANCESTRY, ANCESTRY_BY_SUBRACE
                 self._ancestry_combo.clear()
                 # Default to Standard types (all 10)
                 for anc in ANCESTRY_BY_SUBRACE.get("Standard", []):
@@ -365,7 +360,7 @@ class Step1Race(QWidget):
         # the chosen subrace's own bonuses, not just the base race's.
         def _on_subrace_changed(idx):
             if is_dragonborn and hasattr(self, "_anc_widget"):
-                from dnd_app.data.races import DRACONIC_ANCESTRY, ANCESTRY_BY_SUBRACE
+                from dnd_app.data.phb2014.races import DRACONIC_ANCESTRY, ANCESTRY_BY_SUBRACE
                 sub_name = self._subrace_combo.currentData() or "Standard"
                 types = ANCESTRY_BY_SUBRACE.get(sub_name, ANCESTRY_BY_SUBRACE["Standard"])
                 self._ancestry_combo.clear()
@@ -492,7 +487,7 @@ class Step1Race(QWidget):
 class Step2Abilities(QWidget):
     def __init__(self, char, parent=None):
         super().__init__(parent)
-        from dnd_app.ui.theme import sync_globals as _sg; _sg(globals())
+        from dnd_app.ui.style.theme import sync_globals as _sg; _sg(globals())
         self.char = char
         root = QVBoxLayout(self); root.setContentsMargins(40,24,40,24); root.setSpacing(16)
         root.addWidget(_lbl("Ability Scores", GOLD2, FS_HEAD, bold=True))
@@ -700,7 +695,7 @@ class Step2Abilities(QWidget):
         Subrace strings encode the TOTAL bonus (not an addend), so when a subrace
         is chosen its parsed values replace the base race ASI entirely."""
         import re as _re
-        from dnd_app.data.races import RACE_DICT
+        from dnd_app.data.phb2014.races import RACE_DICT
         race   = char.get("race", "")
         rdata  = RACE_DICT.get(race, {})
         base   = dict(rdata.get("asi", {}))
@@ -726,7 +721,7 @@ class Step2Abilities(QWidget):
         distribute-style race was previously being shown the each-style
         checkbox picker, which can represent neither valid distribute
         option correctly."""
-        from dnd_app.data.races import RACE_DICT
+        from dnd_app.data.phb2014.races import RACE_DICT
         race = char.get("race", "")
         rdata = RACE_DICT.get(race, {})
         flex = rdata.get("asi_flex", 0)
@@ -867,7 +862,7 @@ class Step2Abilities(QWidget):
         elif sub_name:
             self._race_bonus_lbl.setText(f"Subrace: {sub_name}")
     def _update_totals(self):
-        from dnd_app.data.races import RACE_DICT as RD
+        from dnd_app.data.phb2014.races import RACE_DICT as RD
         if "Standard Array" in self._method.currentText():
             for ab, combo in self._sa_combos.items():
                 self._ab_blocks[ab].set_score(int(combo.currentText()))
@@ -975,7 +970,7 @@ class Step3Class(QWidget):
 
     def __init__(self, char, parent=None):
         super().__init__(parent)
-        from dnd_app.ui.theme import sync_globals as _sg; _sg(globals())
+        from dnd_app.ui.style.theme import sync_globals as _sg; _sg(globals())
         self.char = char
         root = QVBoxLayout(self)
         root.setContentsMargins(40, 24, 40, 24); root.setSpacing(16)
@@ -1109,7 +1104,7 @@ class Step3Class(QWidget):
                 self._bg_feat_combo.setVisible(False)
                 self._bg_feat_lbl.setVisible(False)
             return
-        from dnd_app.data.backgrounds import get_background
+        from dnd_app.data.phbCommon.backgrounds import get_background
         bg = get_background(text) or {}
         feat_choices = bg.get("feat_choices") or []
         # Skills row
@@ -1165,7 +1160,7 @@ class Step3Class(QWidget):
 
     def _on_cls_change(self, text):
         if text.startswith("—"): self._cls_info_lbl.setText(""); return
-        from dnd_app.data.classes import CLASS_DICT
+        from dnd_app.data.phb2014.classes import CLASS_DICT
         cdata = CLASS_DICT.get(text, {})
         hd = cdata.get("hit_die", 8)
         saves = ", ".join(cdata.get("save_profs", []))
@@ -1222,7 +1217,7 @@ class Step3Class(QWidget):
         char["edition"] = "2014"
         char["background"] = bg_name
 
-        from dnd_app.data.backgrounds import get_background
+        from dnd_app.data.phbCommon.backgrounds import get_background
         bg_data = get_background(bg_name) or {}
         feat_choices = bg_data.get("feat_choices") or []
         if feat_choices:
@@ -1246,7 +1241,7 @@ class Step3Class(QWidget):
             if isinstance(char.get("_choices"), dict):
                 char["_choices"].pop("background_feat", None)
 
-        from dnd_app.data.classes import CLASS_DICT
+        from dnd_app.data.phb2014.classes import CLASS_DICT
         from dnd_app.core.character import add_class
         cdata = CLASS_DICT.get(cls_name, {})
         hd = cdata.get("hit_die", 8)
@@ -1455,7 +1450,7 @@ def _weapon_category_pool(category_text: str) -> list:
     like "Any other musical instrument" — which incorrectly resolved to
     simple weapons, since "martial" isn't in that text either. Now
     checks for real non-weapon categories first."""
-    from dnd_app.data.items import INSTRUMENT_TOOLS, ARTISAN_TOOLS, GAMING_SETS
+    from dnd_app.data.phbCommon.items import INSTRUMENT_TOOLS, ARTISAN_TOOLS, GAMING_SETS
     t = category_text.lower()
     if "instrument" in t:
         return list(INSTRUMENT_TOOLS)
@@ -1535,7 +1530,7 @@ class Step5Equipment(QWidget):
             f"Choose your starting equipment ({cls_name}):" if cls_name
             else "Choose your starting equipment:", TEXT2, FS_BODY))
 
-        from dnd_app.data.starting_equipment import get_starting_equipment
+        from dnd_app.data.phbCommon.starting_equipment import get_starting_equipment
         self._groups = get_starting_equipment(cls_name)
         scroll = QScrollArea(); scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea{background:transparent;border:none;}")
@@ -1671,7 +1666,7 @@ class Step5Equipment(QWidget):
         # real gameplay additions could exist.
         char["equipped_weapons"] = []
         char["equipment"] = []
-        from dnd_app.data.items import WEAPON_DICT, EQUIPMENT_PACKS
+        from dnd_app.data.phbCommon.items import WEAPON_DICT, EQUIPMENT_PACKS
         for item in chosen_items:
             base = item.split(" (")[0].strip()
             if base == "Shield":

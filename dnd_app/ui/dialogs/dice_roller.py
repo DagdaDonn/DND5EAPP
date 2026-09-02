@@ -7,24 +7,24 @@ import random
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QFont, QColor
-from .theme import *
+from dnd_app.ui.style.theme import *
+from ..shared import h as _h, card as _card
 
 
 def sign(n): return f"+{n}" if n >= 0 else str(n)
 
 def lbl(text, color=None, bold=False, size=None, align=Qt.AlignLeft):
-    w = QLabel(text)
-    s = f"color:{color or TEXT};font-size:{size or FS_TINY}px;"
-    if bold: s += "font-weight:700;"
-    w.setStyleSheet(s); w.setAlignment(align); return w
+    # Not a direct alias to shared.py's h(): h() defaults wrap=True and
+    # calls setWordWrap(True), but this file's labels never had word-
+    # wrap enabled (no such param existed here) — a straight alias would
+    # silently start wrapping "Pick a die below to get started." inside
+    # a panel never laid out to expect that. Delegates with wrap=False
+    # to keep the original (never-wraps) behavior exactly.
+    return _h(text, color or TEXT, size or FS_TINY, bold, align, wrap=False)
 
-def _card() -> QFrame:
-    """A section card matching the rest of the app's dialogs (Settings,
-    Credits) instead of native QGroupBox chrome, which looked out of
-    place next to everything else in MIMIC."""
-    f = QFrame()
-    f.setStyleSheet(f"QFrame{{background:{SURF};border:1px solid {BORDER};border-radius:10px;}}")
-    return f
+# card() is shared.py's promoted version of this exact shape (background
+# SURF, 1px BORDER, radius 10) — this file's own _card() took no accent
+# param and always used BORDER, matching card()'s own default exactly.
 
 def _section_header(text: str) -> QLabel:
     return lbl(text, TEAL2, bold=True, size=FS_TINY)
@@ -44,7 +44,7 @@ class DiceRollerPanel(QWidget):
         # theme change specifically so this line picks up fresh colors
         # each time, rather than trying to re-style already-built child
         # widgets in place.
-        from .theme import sync_globals as _sg; _sg(globals())
+        from dnd_app.ui.style.theme import sync_globals as _sg; _sg(globals())
         self.char = char_ref
         self.setWindowTitle("Dice Roller")
         self.setFixedWidth(380)

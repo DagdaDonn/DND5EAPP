@@ -282,7 +282,7 @@ def ability_score(char: dict, ability: str, ignore_wildshape: bool = False) -> i
     # wild shaped, you use the beast's separate HP pool instead.
     active_beast = char.get("_wildshape_active")
     if active_beast and not ignore_wildshape and ability in ("STR", "DEX", "CON"):
-        from dnd_app.data.statblocks import WILDSHAPE_BEASTS
+        from dnd_app.data.phbCommon.statblocks import WILDSHAPE_BEASTS
         beast = WILDSHAPE_BEASTS.get(active_beast)
         if beast and ability in beast.get("abilities", {}):
             return beast["abilities"][ability]
@@ -314,7 +314,7 @@ def get_class_entry(char: dict, class_name: str) -> Optional[dict]:
 def _lookup_hit_die(class_name: str, fallback: int = 8) -> int:
     """Authoritative hit die from class data — callers can't get it wrong."""
     try:
-        from dnd_app.data.classes import CLASS_DICT
+        from dnd_app.data.phb2014.classes import CLASS_DICT
         return CLASS_DICT.get(class_name, {}).get("hit_die", fallback)
     except Exception:
         return fallback

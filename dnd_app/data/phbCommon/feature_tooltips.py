@@ -1982,7 +1982,7 @@ def get_tool_tooltip(tool_name: str) -> str:
     per the source — avoids duplicating that text 10 and 4 times over."""
     if tool_name in TOOL_TOOLTIPS:
         return TOOL_TOOLTIPS[tool_name]
-    from dnd_app.data.items import INSTRUMENT_TOOLS, GAMING_SETS
+    from dnd_app.data.phbCommon.items import INSTRUMENT_TOOLS, GAMING_SETS
     if tool_name in INSTRUMENT_TOOLS:
         return TOOL_TOOLTIPS["Musical instrument"]
     if tool_name in GAMING_SETS:

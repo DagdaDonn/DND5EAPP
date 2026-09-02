@@ -8,7 +8,7 @@ Date: 2026-08-20
 
 from __future__ import annotations
 
-from dnd_app.data.magic_items import get_item_effect, get_magic_item
+from dnd_app.data.phbCommon.magic_items import get_item_effect, get_magic_item
 import re as _re
 
 
@@ -418,7 +418,7 @@ def apply_equipment_skill_effects(char: dict) -> None:
     from mundane armor properties (PHB p.144: armor that imposes Stealth
     disadvantage does so for ANY wearer, not just magic armor).
     """
-    from dnd_app.data.items import ARMOR_DICT
+    from dnd_app.data.phbCommon.items import ARMOR_DICT
 
     armor_name = char.get("armor_worn", "No Armor")
     base_armor_name, _ = parse_magic_suffix(armor_name)
@@ -438,7 +438,7 @@ def _is_infusion_target_equipped(char: dict, target_item: str, infusion_name: st
     (weapon/armor/shield each track "equipped" completely differently).
     Confirmed this check didn't exist anywhere before — infusion-based
     charge items had no equip-prerequisite enforcement at all."""
-    from dnd_app.data.classes import ARTIFICER_INFUSION_TARGETS
+    from dnd_app.data.phb2014.classes import ARTIFICER_INFUSION_TARGETS
     target_type = ARTIFICER_INFUSION_TARGETS.get(infusion_name)
     if target_type == "weapon":
         return target_item in char.get("equipped_weapons", [])
@@ -496,7 +496,7 @@ def sync_item_charges(char: dict) -> None:
             else:
                 tracked[name] = {"current": uses, "max": uses, "recharge": recharge}
 
-    from dnd_app.data.classes import ARTIFICER_INFUSION_CHARGES
+    from dnd_app.data.phb2014.classes import ARTIFICER_INFUSION_CHARGES
     infusion_charge_keys = set()
     for inf in char.get("active_infusions", []):
         name = inf.get("infusion", "")

@@ -9790,3 +9790,260 @@ Updated an existing scratch test (`RestOptionsDialog._build_options`'s
 Githyanki/Astral Elf coverage) to the new static-method call signature
 and confirmed it still passes. Full 1194/1190/798 regression suites
 re-run clean.
+
+## Styling standardization: a shared style/component layer
+
+User asked to pick one of three "worth redoing" candidates raised
+earlier in this session (styling duplication, the 12k-line `sheet.py`
+god-file, or the total absence of committed tests) — chose styling,
+reasoning that a shared layer would both cut duplication now and make
+`sheet.py`'s eventual split safer later (each extracted tab file would
+already pull from one style module instead of carrying its own ad hoc
+QSS). Confirmed the scope with hard numbers before starting: **59**
+separate hand-rolled `QPushButton{{background:...}}` f-strings in
+`sheet.py` alone, another **~15** across `widgets.py`/`levelup_panel.py`/
+`main_window.py`/`wizard.py`/`dice_roller.py`/`feature_dialog.py` —
+**~74 total**, nearly all re-deriving one of the same ~4 visual shapes
+with only the accent color actually varying — plus a label factory
+(`_lbl`/`h`/`lbl`) independently redefined **six** times across those
+same files with three different, incompatible parameter orders, and a
+card factory (`_card`/`card`) duplicated twice, one copy of which
+(`shared.py`'s own `card()`) had never actually been adopted anywhere.
+This wasn't just cosmetic: it's exactly how the Optional Class
+Features card ended up with its color hardcoded to one theme's exact
+amber value instead of the `AMBER` constant (found and fixed earlier
+this session) — nothing forced these through a shared, theme-aware
+builder.
+
+Added to `shared.py` (the module already intended to hold cross-file
+widgets, previously under-used): `_btn(label, color, variant=...)` —
+five shapes (`cta`, `chip`, `neutral`, `ghost`, `danger`) covering the
+real observed variety, with override params (`bg_alpha`, `border_alpha`,
+`border_width`, `text_color`, `hover_text`, `hover_bg_alpha`) for the
+call sites that used a nonstandard alpha or text color rather than
+losing that nuance; `_pill(label, value, color)` generalizing what
+`CharacterSheet._make_stat_pill()`/`_make_xp_pill()` were building ad
+hoc (the AC/HP/Initiative/Prof/Speed/XP pills). `h()` (the label
+factory) gained a `_lbl` alias and `card()` (the card factory, already
+present but dead) was reshaped to match the signature `sheet.py`'s own
+`_card()` actually used everywhere, then aliased the same way — both
+adopted with **zero call-site changes** anywhere they already matched.
+Where a file's own `_lbl`/`lbl` had a genuinely different, incompatible
+parameter order or defaults (`levelup_panel.py`, `feature_dialog.py`,
+`dice_roller.py` each differed in a different way — confirmed by
+grepping every call site for positional-arg risk before touching
+anything), used a thin signature-preserving wrapper delegating to `h()`
+instead of a blind alias, so the original call sites' behavior is
+provably unchanged rather than silently reinterpreted.
+
+Migrated `sheet.py` (48 of 59 button sites converted; the remaining 11
+are genuinely bespoke — `:checked`/`:focus`/`:disabled` pseudo-states,
+refresh-path re-styling of a persistent widget rather than one-time
+construction, or non-palette hardcoded colors for a deliberate one-off
+like the death-screen skull button — forcing those through a shared
+factory would have meant either losing a real behavior or bloating the
+factory for a single use), `levelup_panel.py` (1 of 4; the other 3 hover
+to a different accent color than their base, which none of the five
+shapes model), `main_window.py` (4 of 4), and de-duplicated the label/
+card factories in `wizard.py`/`dice_roller.py`/`feature_dialog.py` even
+where their buttons stayed hand-rolled (padding/radius differed just
+enough from every shape to risk visibly resizing a fixed-row button for
+a one-or-two-instance gain — not worth the drift).
+
+Along the way, found `widgets.py` was almost entirely dead code: 10 of
+its ~12 classes (`SkillRow`, `StatBox`, `HPTracker`, `ClassEntryRow`,
+`SpellSlotBar`, `FeatureCard` — defined twice, the second silently
+shadowing the first — `FeatureSection`, `ResourceWidget`, `LevelHeader`,
+`AbilityWidget`) plus their own `lbl()`/`hline()`/`colored_btn()`
+helpers were never imported or instantiated anywhere else in the app —
+an earlier widget set superseded by equivalents built directly into
+`sheet.py`/`shared.py`, confirmed via a repo-wide grep (not just
+`ui`/`core`) before touching anything. Flagged this to the user rather
+than deleting unilaterally, since removing ~600 lines was well outside
+what "styling standardization" implied; user confirmed deletion.
+`widgets.py` is now 707 → 121 lines: just `FlowLayout`/`FlowContainer`
+(the two things anything else in the app actually imports) and `sign()`.
+
+Also found and fixed a real, unrelated bug while touching this code:
+`_build_summoned_creatures_section()` referenced `remove_btn` via
+`.setStyleSheet()`/`.clicked.connect()` without ever constructing one
+in that loop — a `NameError` waiting for the first character with any
+owned summoned creature (Summon Undead/Beast/etc.), never triggered
+before because nothing in this session's regression suites happened to
+give a test character one.
+
+Verified: every touched file recompiles; the full existing test/
+regression suite (1194/1190/798/13930-combination sweeps, plus all
+dialog- and preview-construction tests built earlier this session)
+re-run clean after each file's migration, not just at the end. Added
+new direct tests: `_btn()`'s five variants and every override param,
+checked against the real generated QSS string (not just "didn't
+crash") via a `QPushButton` stub upgrade (was a no-op `_Dummy`, now
+actually remembers style/tooltip/text/enabled state); the summoned-
+creature bug fix, constructing the real section with an owned summon
+and confirming no `NameError`; the `RestPreviewDialog`-adjacent
+`ChoiceWidget` confirm button's `:hover:enabled`/`:disabled` split,
+constructed for real with a multi-select choice and its actual
+generated stylesheet inspected; `StartMenu`/`DiceRollerPanel`
+construction end-to-end through the real `_btn`/`_lbl`/`_card`
+wiring. Also upgraded the shared PySide6 test stub itself — cached
+`QDialog.Accepted`-style class attributes per-name (previously a fresh
+throwaway object every access, which made an `exec() != QDialog.
+Accepted` comparison unsimulatable) and made its `Signal`-backed
+connections actually store and invoke callbacks — both needed for
+this pass's verification and reusable for whatever's tested next.
+
+## ui/ and data/ restructured by category, and sheet.py split out of one 12,060-line file
+
+Follow-up to the styling-standardization pass above: `sheet.py` alone
+was 12,060 lines (everything else in `ui/` was under 3,100), `ui/` had
+no `pages/`/`dialogs/` separation a coder browsing from outside could
+use to find things, and `data/`'s 17 modules sat flat with no signal
+for which were edition-specific. All landed in one session as several
+staged, independently-verified commits:
+
+- **`dnd_app/data/phb2014/` and `dnd_app/data/phb2024/`** — before
+  moving anything, checked which of the 17 data modules are actually
+  edition-forked by reading each. Only 2 pairs are: `races.py`/
+  `species_2024.py` and `classes.py`/`classes_2024.py`. The other 13
+  (`backgrounds`, `class_features`, `conditions`, `dm_rewards`, `feats`,
+  `feature_tooltips`, `feature_ui_interactions`, `items`, `magic_items`,
+  `movement_sources`, `resistance_sources`, `spells`,
+  `starting_equipment`, `statblocks`) are already genuinely
+  edition-shared — `backgrounds.py`'s `bg()` builder already carries an
+  optional 2024 `origin_feat` field alongside its 2014 fields in one
+  record, `multiclass.py` in `core/` already handles both editions'
+  rules in a single file — so a literal three-way 2014/2024/common split
+  would have left "common" holding nearly the whole directory. Those 13
+  moved into `dnd_app/data/phbCommon/` instead; the two real edition
+  pairs into `phb2014/`/`phb2024/` (not `2014/`/`2024/` — Python module
+  names can't start with a digit). ~130 import call sites updated across
+  `core/` and `ui/` (the app reaches into data submodules by absolute
+  dotted path everywhere, not through `data/__init__.py`'s facade).
+- **`dnd_app/ui/style/`** — `theme.py` (the QSS/color engine, imported
+  by essentially every UI file), `flavor_text.py`, `immersive_spells.py`
+  (both pure cosmetic-text generators with zero Qt imports, despite
+  living in `ui/` — confirmed neither imports PySide6 at all before
+  grouping them with `theme.py`).
+- **`dnd_app/ui/dialogs/`** — `dice_roller.py`, `levelup_panel.py`
+  (moved as-is), plus `arcane_recovery.py`, `rest.py`,
+  `levelup_multiclass.py` (extracted out of `sheet.py`, see below).
+  `feature_dialog.py` was deleted rather than moved: its `FeatureDialog`
+  class had zero usages anywhere in the repo (confirmed by grep, only a
+  passing comment mention elsewhere) — same class of dead code as this
+  session's `widgets.py` cleanup, confirmed with the user before
+  deleting rather than assumed.
+- **`dnd_app/ui/pages/`** — `wizard.py`, `main_window.py`, and
+  `sheet/` (see below) grouped together as the app's top-level screens.
+- **`dnd_app/ui/pages/sheet/`** — the actual point of the exercise.
+  Before touching anything, an Explore agent mapped `sheet.py`'s real
+  structure: 226 methods on `CharacterSheet`, several `_build_*` methods
+  rebuilt on refresh rather than called only at init
+  (`_build_companions_tab` runs from inside `_build_tab_gear`, not
+  `_build_ui`; `_build_statblock_card` is a shared factory called from 5
+  different sites), and the cross-tab-coupled attributes are
+  consistently widget-handle references (`self._xxx_lay`/`_lbl`/`_tree`)
+  rather than data — which rules out splitting `CharacterSheet` into
+  independent composed objects (a refresh method in one domain routinely
+  calls another domain's `_build_*`/helper methods) and points at a
+  **mixin** split instead: one plain class per tab/concern
+  (`BaseSheetMixin`, `AbilitiesMixin`, `SkillsMixin`, `CombatMixin`,
+  `GearMixin`, `CompanionsMixin`, `ChoicesMixin`, `InfusionsMixin`,
+  `SpellsMixin`, `FeaturesMixin`, `TraitsNotesMixin`,
+  `ActionTabsMixin`), composed via multiple inheritance into one real
+  `CharacterSheet(..., QWidget)` that still shares a single `self` — a
+  method in one file can call `self._build_statblock_card(...)` even
+  though it's defined in a different mixin's file, resolved through the
+  composed class's MRO at runtime with no import needed between the
+  mixin files themselves.
+
+  Extracted with a line-range slicing script (kept in the session
+  scratchpad) rather than manual retyping, so every method body is
+  byte-identical to the original — for a split this size the actual risk
+  isn't transcription, it's cross-file references. Three classes of
+  those got found and fixed by grepping every extracted file for every
+  name that moved, not assumed correct: (1) `import *` silently skips
+  underscore-prefixed names when a module has no `__all__` — `_lbl`/
+  `_sep`/`_card` needed explicit imports in every mixin file *and* in
+  the three dialog files, which got the same `shared.py` import block
+  `sheet.py` had but not the separate module-constants block those
+  aliases used to live in; (2) `RestOptionsDialog`/`RestPreviewDialog`/
+  `ArcaneRecoveryDialog`/`LevelUpMulticlassDialog` and the stale-choice
+  helpers (`_prune_stale_choices`, `_all_relevant_choice_ids`,
+  `RACE_SCOPED_CHOICE_IDS`, `BACKGROUND_SCOPED_CHOICE_IDS`) are called
+  from `CharacterSheet` methods, not just from each other — needed
+  importing into `base.py`/`choices.py`, not just left in `dialogs/`;
+  (3) `back_to_menu = Signal()` had to move onto the final composed
+  `CharacterSheet` class itself, not `BaseSheetMixin` — PySide6's Signal
+  descriptor only gets registered by Qt's metaclass machinery for
+  classes that actually derive from `QObject` at class-body-processing
+  time, which a plain mixin doesn't.
+
+  `ResourceWidget` (~217 lines, one of `sheet.py`'s other top-of-file
+  classes) was dropped rather than relocated: zero instantiation sites
+  anywhere in the repo, same class of dead code as `widgets.py`'s
+  cleanup and `feature_dialog.py`'s deletion, confirmed before deleting.
+
+  Verified with `py_compile` on every new file, the full scratchpad
+  regression suite (24 scripts, ~19,000 combined combos/calls, all
+  green), and confirmed the composed `CharacterSheet`'s MRO resolves
+  cleanly. A stub-only full-construction smoke test surfaced a real
+  `while widget.count():` hang, traced to a pre-existing PySide6-stub
+  gap (a fake `QGridLayout.count()` never becomes falsy against the
+  minimal test stub) rather than app code — not chased further, since
+  the regression suite already gives strong coverage and it's a
+  test-harness limitation rather than a bug.
+
+  `core/` was left flat on review — no edition forking and no dominant
+  oversized file the way `sheet.py` dominated `ui/`, so there was no
+  real problem for subfolders to solve there.
+
+## Cleric Domain Spells: 7 core domains added, 6 supplement domains still missing
+
+User reported Death Domain wasn't granting its bonus spells. Investigation
+found `BONUS_SPELLS` (`dnd_app/data/phbCommon/spells.py`) — the table that
+drives always-prepared domain/circle/patron spells via `get_bonus_spells()`
+— only had the 5 Amonkhet/Knowledge Cleric domains wired up (Knowledge,
+Ambition, Solidarity, Strength, Zeal). All 7 core PHB/SCAG domains were
+completely absent: Life, Light, Nature, Tempest, Trickery, War, Death.
+Every Cleric using one of those (almost certainly the most commonly
+picked domains) got zero domain spells auto-prepared.
+
+Added all 7, each cross-checked against real source text (web search,
+not memory alone) before entry — same discipline as the rest of this
+file. Every spell name verified present in `SPELL_NAMES` (the app's own
+spell database) to catch naming mismatches before they'd silently no-op.
+Confirmed via direct `rebuild()` calls that all 7 domains now populate
+`char["bonus_spells"]`/`spells_prepared` correctly at level 9 (10 spells
+each, the full 1/3/5/7/9 progression).
+
+**Update — the user explicitly asked for the Reaper chooser, so it was
+built rather than left deferred.** Death Domain's **Reaper** feature
+(1st level: learn one necromancy cantrip of your choice from any class's
+spell list, plus the cantrip-doubling passive) was originally going to
+be left as a passive description only, matching the existing precedent
+for Circle of the Land's identically-shaped Bonus Cantrip. After a
+direct user report ("death domain cleric is meant to get a bonus
+necromancy cantrip i didnt see that in the chooser"), implemented a real
+chooser instead: `_get_subclass_choices()` in `levelup_panel.py` now
+offers a `magical_secrets`-type pick (reusing that existing chooser UI)
+pooled to the app's 4 real necromancy cantrips (Chill Touch, Spare the
+Dying, Toll the Dead, Sapping Sting) once Cleric Death Domain is at
+level 1+. The pick is stored in `char["_choices"]["death_domain_reaper_cantrip"]`
+and read back into `get_bonus_spells()` (`spells.py`) — same pattern as
+Circle of the Land's terrain choice just above it — so it survives
+`rebuild()`, is added to `spells_known`/`spells_prepared` as a proper
+bonus spell (doesn't eat the Cleric cantrip cap), and gets pruned
+automatically if the character switches away from Death Domain (via the
+existing `_all_relevant_choice_ids()`/`_prune_stale_choices()` diff,
+since it already calls `_get_subclass_choices()` directly). Circle of
+the Land's Bonus Cantrip remains passive-only for now — same shape of
+gap, not reported, left as documented precedent for the next one.
+
+**Still missing** (not added — lower-play-rate XGE/TCE/SCAG domains,
+skipped rather than risk unverified data under time pressure): Arcana
+Domain (SCAG), Forge Domain (XGE), Grave Domain (XGE), Order Domain
+(GGR/TCE), Peace Domain (TCE), Twilight Domain (TCE). Same fix pattern
+applies — add a `("Cleric", "<Domain> Domain")` entry to `BONUS_SPELLS`
+in `dnd_app/data/phbCommon/spells.py` with each spell verified against
+real source text and against `SPELL_NAMES`.

@@ -722,6 +722,59 @@ BONUS_SPELLS = {
         7: ["Fire Shield", "Freedom of Movement"],
         9: ["Destructive Wave", "Flame Strike"],
     },
+    # Core PHB/SCAG domains — verified against real source text. These were
+    # missing entirely (only the Amonkhet/Knowledge domains above were
+    # wired up), so Life/Light/Nature/Tempest/Trickery/War/Death Domain
+    # clerics got none of their always-prepared domain spells.
+    ("Cleric", "Life Domain"): {
+        1: ["Bless", "Cure Wounds"],
+        3: ["Lesser Restoration", "Spiritual Weapon"],
+        5: ["Beacon of Hope", "Revivify"],
+        7: ["Death Ward", "Guardian of Faith"],
+        9: ["Mass Cure Wounds", "Raise Dead"],
+    },
+    ("Cleric", "Light Domain"): {
+        1: ["Burning Hands", "Faerie Fire"],
+        3: ["Flaming Sphere", "Scorching Ray"],
+        5: ["Daylight", "Fireball"],
+        7: ["Guardian of Faith", "Wall of Fire"],
+        9: ["Flame Strike", "Scrying"],
+    },
+    ("Cleric", "Nature Domain"): {
+        1: ["Animal Friendship", "Speak with Animals"],
+        3: ["Barkskin", "Spike Growth"],
+        5: ["Plant Growth", "Wind Wall"],
+        7: ["Dominate Beast", "Grasping Vine"],
+        9: ["Insect Plague", "Tree Stride"],
+    },
+    ("Cleric", "Tempest Domain"): {
+        1: ["Fog Cloud", "Thunderwave"],
+        3: ["Gust of Wind", "Shatter"],
+        5: ["Call Lightning", "Sleet Storm"],
+        7: ["Control Water", "Ice Storm"],
+        9: ["Destructive Wave", "Insect Plague"],
+    },
+    ("Cleric", "Trickery Domain"): {
+        1: ["Charm Person", "Disguise Self"],
+        3: ["Mirror Image", "Pass without Trace"],
+        5: ["Blink", "Dispel Magic"],
+        7: ["Dimension Door", "Polymorph"],
+        9: ["Dominate Person", "Modify Memory"],
+    },
+    ("Cleric", "War Domain"): {
+        1: ["Divine Favor", "Shield of Faith"],
+        3: ["Magic Weapon", "Spiritual Weapon"],
+        5: ["Crusader's Mantle", "Spirit Guardians"],
+        7: ["Freedom of Movement", "Stoneskin"],
+        9: ["Flame Strike", "Hold Monster"],
+    },
+    ("Cleric", "Death Domain"): {
+        1: ["False Life", "Ray of Sickness"],
+        3: ["Blindness/Deafness", "Ray of Enfeeblement"],
+        5: ["Animate Dead", "Vampiric Touch"],
+        7: ["Blight", "Death Ward"],
+        9: ["Antilife Shell", "Cloudkill"],
+    },
 
     # ── Druid: Circle of the Land (terrain-specific) ────────────────────────
     # Keyed by the exact terrain string used in the land_terrain chooser.
@@ -982,6 +1035,15 @@ def get_bonus_spells(char: dict) -> list[str]:
         for req_lvl, spells in by_level.items():
             if lvl >= req_lvl:
                 out.extend(spells)
+
+    # Death Domain: Reaper's bonus necromancy cantrip is a player CHOICE
+    # (any necromancy cantrip from any class's list), not a fixed grant,
+    # so it can't live in BONUS_SPELLS above like the other domain spells
+    # — read the pick back in from _choices instead, same as Circle of
+    # the Land's terrain choice just above.
+    if cl.get("Cleric", 0) >= 1 and "death domain" in subs.get("Cleric", "").lower():
+        reaper_pick = char.get("_choices", {}).get("death_domain_reaper_cantrip", [])
+        out.extend(reaper_pick)
 
     species = char.get("species") or char.get("race", "")
     char_subrace = char.get("subrace", "") or ""

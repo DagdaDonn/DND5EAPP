@@ -5,6 +5,25 @@
 import os, sys
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
+# PyInstaller os.chdir()s to the spec file's own directory (SPECPATH,
+# injected automatically into this file's execution namespace) before
+# running it, so every relative path below resolves against THAT
+# directory, not the CWD the `pyinstaller`/build script was invoked from.
+# This spec lives in packaging/, one level below the repo root where
+# run_dnd_creator.py, dnd_app/, and README.md actually are -- _ROOT makes
+# every path explicit and location-independent instead of relying on
+# an assumption about CWD that doesn't hold once PyInstaller chdirs.
+_ROOT = os.path.dirname(SPECPATH)
+# collect_submodules('dnd_app') below needs dnd_app importable -- don't
+# rely on however sys.path happened to be set when `pyinstaller`/the
+# build script was launched (it worked by incidental luck the one time
+# this was tested: `python -m PyInstaller` snapshots sys.path[0] as the
+# launch CWD before PyInstaller's own chdir to SPECPATH ever runs, and
+# the launch CWD only happened to be the repo root because the build
+# script cd's there first). Make it explicit instead.
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
 pyside6_datas, pyside6_binaries, pyside6_hiddenimports = collect_all('PySide6')
 
 # ── Strip unused PySide6 payload BEFORE it's bundled ─────────────────────────
@@ -44,6 +63,27 @@ _DEAD_WEIGHT_MARKERS = [
     # hardcoded English regardless, so there's nothing for these to
     # translate — safe to drop entirely.
     os.sep + 'translations' + os.sep,
+    # Plugin binaries for modules already excluded above via QT_EXCLUDES —
+    # same collect_all()-bypasses-module-excludes mismatch that motivated
+    # this whole marker list in the first place (see the file's top
+    # comment), just more instances of it: QtSql/QtPrintSupport/
+    # QtPositioning/QtSensors/QtSerialBus/QtNetwork's plugin .dll/.so files
+    # get walked and bundled by collect_all() regardless of the module
+    # itself being excluded from hiddenimports. Directory-scoped (with
+    # path separators) since these are short, generic-sounding names that
+    # could otherwise false-match an unrelated file.
+    os.sep + 'sqldrivers' + os.sep, os.sep + 'printsupport' + os.sep,
+    os.sep + 'position' + os.sep, os.sep + 'sensors' + os.sep,
+    os.sep + 'sensorgestures' + os.sep, os.sep + 'canbus' + os.sep,
+    os.sep + 'tls' + os.sep, os.sep + 'networkinformation' + os.sep,
+    os.sep + 'geoservices' + os.sep, os.sep + 'geometryloaders' + os.sep,
+    # SVG support (QtSvg/QtSvgWidgets, also excluded above): confirmed via
+    # grep that this app has zero .svg/QSvg usage anywhere — its icons are
+    # .ico/.png/.gif only — so the SVG icon-engine and image-format
+    # plugins (iconengines/qsvgicon.*, imageformats/qsvg.*) are dead
+    # weight too. os.sep-prefixed so it only matches a path component,
+    # not e.g. a data file that happens to contain "qsvg" mid-string.
+    os.sep + 'qsvg',
 ]
 
 def _is_dead_weight(path: str) -> bool:
@@ -199,15 +239,24 @@ STDLIB_EXCLUDES = [
 
 EXCLUDES = QT_EXCLUDES + STDLIB_EXCLUDES
 
+_README = os.path.join(_ROOT, 'README.md')
+_SPLASH_GIF = os.path.join(_ROOT, 'dnd_app', 'ui', 'splash', 'splash.gif')
+_SPLASH_PNG = os.path.join(_ROOT, 'dnd_app', 'ui', 'splash', 'splash.png')
+
 a = Analysis(
-    ['run_dnd_creator.py'],
-    pathex=[os.path.abspath('.')],
+    [os.path.join(_ROOT, 'run_dnd_creator.py')],
+    pathex=[_ROOT],
     binaries=pyside6_binaries + extra_binaries,
     datas=[
-        ('dnd_app/data',     'dnd_app/data'),
-        ('dnd_app/icon.ico', 'dnd_app'),
-        *([('README.md', '.')] if os.path.isfile('README.md') else []),
-        *([('dnd_app/assets', 'dnd_app/assets')] if os.path.isdir('dnd_app/assets') else []),
+        (os.path.join(_ROOT, 'dnd_app', 'data'), 'dnd_app/data'),
+        (os.path.join(_ROOT, 'dnd_app', 'ui', 'icon.ico'), 'dnd_app/ui'),
+        *([(_README, '.')] if os.path.isfile(_README) else []),
+        # splash.gif/splash.png live in dnd_app/ui/splash alongside the code
+        # that reads them. Analysis only auto-bundles .py files it traces
+        # through imports, so these binary assets need explicit datas
+        # entries same as the old dnd_app/assets dir they moved out of.
+        *([(_SPLASH_GIF, 'dnd_app/ui/splash')] if os.path.isfile(_SPLASH_GIF) else []),
+        *([(_SPLASH_PNG, 'dnd_app/ui/splash')] if os.path.isfile(_SPLASH_PNG) else []),
         *pyside6_datas,
     ],
     hiddenimports=[
@@ -219,6 +268,14 @@ a = Analysis(
         # Ensure these stdlib modules are always included even if analysis
         # doesn't find them via import tracing:
         'ast', 'tokenize', 'dis',
+        # pypdf is only ever imported lazily, inside export_official_pdf()
+        # in core/pdf_export.py -- a known PyInstaller blind spot (static
+        # analysis traces top-level imports far more reliably than ones
+        # buried in a function body), so it needs to be declared
+        # explicitly or "Export Character" -> "Official character sheet
+        # (PDF)" fails with ModuleNotFoundError in the built exe even
+        # though `pip install -r packaging/requirements.txt` has it installed.
+        *collect_submodules('pypdf'),
     ],
     hookspath=[],
     runtime_hooks=[],
@@ -230,14 +287,14 @@ pyz = PYZ(a.pure)
 
 # ── Bootloader-level splash screen (onefile only) ────────────────────────────
 # This is PyInstaller's own native splash feature, separate from and in
-# addition to the app's own in-process AnimatedSplash (dnd_app/ui/splash.py).
+# addition to the app's own in-process AnimatedSplash (dnd_app/ui/splash/).
 # It runs in the PARENT process and can appear WHILE the onefile bootloader
 # is still self-extracting the bundle — i.e. during the exact multi-second
 # gap that otherwise looks like a frozen/dead window on cold start, since
 # nothing the app itself does can run until extraction finishes. Requires a
 # static image (no GIF support at this layer); splash.png here is just the
-# first frame of assets/splash.gif so the two splashes look continuous.
-_SPLASH_PNG = os.path.join('dnd_app', 'assets', 'splash.png')
+# first frame of dnd_app/ui/splash/splash.gif so the two splashes look
+# continuous.
 _splash_target = []
 _splash_binaries = []
 if os.path.isfile(_SPLASH_PNG):
@@ -273,5 +330,5 @@ exe = EXE(
     # worth ~25% smaller disk size for this app.
     upx=False,
     console=False,
-    icon='dnd_app/icon.ico',
+    icon=os.path.join(_ROOT, 'dnd_app', 'ui', 'icon.ico'),
 )

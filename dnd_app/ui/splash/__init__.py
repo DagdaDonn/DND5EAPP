@@ -6,8 +6,8 @@ Shows instant visual feedback while the main window constructs (parsing
 seconds on some machines, which otherwise looks like a frozen/dead app).
 
 Drop-in support for a custom splash image:
-  - dnd_app/assets/splash.gif  (animated — preferred if present)
-  - dnd_app/assets/splash.png  (static — used if no gif)
+  - dnd_app/ui/splash/splash.gif  (animated — preferred if present)
+  - dnd_app/ui/splash/splash.png  (static — used if no gif)
 If neither file exists, falls back to a lightweight branded placeholder so
 there's still something on screen immediately, rather than a blank frame.
 
@@ -23,7 +23,10 @@ from PySide6.QtWidgets import QSplashScreen, QLabel, QVBoxLayout, QWidget
 from PySide6.QtGui import QMovie, QPixmap, QPainter, QColor, QFont
 from PySide6.QtCore import Qt, QSize, Signal, QObject
 
-_ASSETS = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
+# splash.gif/splash.png now live in this same package folder (co-located
+# with the code that reads them) instead of a separate top-level assets/
+# directory, so no more climbing two dirs up to find them.
+_ASSETS = os.path.dirname(__file__)
 _GIF = os.path.join(_ASSETS, "splash.gif")
 _PNG = os.path.join(_ASSETS, "splash.png")
 

@@ -10,8 +10,12 @@ import os, sys
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt, Signal, QEvent, QTimer
 from PySide6.QtGui import QFont, QAction
-from .theme import *
-from .shared import *
+from dnd_app.ui.style.theme import *
+from ..shared import *
+# `import *` skips underscore-prefixed names when a module has no
+# __all__ (shared.py doesn't) — _btn needs an explicit import for that
+# reason, same as sheet.py.
+from ..shared import _btn
 from .wizard import CharacterWizard
 from .sheet import CharacterSheet
 from dnd_app.core.character import new_character
@@ -37,10 +41,8 @@ def _save_recent(path: str):
 
 
 
-def _lbl(text, color=TEXT, size=FS_BODY, bold=False, wrap=True, align=Qt.AlignLeft):
-    w = QLabel(text); w.setWordWrap(wrap); w.setAlignment(align)
-    w.setStyleSheet(f"color:{color};font-size:{size}px;background:transparent;{'font-weight:700;' if bold else ''}")
-    return w
+# Same shape/param order as shared.py's h() — safe direct alias.
+_lbl = h
 
 
 class StartMenu(QWidget):
@@ -49,7 +51,7 @@ class StartMenu(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        from dnd_app.ui.theme import sync_globals as _sg; _sg(globals())
+        from dnd_app.ui.style.theme import sync_globals as _sg; _sg(globals())
         root = QVBoxLayout(self); root.setContentsMargins(0,0,0,0)
 
         hero = QFrame(); hero.setStyleSheet(f"QFrame{{background:{SURF};}}")
@@ -101,12 +103,13 @@ class StartMenu(QWidget):
                 race = c.get("species") or c.get("race","")
                 col.addWidget(_lbl(f"{race}  |  {cls_str}" if race else cls_str, TEXT2, FS_SMALL, wrap=False))
                 rl.addLayout(col, 1)
-                load_btn = QPushButton("Load →"); load_btn.setFixedSize(100,38)
-                load_btn.setStyleSheet(f"QPushButton{{background:{qa(INDIGO,0x33)};border:2px solid {INDIGO};border-radius:8px;color:{IND2};font-weight:700;font-size:{FS_SMALL}px;}}QPushButton:hover{{background:{INDIGO};color:white;}}")
+                load_btn = _btn("Load →", INDIGO, variant="cta", width=100, height=38,
+                                 radius=8, text_color=IND2, hover_text="white", font_size=FS_SMALL)
                 load_btn.clicked.connect(lambda checked, p=path: self.load_char.emit(p))
                 rl.addWidget(load_btn)
-                del_btn = QPushButton("✕"); del_btn.setFixedSize(38,38)
-                del_btn.setStyleSheet(f"QPushButton{{background:transparent;border:1px solid {qa(CRIMSON,0x55)};border-radius:8px;color:{TEXT3};font-size:16px;}}QPushButton:hover{{background:{CRIMSON};color:white;}}")
+                del_btn = _btn("✕", CRIMSON, variant="ghost", width=38, height=38, radius=8,
+                                border_alpha=0x55, text_color=TEXT3, font_size=16)
+                del_btn.setStyleSheet(del_btn.styleSheet() + f"QPushButton:hover{{background:{CRIMSON};color:white;}}")
                 del_btn.clicked.connect(lambda checked, p=path, r=row: self._delete_saved_row(p, r))
                 rl.addWidget(del_btn)
                 il.addWidget(row)
@@ -140,7 +143,7 @@ class SettingsDialog(QDialog):
         # startup's theme regardless of later switches, unlike sheet.py/
         # wizard.py/levelup_panel.py, which already call this at the top
         # of their own __init__.
-        from dnd_app.ui.theme import sync_globals as _sg; _sg(globals())
+        from dnd_app.ui.style.theme import sync_globals as _sg; _sg(globals())
         self.app_window = app_window
         self.setWindowTitle("Settings")
         self.setMinimumSize(420, 420)
@@ -159,7 +162,7 @@ class SettingsDialog(QDialog):
         self._theme_combo = QComboBox()
         for name in THEMES:
             self._theme_combo.addItem(name)
-        current = getattr(app_window, "_current_theme_name", "Obsidian")
+        current = getattr(app_window, "_current_theme_name", "(Dark) Obsidian")
         idx = self._theme_combo.findText(current)
         if idx >= 0:
             self._theme_combo.setCurrentIndex(idx)
@@ -382,19 +385,38 @@ class SettingsDialog(QDialog):
         root.addStretch()
         btn_row = QHBoxLayout(); btn_row.addStretch()
         close_btn = QPushButton("Done"); close_btn.setFixedHeight(34)
-        close_btn.setStyleSheet(
-            f"QPushButton{{background:{qa(GOLD,0x33)};border:2px solid {GOLD};border-radius:6px;"
-            f"color:{GOLD2};font-weight:700;padding:4px 24px;}}"
-            f"QPushButton:hover{{background:{GOLD};color:{BG};}}")
+        close_btn.setStyleSheet(_btn("", GOLD, variant="cta", text_color=GOLD2, padding="4px 24px").styleSheet())
         close_btn.clicked.connect(self._on_done)
         btn_row.addWidget(close_btn)
         root.addLayout(btn_row)
 
     def _on_theme_changed(self, name):
-        self.app_window._set_theme(name)
+        # _set_theme() below is synchronous and, with a character sheet
+        # open, rebuilds the whole CharacterSheet (12 mixins, hundreds of
+        # widgets) -- on a big character that's a noticeable freeze with
+        # zero visual feedback otherwise, since Qt can't repaint anything
+        # (including this combo going disabled) until it's back in the
+        # event loop. Disable the combo, switch to a wait cursor, and
+        # force a repaint via processEvents() *before* starting the heavy
+        # work so the user actually sees something happened.
+        self._theme_combo.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        QApplication.processEvents()
+        try:
+            self.app_window._set_theme(name)
+        finally:
+            QApplication.restoreOverrideCursor()
+        # This dialog's own background/labels were built once, from
+        # whatever theme was active when it opened -- _set_theme()'s
+        # rebuild-in-place only covers the sheet/wizard/start menu, none
+        # of which is this dialog. Close and let _open_settings()'s loop
+        # reopen a fresh one, which picks up the new colors the same way
+        # every other themed window already does at its own __init__.
+        self._reopen_for_theme = True
+        self.close()
 
     def _on_font_scale_changed(self, scale_text):
-        from . import theme
+        from dnd_app.ui.style import theme
         theme.set_font_scale(scale_text)
         sheet = getattr(self.app_window, "_sheet", None)
         if sheet:
@@ -404,8 +426,21 @@ class SettingsDialog(QDialog):
         # build_qss() (now reading the new _font_scale) and reconstructs
         # CharacterSheet, whose __init__ calls sync_globals() to pick up
         # the freshly recomputed FS_* values -- without this, the saved
-        # scale had nowhere to actually take effect.
-        self.app_window._set_theme(self.app_window._current_theme_name)
+        # scale had nowhere to actually take effect. Same wait-cursor
+        # treatment as _on_theme_changed -- this is the same expensive
+        # synchronous rebuild.
+        self._font_combo.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        QApplication.processEvents()
+        try:
+            self.app_window._set_theme(self.app_window._current_theme_name)
+        finally:
+            QApplication.restoreOverrideCursor()
+        # Same reasoning as _on_theme_changed: this dialog's own text
+        # sizes were also fixed at __init__ and won't reflect the new
+        # scale without reopening.
+        self._reopen_for_theme = True
+        self.close()
 
     def _on_done(self):
         sheet = getattr(self.app_window, "_sheet", None)
@@ -466,7 +501,7 @@ class CreditsDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        from dnd_app.ui.theme import sync_globals as _sg; _sg(globals())
+        from dnd_app.ui.style.theme import sync_globals as _sg; _sg(globals())
         self.setWindowTitle("Credits")
         self.setMinimumSize(640, 560)
         self.setStyleSheet(parent.styleSheet() if parent else "")
@@ -484,10 +519,7 @@ class CreditsDialog(QDialog):
 
         btn_row = QHBoxLayout(); btn_row.addStretch()
         close_btn = QPushButton("Close"); close_btn.setFixedHeight(34)
-        close_btn.setStyleSheet(
-            f"QPushButton{{background:{qa(GOLD,0x33)};border:2px solid {GOLD};border-radius:6px;"
-            f"color:{GOLD2};font-weight:700;padding:4px 24px;}}"
-            f"QPushButton:hover{{background:{GOLD};color:{BG};}}")
+        close_btn.setStyleSheet(_btn("", GOLD, variant="cta", text_color=GOLD2, padding="4px 24px").styleSheet())
         close_btn.clicked.connect(self.accept)
         btn_row.addWidget(close_btn)
         lay.addLayout(btn_row)
@@ -504,9 +536,23 @@ class CharacterCreatorApp(QMainWindow):
         self.setWindowTitle("MIMIC")
         self.setMinimumSize(1200, 800)
         self.resize(1400, 900)
-        from .theme import build_qss
-        self.setStyleSheet(build_qss())
-        self._current_theme_name = "Obsidian"
+        from dnd_app.ui.style.theme import build_qss
+        _initial_qss = build_qss()
+        self.setStyleSheet(_initial_qss)
+        # Also set at the QApplication level -- see _set_theme()'s comment
+        # for why a single widget's setStyleSheet() isn't enough to theme
+        # QToolTip everywhere (this is the initial app-launch styling,
+        # before any theme switch has happened, so it needs the same fix).
+        _app = QApplication.instance()
+        if _app is not None:
+            _app.setStyleSheet(_initial_qss)
+        # Must match a real THEMES key ("(Dark) Obsidian", not bare
+        # "Obsidian") -- theme.py's own default palette used until
+        # apply_theme() is ever called happens to look like this theme,
+        # but the bookkeeping name has to be a real key or every
+        # `saved_theme in THEMES`/`findText(current)` check downstream
+        # silently fails to match it.
+        self._current_theme_name = "(Dark) Obsidian"
 
         self._stack = QStackedWidget()
         self.setCentralWidget(self._stack)
@@ -514,7 +560,7 @@ class CharacterCreatorApp(QMainWindow):
         self._sheet  = None
         self._dice_roller = None
 
-        self._start = StartMenu()
+        self._start = StartMenu(self)
         self._start.new_char.connect(self._go_wizard)
         self._start.load_char.connect(self._go_sheet_from_path)
         self._stack.addWidget(self._start)
@@ -539,6 +585,12 @@ class CharacterCreatorApp(QMainWindow):
                 if self._cheese_buffer == "cheese":
                     self._show_cheese_easter_egg()
                     self._cheese_buffer = ""
+        # Opt-in trace, off by default -- see dnd_app/ui/diagnostics.py.
+        # (This is how the flashing min/max/close popup on character
+        # load was actually root-caused and fixed -- see abilities.py.)
+        if event.type() == QEvent.Show:
+            from dnd_app.ui.diagnostics import log_window_show
+            log_window_show(obj, event)
         return super().eventFilter(obj, event)
 
     def _show_cheese_easter_egg(self):
@@ -581,6 +633,7 @@ class CharacterCreatorApp(QMainWindow):
         a = QAction("Open…", self);         a.setShortcut("Ctrl+O"); a.triggered.connect(self._load_dialog); fm.addAction(a)
         self._recent_menu = fm.addMenu("Open Recent"); self._rebuild_recent_menu()
         a = QAction("Save", self);           a.setShortcut("Ctrl+S"); a.triggered.connect(self._save); fm.addAction(a)
+        a = QAction("Export…", self);        a.setShortcut("Ctrl+E"); a.triggered.connect(self._export_dialog); fm.addAction(a)
         a = QAction("Duplicate Character", self); a.setShortcut("Ctrl+Shift+D"); a.triggered.connect(self._duplicate_character); fm.addAction(a)
         fm.addSeparator()
         a = QAction("Quit", self);           a.setShortcut("Ctrl+Q"); a.triggered.connect(self.close); fm.addAction(a)
@@ -590,27 +643,52 @@ class CharacterCreatorApp(QMainWindow):
         a = QAction("⏸  Short Rest",  self); a.setShortcut("Ctrl+R"); a.triggered.connect(self._short_rest);       tm.addAction(a)
         a = QAction("🌙  Long Rest",   self); a.setShortcut("Ctrl+Shift+R"); a.triggered.connect(self._long_rest); tm.addAction(a)
 
-        sm = mb.addMenu("&Settings")
-        a = QAction("⚙  Settings…", self); a.setShortcut("Ctrl+,"); a.triggered.connect(self._open_settings); sm.addAction(a)
-
-        cm = mb.addMenu("&Credits")
-        a = QAction("View Credits…", self); a.triggered.connect(self._open_credits); cm.addAction(a)
+        # Settings/Credits are single actions, not menus with one item
+        # inside them -- addAction() straight onto the menu bar makes
+        # each a direct single-click, no dropdown to open first.
+        a = QAction("⚙  Settings…", self); a.setShortcut("Ctrl+,"); a.triggered.connect(self._open_settings); mb.addAction(a)
+        a = QAction("Credits", self); a.triggered.connect(self._open_credits); mb.addAction(a)
 
     def _open_settings(self):
-        from dnd_app.ui.main_window import SettingsDialog
-        dlg = SettingsDialog(self, self)
-        dlg.exec()
+        # SettingsDialog's own background/labels are built once, at
+        # __init__, from whatever theme was active at that moment --
+        # _set_theme() (fired live as soon as the Theme combo inside this
+        # very dialog changes) rebuilds the sheet/wizard/start menu in
+        # place, but has no way to restyle a dialog it doesn't own the
+        # reference to. Rather than hand-restyle every already-built
+        # child widget in place, SettingsDialog closes itself and sets
+        # _reopen_for_theme when its own theme combo changes -- this
+        # loop just builds a fresh one (picking up the new colors from
+        # scratch, same as every other rebuild-on-theme-switch spot)
+        # until the user actually dismisses it normally.
+        from dnd_app.ui.pages.main_window import SettingsDialog
+        while True:
+            dlg = SettingsDialog(self, self)
+            dlg.exec()
+            if not getattr(dlg, "_reopen_for_theme", False):
+                break
 
     def _open_credits(self):
-        from dnd_app.ui.main_window import CreditsDialog
+        from dnd_app.ui.pages.main_window import CreditsDialog
         dlg = CreditsDialog(self)
         dlg.exec()
 
     def _set_theme(self, name):
-        from .theme import apply_theme
+        from dnd_app.ui.style.theme import apply_theme
         self._switching_theme = True
         try:
-            self.setStyleSheet(apply_theme(name))
+            qss = apply_theme(name)
+            self.setStyleSheet(qss)
+            # QToolTip (and a few other selectors) don't reliably cascade
+            # from a single widget's setStyleSheet() down to tooltips
+            # shown by unrelated descendants -- Qt only guarantees that
+            # for a stylesheet set at the QApplication level. Without
+            # this, a tooltip triggered anywhere outside whichever widget
+            # actually got setStyleSheet() falls back to the OS's native
+            # tooltip look regardless of the app's active theme.
+            app = QApplication.instance()
+            if app is not None:
+                app.setStyleSheet(qss)
             self._current_theme_name = name
             if self._sheet:
                 char = self._sheet.char
@@ -619,6 +697,29 @@ class CharacterCreatorApp(QMainWindow):
                 self._show_sheet(char)
                 if self._sheet:
                     self._sheet._tabs.setCurrentIndex(cur_tab)
+
+            # CharacterWizard has the exact same never-rebuilt-on-theme-
+            # switch gap StartMenu/CharacterSheet had -- Settings is
+            # reachable mid-wizard too, and its own sync_globals() call
+            # only ever runs once, at construction. Rebuilt in place,
+            # preserving in-progress selections (self.char) and which
+            # step the player was on, same pattern as the sheet above.
+            if self._wizard:
+                was_current_wizard = (self._stack.currentWidget() is self._wizard)
+                old_char, old_step = self._wizard.char, self._wizard._step
+                self._stack.removeWidget(self._wizard); self._wizard.deleteLater()
+                self._wizard = CharacterWizard(self)
+                self._wizard.char = old_char
+                self._wizard.done.connect(self._show_sheet)
+                self._stack.addWidget(self._wizard)
+                self._wizard._step = old_step
+                steps = [self._wizard._step1, self._wizard._step2, self._wizard._step3,
+                         self._wizard._step4, self._wizard._step5]
+                steps[old_step].populate(self._wizard.char)
+                self._wizard._stack.setCurrentIndex(old_step)
+                self._wizard._update_pills()
+                if was_current_wizard:
+                    self._stack.setCurrentWidget(self._wizard)
 
             # StartMenu was built once at app startup and, like the
             # sheet before the fix above, never rebuilt on a theme
@@ -629,7 +730,7 @@ class CharacterCreatorApp(QMainWindow):
             # stack widget was current if StartMenu itself was showing.
             was_current_start = (self._stack.currentWidget() is self._start)
             self._stack.removeWidget(self._start); self._start.deleteLater()
-            self._start = StartMenu()
+            self._start = StartMenu(self)
             self._start.new_char.connect(self._go_wizard)
             self._start.load_char.connect(self._go_sheet_from_path)
             self._stack.insertWidget(0, self._start)
@@ -642,7 +743,7 @@ class CharacterCreatorApp(QMainWindow):
             # here) -- rebuilt in place, preserving its screen position
             # and only re-shown if it was actually visible.
             if self._dice_roller:
-                from .dice_roller import DiceRollerPanel
+                from dnd_app.ui.dialogs.dice_roller import DiceRollerPanel
                 was_visible = self._dice_roller.isVisible()
                 pos = self._dice_roller.pos()
                 dice_char = self._dice_roller.char
@@ -657,7 +758,7 @@ class CharacterCreatorApp(QMainWindow):
     def _go_wizard(self):
         if self._wizard:
             self._stack.removeWidget(self._wizard); self._wizard.deleteLater()
-        self._wizard = CharacterWizard()
+        self._wizard = CharacterWizard(self)
         self._wizard.done.connect(self._show_sheet)
         self._stack.addWidget(self._wizard)
         self._stack.setCurrentWidget(self._wizard)
@@ -669,14 +770,55 @@ class CharacterCreatorApp(QMainWindow):
             QMessageBox.warning(self, "Load Error", str(e))
 
     def _show_sheet(self, char: dict):
-        from . import theme
+        from dnd_app.ui.style import theme
         theme.set_font_scale(char.get("ui_font_scale", "Medium (default)"))
         self._apply_name_easter_egg(char)
+        # Apply this character's own theme (if it has a valid one and it
+        # differs from what's currently active) BEFORE building its
+        # sheet, not after. Building it after meant constructing a full
+        # CharacterSheet with the wrong colors active, immediately
+        # discarding it, and building a second one correctly once the
+        # right theme was applied -- besides being wasteful, that first,
+        # thrown-away construction still runs every bit of _load()'s own
+        # logic (LevelUpPanel/ChoiceWidget construction, death-screen
+        # state check, etc), which is a very plausible source of a
+        # stray dialog flashing and immediately closing again when that
+        # first sheet gets torn down moments later.
+        saved_theme = char.get("theme")
+        if saved_theme in THEMES:
+            if (saved_theme != self._current_theme_name
+                    and not getattr(self, "_switching_theme", False)):
+                qss = theme.apply_theme(saved_theme)
+                self.setStyleSheet(qss)
+                # Same QApplication-level QToolTip fix as _set_theme() --
+                # a per-widget setStyleSheet() doesn't reliably theme
+                # tooltips shown by unrelated descendants.
+                app = QApplication.instance()
+                if app is not None:
+                    app.setStyleSheet(qss)
+                self._current_theme_name = saved_theme
+        else:
+            # New characters (and old saves from before "theme" existed)
+            # have no theme of their own recorded yet -- stamp the
+            # currently-active one so this character remembers it from
+            # here on, not only after an explicit Settings change.
+            char["theme"] = self._current_theme_name
         self._stack.setUpdatesEnabled(False)
         try:
             if self._sheet:
                 self._stack.removeWidget(self._sheet); self._sheet.deleteLater()
-            self._sheet = CharacterSheet(char)
+            # Explicit parent (self, not the default None) matters here:
+            # CharacterSheet.__init__ runs a lot of work -- every tab's
+            # _build_tab_* -- before this line's addWidget() reparents it
+            # into self._stack a moment later. A parentless QWidget is a
+            # genuine independent top-level window as far as Qt/the OS
+            # window manager is concerned for that whole window, full
+            # min/max/close chrome included, even though nothing here
+            # ever calls .show() on it -- matches a user report of a
+            # full window flashing open and shut on load/create.
+            # StartMenu()/CharacterWizard() construction sites got the
+            # same fix, for the same reason.
+            self._sheet = CharacterSheet(char, self)
             self._sheet.back_to_menu.connect(self._sheet_back_to_menu)
             self._stack.addWidget(self._sheet)
             self._stack.setCurrentWidget(self._sheet)
@@ -686,26 +828,20 @@ class CharacterCreatorApp(QMainWindow):
             # to actually see what's going wrong without a live PySide6
             # install available to test against directly.
             import traceback
+            from dnd_app.ui.shared import write_diagnostic_log
             tb = traceback.format_exc()
-            try:
-                with open(os.path.join(os.path.expanduser("~"), "mimic_crash_log.txt"), "w") as f:
-                    f.write(tb)
-            except Exception:
-                pass
+            log_path = write_diagnostic_log("mimic_crash_log.txt", tb)
             dlg = QMessageBox(self)
             dlg.setIcon(QMessageBox.Critical)
             dlg.setWindowTitle("Character Sheet Failed to Build")
             dlg.setText("Something went wrong building the character sheet. The details below "
-                        "(also saved to mimic_crash_log.txt in your home folder) will help fix this.")
+                        + (f"(also saved to {log_path}) " if log_path else "")
+                        + "will help fix this.")
             dlg.setDetailedText(tb)
             dlg.exec()
             return
         finally:
             self._stack.setUpdatesEnabled(True)
-        saved_theme = char.get("theme","Obsidian")
-        if (saved_theme in THEMES and saved_theme != self._current_theme_name
-                and not getattr(self,"_switching_theme",False)):
-            self._set_theme(saved_theme)
 
     def _sheet_back_to_menu(self):
         if self._sheet and not self._sheet.confirm_leave():
@@ -714,7 +850,7 @@ class CharacterCreatorApp(QMainWindow):
 
     def _go_menu(self):
         self._stack.removeWidget(self._start); self._start.deleteLater()
-        self._start = StartMenu()
+        self._start = StartMenu(self)
         self._start.new_char.connect(self._go_wizard)
         self._start.load_char.connect(self._go_sheet_from_path)
         self._stack.insertWidget(0, self._start)
@@ -730,6 +866,9 @@ class CharacterCreatorApp(QMainWindow):
             self._sheet._collect()
             self._sheet._save()
 
+    def _export_dialog(self):
+        if self._sheet: self._sheet._export_dialog()
+
     def _short_rest(self):
         if self._sheet: self._sheet._short_rest()
 
@@ -738,7 +877,7 @@ class CharacterCreatorApp(QMainWindow):
 
     def _rebuild_recent_menu(self):
         self._recent_menu.clear()
-        from dnd_app.ui.main_window import _load_recent
+        from dnd_app.ui.pages.main_window import _load_recent
         recent = _load_recent()
         if not recent:
             a = self._recent_menu.addAction("(no recent characters)"); a.setEnabled(False)
@@ -761,7 +900,7 @@ class CharacterCreatorApp(QMainWindow):
         if not self._sheet: return
         import copy, time
         from dnd_app.core.save_load import save_character, character_filename
-        from dnd_app.ui.main_window import _save_recent
+        from dnd_app.ui.pages.main_window import _save_recent
         dup = copy.deepcopy(self._sheet.char)
         dup["name"] = dup.get("name","Character") + " (Copy)"
         dup["_id"] = f"char_{int(time.time())}"
@@ -773,7 +912,7 @@ class CharacterCreatorApp(QMainWindow):
         self.statusBar().showMessage(f"Duplicated → {dup['name']}", 3000)
 
     def _open_dice_roller(self):
-        from .dice_roller import DiceRollerPanel
+        from dnd_app.ui.dialogs.dice_roller import DiceRollerPanel
         char = self._sheet.char if self._sheet else new_character()
         if self._dice_roller:
             self._dice_roller.char = char
@@ -811,7 +950,7 @@ def main(app=None, splash=None):
         # Show a splash immediately — building the sheet (magic items, spells,
         # every tab widget) takes a couple of seconds on some machines, and an
         # empty frame during that time reads as a frozen/crashed app. Drop
-        # dnd_app/assets/splash.gif (or splash.png) in to use a custom splash.
+        # dnd_app/ui/splash/splash.gif (or splash.png) in to use a custom splash.
         from dnd_app.ui.splash import AnimatedSplash
         splash = AnimatedSplash()
         splash.show()

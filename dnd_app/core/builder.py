@@ -16,7 +16,7 @@ Author: Ethan O'Brien
 Date: 2026-08-20
 """
 from .character import ability_mod, total_level
-from dnd_app.data.backgrounds import get_background
+from dnd_app.data.phbCommon.backgrounds import get_background
 
 ABILITIES = ["STR","DEX","CON","INT","WIS","CHA"]
 
@@ -40,7 +40,7 @@ BACKGROUND_SKILL_CHOICES = {
 }
 
 def get_race_asi(race_name: str) -> dict:
-    from dnd_app.data.races import RACE_DICT
+    from dnd_app.data.phb2014.races import RACE_DICT
     race = RACE_DICT.get(race_name, {})
     return dict(race.get("asi", {}))
 
@@ -50,14 +50,14 @@ def get_race_skills(race_name: str) -> list:
 
 def get_background_skills(bg_name: str) -> list:
     """Return the 2 skill proficiencies granted by a background."""
-    from dnd_app.data.backgrounds import get_background
+    from dnd_app.data.phbCommon.backgrounds import get_background
     bg = get_background(bg_name)
     if not bg:
         return []
     return list(bg.get("skills", []))
 
 def get_background_tools(bg_name: str) -> list:
-    from dnd_app.data.backgrounds import get_background
+    from dnd_app.data.phbCommon.backgrounds import get_background
     bg = get_background(bg_name)
     if not bg:
         return []
@@ -66,25 +66,25 @@ def get_background_tools(bg_name: str) -> list:
 def get_class_save_profs(class_name: str, edition: str = "2014") -> list:
     """Return the two saving throw proficiencies for a class."""
     if edition == "2024":
-        from dnd_app.data.classes_2024 import CLASS_DICT_2024 as D
+        from dnd_app.data.phb2024.classes_2024 import CLASS_DICT_2024 as D
     else:
-        from dnd_app.data.classes import CLASS_DICT as D
+        from dnd_app.data.phb2014.classes import CLASS_DICT as D
     cls = D.get(class_name, {})
     return list(cls.get("save_profs", []))
 
 def get_class_armor_profs(class_name: str, edition: str = "2014") -> str:
     if edition == "2024":
-        from dnd_app.data.classes_2024 import CLASS_DICT_2024 as D
+        from dnd_app.data.phb2024.classes_2024 import CLASS_DICT_2024 as D
     else:
-        from dnd_app.data.classes import CLASS_DICT as D
+        from dnd_app.data.phb2014.classes import CLASS_DICT as D
     cls = D.get(class_name, {})
     return cls.get("armor", "") or ""
 
 def get_class_weapon_profs(class_name: str, edition: str = "2014") -> str:
     if edition == "2024":
-        from dnd_app.data.classes_2024 import CLASS_DICT_2024 as D
+        from dnd_app.data.phb2024.classes_2024 import CLASS_DICT_2024 as D
     else:
-        from dnd_app.data.classes import CLASS_DICT as D
+        from dnd_app.data.phb2014.classes import CLASS_DICT as D
     cls = D.get(class_name, {})
     return cls.get("weapons", "") or ""
 
@@ -107,9 +107,9 @@ def get_class_tool_profs(class_name: str, edition: str = "2014") -> list:
 def get_class_skill_pool(class_name: str, edition: str = "2014") -> tuple:
     """Return (skill_pool: list, skill_count: int) for the class."""
     if edition == "2024":
-        from dnd_app.data.classes_2024 import CLASS_DICT_2024 as D
+        from dnd_app.data.phb2024.classes_2024 import CLASS_DICT_2024 as D
     else:
-        from dnd_app.data.classes import CLASS_DICT as D
+        from dnd_app.data.phb2014.classes import CLASS_DICT as D
     cls = D.get(class_name, {})
     pool = cls.get("skill_choices", [])
     count = cls.get("skill_count", 2)
@@ -118,9 +118,9 @@ def get_class_skill_pool(class_name: str, edition: str = "2014") -> tuple:
 def get_level_gains(class_name: str, level: int, edition: str = "2014") -> list:
     """Return list of things gained at this exact level (not cumulative)."""
     if edition == "2024":
-        from dnd_app.data.classes_2024 import CLASS_DICT_2024 as D
+        from dnd_app.data.phb2024.classes_2024 import CLASS_DICT_2024 as D
     else:
-        from dnd_app.data.classes import CLASS_DICT as D
+        from dnd_app.data.phb2014.classes import CLASS_DICT as D
     cls = D.get(class_name, {})
     choices = cls.get("level_choices", {})
     features = cls.get("features", {})
@@ -135,7 +135,7 @@ def get_level_gains(class_name: str, level: int, edition: str = "2014") -> list:
 def _get_subrace_asi(race_name: str, subrace_name: str) -> dict:
     """Parse subrace ASI from string like 'Hill (+CON 2, +WIS 1, Dwarven Toughness)'."""
     import re as _re
-    from dnd_app.data.races import RACE_DICT
+    from dnd_app.data.phb2014.races import RACE_DICT
     rdata = RACE_DICT.get(race_name, {})
     for sub_str in rdata.get("subraces", []):
         name = sub_str.split("(")[0].strip()
@@ -143,6 +143,53 @@ def _get_subrace_asi(race_name: str, subrace_name: str) -> dict:
             inner = sub_str[sub_str.find("(")+1:sub_str.rfind(")")]
             return {ab: int(n) for ab, n in _re.findall(r"\+([A-Z]{3})\s+(\d+)", inner)}
     return {}
+
+def full_list_dumped_spell_names(char: dict) -> dict:
+    """{class_name: set(spell names)} of LEVELED spells that a full-list
+    prepared caster's (Cleric/Druid/Paladin/Artificer) class list actually
+    grants this character right now, computed from THAT CLASS'S OWN
+    individual level (not the combined multiclass spell-slot table) —
+    same rule rebuild() uses to populate spells_known. Only the classes
+    the character actually has, and only spells within what that class's
+    own level currently unlocks, ever appear here — e.g. a level-1 Cleric
+    never includes a 3rd-level spell just because it's theoretically on
+    Cleric's full list.
+
+    Shared by two callers that both need to know precisely which
+    spells_known entries a prepared caster is responsible for, rather
+    than that class's entire theoretical spell list regardless of level:
+    rebuild() itself (to populate spells_known and to correctly scope its
+    known-caster auto-prepare exclusion), and the Spells tab's
+    _attribute_known_spells()/_attribute_prepared_spells() (so a Cleric's
+    own full-list spell never gets miscounted as a Bard's/Sorcerer's/etc.
+    own known-spell pick just because the name happens to also be on that
+    known-caster class's list).
+    """
+    from dnd_app.data.phbCommon.spells import spells_for_class
+    from dnd_app.core.multiclass import (get_multiclass_spell_slots,
+                                          FULL_CASTERS, HALF_CASTERS, ARTIFICER_CLASSES)
+    FULL_LIST_CLASSES = ("Cleric", "Druid", "Paladin", "Artificer")
+    cl_now = {c.get("class",""): c.get("level",0) for c in char.get("classes", [])}
+    out = {}
+    for cname in FULL_LIST_CLASSES:
+        lvl = cl_now.get(cname, 0)
+        if lvl <= 0:
+            continue
+        if cname in FULL_CASTERS:
+            own_caster_lvl = lvl
+        elif cname in HALF_CASTERS or cname in ARTIFICER_CLASSES:
+            own_caster_lvl = lvl // 2
+        else:
+            own_caster_lvl = 0
+        own_slots = get_multiclass_spell_slots(own_caster_lvl)
+        max_lvl = 0
+        for i, count in enumerate(own_slots):
+            if count > 0:
+                max_lvl = i + 1
+        out[cname] = {sp["name"] for sp in spells_for_class(cname)
+                      if sp.get("level", 0) > 0 and sp["level"] <= max_lvl}
+    return out
+
 
 def rebuild(char: dict) -> None:
     """
@@ -233,7 +280,7 @@ def rebuild(char: dict) -> None:
     # ── Background grants ─────────────────────────────────────────────────────
     if bg_name:
         # Apply starting gold from background equipment string (first time only)
-        from dnd_app.data.backgrounds import get_background as _get_bg
+        from dnd_app.data.phbCommon.backgrounds import get_background as _get_bg
         import re as _re_bg
         _bg = _get_bg(bg_name) or {}
         _equip = _bg.get("equipment","")
@@ -350,7 +397,7 @@ def rebuild(char: dict) -> None:
     # grant instead of accumulating.
     astral_wt = char.get("_choices", {}).get("astral_knowledge_weapon_or_tool", [])
     if astral_wt:
-        from dnd_app.data.items import WEAPON_NAMES, ALL_TOOLS
+        from dnd_app.data.phbCommon.items import WEAPON_NAMES, ALL_TOOLS
         pick = astral_wt[0]
         if pick in WEAPON_NAMES:
             grants["weapon_profs"].append(pick)
@@ -460,7 +507,7 @@ def rebuild(char: dict) -> None:
     # level. Tracked separately in char["bonus_spells"] so the UI can
     # badge them distinctly and so they're never mistaken for (or
     # overwritten by) the player's own chosen known/prepared spells.
-    from dnd_app.data.spells import get_bonus_spells
+    from dnd_app.data.phbCommon.spells import get_bonus_spells
     old_bonus = set(char.get("bonus_spells", []))
     bonus = get_bonus_spells(char)
     char["bonus_spells"] = bonus
@@ -502,31 +549,21 @@ def rebuild(char: dict) -> None:
     # even a spellcaster yet on its own) multiclassed with a high-level
     # Sorcerer gain access to 2nd-level Paladin spells, since the combined
     # pool crossed that threshold even though Paladin's own level didn't.
-    from dnd_app.data.spells import spells_for_class
-    from dnd_app.core.multiclass import (get_multiclass_spell_slots,
-                                          FULL_CASTERS, HALF_CASTERS, ARTIFICER_CLASSES)
-    FULL_LIST_CLASSES = ("Cleric", "Druid", "Paladin", "Artificer")
-    cl_now = {c.get("class",""): c.get("level",0) for c in char.get("classes", [])}
+    from dnd_app.data.phbCommon.spells import spells_for_class
     subs_now = {c.get("class",""): c.get("subclass","") for c in char.get("classes", [])}
-    for cname in FULL_LIST_CLASSES:
-        lvl = cl_now.get(cname, 0)
-        if lvl <= 0:
-            continue
-        if cname in FULL_CASTERS:
-            own_caster_lvl = lvl
-        elif cname in HALF_CASTERS or cname in ARTIFICER_CLASSES:
-            own_caster_lvl = lvl // 2
-        else:
-            own_caster_lvl = 0
-        own_slots = get_multiclass_spell_slots(own_caster_lvl)
-        max_lvl = 0
-        for i, count in enumerate(own_slots):
-            if count > 0:
-                max_lvl = i + 1
-        for sp in spells_for_class(cname):
-            if sp.get("level", 0) > 0 and sp["level"] <= max_lvl:
-                if sp["name"] not in char.get("spells_known", []):
-                    char.setdefault("spells_known", []).append(sp["name"])
+    cl_now = {c.get("class",""): c.get("level",0) for c in char.get("classes", [])}
+    # Exactly which spell names each prepared-caster class's full-list
+    # access actually grants THIS character right now — shared with the
+    # UI's known-caster spell attribution (sheet/spells.py) so a prepared
+    # caster's own full-list spells never get miscounted as a
+    # known-caster's own pick just because the name also happens to be
+    # on that known-caster class's spell list too. See that function's
+    # exclusion logic below for why this matters.
+    full_list_dumped_names = full_list_dumped_spell_names(char)
+    for cname, dumped in full_list_dumped_names.items():
+        for name in dumped:
+            if name not in char.get("spells_known", []):
+                char.setdefault("spells_known", []).append(name)
 
     # ── Known casters: Sorcerer, Bard, Warlock, Ranger, and Eldritch
     # Knight/Arcane Trickster's limited Wizard-list spells ─────────────────
@@ -556,16 +593,28 @@ def rebuild(char: dict) -> None:
         # theoretical full list (e.g. "Bane" is on both Cleric's and
         # Bard's lists; "Fireball" is on both Wizard's and Sorcerer's)
         # must not be auto-marked prepared for free here, since that
-        # would bypass the prepared caster's cap. Exclude anything also
-        # on ANY of the character's own prepared-caster class lists
-        # (all five: Wizard included, not just the four that get a
-        # full-list dump), since those always require explicit
-        # preparation regardless of what else happens to share the name.
-        PREPARED_CASTER_CLASSES = ("Wizard", "Cleric", "Druid", "Paladin", "Artificer")
+        # would bypass the prepared caster's cap.
+        #
+        # For Cleric/Druid/Paladin/Artificer, only exclude names actually
+        # dumped into spells_known just above (full_list_dumped_names) —
+        # NOT that class's entire theoretical spell list regardless of
+        # level. Using the unfiltered list was a real bug: e.g. a level-1
+        # Cleric (whose dump never reaches 3rd-level spells) multiclassed
+        # with a level-5 Bard who genuinely knows "Speak with Dead" (also
+        # on Cleric's full list, but never actually granted to this
+        # character's Cleric side) silently never got it auto-prepared,
+        # even though nothing ever actually gave it to Cleric to conflict
+        # with. Wizard has no level-filtered dump to compare against (its
+        # spellbook is entirely player-built via the browser), so it
+        # keeps using its full list — a spell on Wizard's list already
+        # requires being on one of the player's own class lists to have
+        # been added at all (browser Gate 1), so this exclusion is
+        # narrower in practice than it looks.
         prepared_caster_spell_names = set()
-        for cname in PREPARED_CASTER_CLASSES:
-            if cl_now.get(cname, 0) > 0:
-                prepared_caster_spell_names.update(sp["name"] for sp in spells_for_class(cname))
+        for cname in ("Cleric", "Druid", "Paladin", "Artificer"):
+            prepared_caster_spell_names.update(full_list_dumped_names.get(cname, set()))
+        if cl_now.get("Wizard", 0) > 0:
+            prepared_caster_spell_names.update(sp["name"] for sp in spells_for_class("Wizard"))
         for sp_name in char.get("spells_known", []):
             if (sp_name in known_caster_spell_names
                     and sp_name not in prepared_caster_spell_names
@@ -705,7 +754,7 @@ def get_choices_needed(char: dict) -> list:
     # ── Background choices ────────────────────────────────────────────────────
     # Check if background gives a language choice
     if bg_name:
-        from dnd_app.data.backgrounds import get_background
+        from dnd_app.data.phbCommon.backgrounds import get_background
         bg = get_background(bg_name)
         if bg:
             lang_count = bg.get("languages", 0)
@@ -808,9 +857,9 @@ def get_choices_needed(char: dict) -> list:
         # ASI choices — one per ASI level
         # ── ASI choices — one per ASI level, but only if not already taken for THAT LEVEL ──
         if edition == "2024":
-            from dnd_app.data.classes_2024 import CLASS_DICT_2024 as D
+            from dnd_app.data.phb2024.classes_2024 import CLASS_DICT_2024 as D
         else:
-            from dnd_app.data.classes import CLASS_DICT as D
+            from dnd_app.data.phb2014.classes import CLASS_DICT as D
         
         cls_data = D.get(cname, {})
         lc = cls_data.get("level_choices", {})
@@ -900,7 +949,7 @@ def get_choices_needed(char: dict) -> list:
             blood_hunter_lvl = c.get("level", 0)
             bh_sub = c.get("subclass", "").lower()
     if blood_hunter_lvl >= 3 and "mutant" in bh_sub:
-        from dnd_app.data.classes import MUTAGENS
+        from dnd_app.data.phb2014.classes import MUTAGENS
         # 4 formulas known at 3rd, 5 at 7th, 6 at 11th, 7 at 15th, 8 at 18th.
         if blood_hunter_lvl >= 18: mut_count = 8
         elif blood_hunter_lvl >= 15: mut_count = 7
@@ -930,7 +979,7 @@ def get_choices_needed(char: dict) -> list:
 
     # ── Blood Hunter: Blood Curses picker ─────────────────────────────────────
     if blood_hunter_lvl >= 1:
-        from dnd_app.data.classes import BLOOD_CURSES
+        from dnd_app.data.phb2014.classes import BLOOD_CURSES
         # 1 known at 1st, 2 at 6th, 3 at 10th, 4 at 14th, 5 at 18th.
         if blood_hunter_lvl >= 18: bc_count = 5
         elif blood_hunter_lvl >= 14: bc_count = 4

@@ -807,7 +807,7 @@ def effect_ac_bonus(char: dict) -> int:
     # "has the feat") for 2+ distinct melee weapons, neither Two-handed,
     # since a Two-handed weapon can't be one of a pair held one in each hand.
     if "Dual Wielder" in char.get("feats", []):
-        from dnd_app.data.items import WEAPON_DICT
+        from dnd_app.data.phbCommon.items import WEAPON_DICT
         melee_one_handed = []
         for wname in char.get("equipped_weapons", []):
             base_name = wname.split(" +")[0].strip()  # strip a magic "+1"/"+2" suffix

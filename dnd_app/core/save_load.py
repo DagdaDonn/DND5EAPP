@@ -256,7 +256,7 @@ def export_character_text(char: dict) -> str:
     # ── Weapons ───────────────────────────────────────────────────────────────
     equipped = char.get("equipped_weapons", [])
     if equipped:
-        from dnd_app.data.items import WEAPON_DICT
+        from dnd_app.data.phbCommon.items import WEAPON_DICT
         from .magic_items import parse_magic_suffix
         add("── WEAPONS ──")
         for wname in equipped:
@@ -318,7 +318,7 @@ def export_character_text(char: dict) -> str:
     # ── Spells known / prepared ───────────────────────────────────────────────
     known = char.get("spells_known", []) + char.get("cantrips", [])
     if known:
-        from dnd_app.data.spells import get_spell
+        from dnd_app.data.phbCommon.spells import get_spell
         prepared = set(char.get("spells_prepared", []))
         by_level = {}
         for sp in known:
