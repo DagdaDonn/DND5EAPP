@@ -12,11 +12,7 @@ from ..shared import *
 # aliases to h/card/hline, which ARE plain names the wildcard import above
 # already brought in).
 from ..shared import _btn, _pill
-# _lbl/_sep/_card used to be local aliases to h()/hline()/card() defined
-# once at the top of the original (pre-split) sheet.py, alongside the
-# rest of its module constants -- re-declared here since this file only
-# got that constants block's siblings (_btn/_pill), not the aliases
-# themselves.
+# Local aliases matching the short names used throughout this file.
 _lbl = h
 _sep = hline
 _card = card

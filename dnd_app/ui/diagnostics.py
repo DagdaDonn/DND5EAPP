@@ -20,11 +20,8 @@ LOG_WINDOW_SHOWS = ENABLED  # every top-level QEvent.Show, app-wide -> mimic_win
 
 
 def log_toast(text: str) -> None:
-    """Trace every toast fire (message + call stack). Was used to root-cause
-    a report of a small popup flashing on character load/create -- that
-    turned out to be a different bug (see log_window_show), so this can
-    stay off, but the trace is cheap and easy to flip back on if another
-    "why did a toast fire here" question comes up."""
+    """Trace every toast fire (message + call stack). Useful for tracking
+    down an unexpected or unexplained toast notification."""
     if not LOG_TOASTS:
         return
     try:
@@ -39,16 +36,11 @@ def log_toast(text: str) -> None:
 
 def log_window_show(obj, event) -> None:
     """Trace every top-level window becoming visible, app-wide -- call from
-    CharacterCreatorApp.eventFilter() on QEvent.Show. This is how the
-    "flashing min/max/close popup on character load" bug was actually
-    root-caused: a real live-run log showed a bare QLabel (abilities.py's
-    save-advantage badge) becoming its own top-level window because
-    setVisible(True) was called on it before it was ever added to a
-    layout -- a QWidget with no parent yet is a genuine top-level window
-    as far as Qt/the OS window manager is concerned. Fixed at the source
-    (abilities.py); this trace is kept here, off by default, in case a
-    similar "stray top-level window" report shows up again for a
-    different widget."""
+    CharacterCreatorApp.eventFilter() on QEvent.Show. Useful for tracking
+    down a stray top-level window: a QWidget with no parent yet is a
+    genuine top-level window as far as Qt/the OS window manager is
+    concerned, so calling setVisible(True) on one before it's added to a
+    layout will flash a real window open for a frame."""
     if not LOG_WINDOW_SHOWS:
         return
     try:

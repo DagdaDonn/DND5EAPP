@@ -159,7 +159,7 @@ spell("Zephyr Strike",     1, TRN, [RAN],              concentration=True, desc=
     spell("Silvery Barbs",      1, ENC, [BAR,SOR,WIZ],     cast_time="Reaction", desc="When a creature succeeds on an attack/ability check/save, force a reroll (take lower) and grant a different creature advantage on its next d20 roll.", source="SCC"),
     spell("Tasha's Caustic Brew",1,EVO,[ART,SOR,WIZ],      concentration=True, desc="Line 30 ft long 5 ft wide: creatures take 2d4 acid damage (DEX save); coated creatures take 2d4 acid each turn until removed.", source="TCE"),
     spell("Tenser's Floating Disk",1,CON,[WIZ],             ritual=True, desc="Creates a disk of force 3 ft in diameter hovering 3 ft off the ground. Holds 500 lbs. Follows within 20 ft. Lasts 1 hour.", source="PHB"),
-    spell("Thundering Smite",   1, EVO, [PAL],              concentration=True, cast_time="Bonus action", desc="Next melee hit: +2d6 thunder damage; target CON save or pushed 10 ft and knocked prone.", source="PHB"),
+    spell("Thunderous Smite",   1, EVO, [PAL],              concentration=True, cast_time="Bonus action", desc="Next melee hit: +2d6 thunder damage, audible 300 ft; target STR save or pushed 10 ft and knocked prone.", source="PHB"),
 
     spell("Sudden Awakening",   1, ENC, [BAR,RAN,SOR,WIZ],  desc="Each sleeping creature you choose within 10 ft wakes up. A sleeping creature who wakes becomes no longer surprised.", source="EEPC"),
     spell("Unearthly Chorus",   1, ILL, [BAR],               desc="Primal, discordant music fills the air around you in a 30-ft radius. Concentration 1 min: creatures of your choice are frightened (WIS save). You can sustain the effect.", source="EEPC"),
@@ -347,6 +347,7 @@ spell("Death Ward",        4, ABJ, [CLE,PAL],          desc="Once: drop to 1 HP 
 spell("Dimension Door",     4, CON, [ART,BAR,SOR,WAR,WIZ], desc="Teleport up to 500 ft, bring 1 willing creature.", range_="500 ft"),
 spell("Divination",        4, DIV, [CLE],              ritual=True, desc="Receive truthful answer to one question about event within 7 days.", cast_time="1 action", range_="Self"),
 spell("Dominate Beast",    4, ENC, [DRU,RAN,SOR],     concentration=True, desc="WIS save or beast obeys commands.", duration="1 min"),
+spell("Evard's Black Tentacles", 4, CON, [WIZ],       concentration=True, desc="20-ft square becomes difficult terrain; entering/starting turn there: DEX save or 3d6 bludgeoning + restrained. Restrained creature can STR/DEX check vs your save DC to break free.", duration="1 min", range_="90 ft", components="V, S, M (a piece of tentacle from a giant octopus or squid)"),
 spell("Fabricate",         4, TRN, [ART,WIZ],          desc="Transform 10-cu-ft material into finished product.", cast_time="10 min", range_="120 ft"),
 spell("Fire Shield",        4, EVO, [DRU,SOR,WIZ],          desc="Warm shield (cold resist, fire retaliation 2d8) or chill shield (fire resist, cold retaliation).", duration="10 min", range_="Self"),
 spell("Freedom of Movement", 4, ABJ, [ART,BAR,CLE,DRU,RAN], desc="Ignore nonmagical difficult terrain; not slowed by magic; free from paralysis.", duration="1 hour", range_="Touch"),
@@ -356,6 +357,7 @@ spell("Greater Invisibility", 4, ILL, [ART,BAR,SOR,WIZ], concentration=True, des
 spell("Guardian of Faith", 4, CON, [CLE],              desc="Large spectral guardian: radiant damage to enterers (DEX save). Scales.", range_="30 ft"),
 spell("Hallucinatory Terrain", 4, ILL, [BAR,DRU,WAR,WIZ], desc="Disguise natural terrain (150-ft cube) as another kind.", duration="24 hours", range_="300 ft"),
 spell("Ice Storm",         4, EVO, [DRU,SOR,WIZ],     desc="20-ft cylinder: 2d8 bludgeoning + 4d6 cold (DEX save); difficult terrain. Scales.", range_="300 ft"),
+spell("Leomund's Secret Chest", 4, CON, [WIZ],         desc="Hide a chest (up to 12 cu ft) on the Ethereal Plane; recall or re-send it with an action while touching its Tiny replica. 5%/day cumulative chance the effect ends after 60 days.", range_="Touch", components="V, S, M (an exquisite chest worth 5,000+ gp and a Tiny replica worth 50+ gp)"),
 spell("Locate Creature",   4, DIV, [BAR,CLE,DRU,PAL,RAN,WIZ], concentration=True, desc="Sense specific creature or type within 1000 ft.", duration="1 hour", range_="Self"),
 spell("Phantasmal Killer", 4, ILL, [WIZ],              concentration=True, desc="Nightmare: WIS save or Frightened; 4d10 psychic/turn (WIS save). Scales.", duration="1 min", range_="120 ft"),
 spell("Polymorph",          4, TRN, [ART,BAR,DRU,SOR,WIZ], concentration=True, desc="Transform creature into beast whose CR ≤ level/4 (or up to its own CR).", duration="1 hour"),
@@ -364,6 +366,7 @@ spell("Shadow of Moil",    4, NEC, [WAR],              concentration=True, desc=
 spell("Sickening Radiance", 4, EVO, [SOR,WAR,WIZ],    concentration=True, desc="30-ft sphere: CON save or 4d10 radiant + 1 exhaustion.", duration="10 min", source="XGE", range_="120 ft"),
 spell("Spirit of Death",   4, NEC, [WAR,WIZ],          concentration=True, desc="Summon reaper spirit. Scales.", source="BOMT"),
 spell("Stone Shape",       4, TRN, [ART,CLE,DRU,WIZ], desc="Reshape one stone object (up to 5 cu ft) or form a door.", range_="Touch"),
+spell("Staggering Smite",  4, EVO, [PAL],              cast_time="Bonus action", concentration=True, desc="Next melee hit this spell's duration: +4d6 psychic. WIS save or disadvantage on attacks/checks + no reactions until end of its next turn.", duration="1 min", range_="Self", components="V"),
 spell("Stoneskin",         4, ABJ, [ART,DRU,RAN,SOR,WIZ], concentration=True, desc="Resistance to nonmagical B/P/S.", duration="1 hour", range_="Touch"),
 spell("Storm Sphere",      4, EVO, [SOR,WIZ],          concentration=True, desc="20-ft sphere: bonus ranged attack 4d6 lightning; DEX save 2d6 thunder. Scales.", source="XGE", range_="150 ft"),
 spell("Summon Aberration", 4, CON, [WAR,WIZ],          concentration=True, desc="Summon aberrant spirit. Scales.", source="TCE", range_="90 ft"),
@@ -676,11 +679,70 @@ BONUS_SPELLS = {
         17: ["Banishing Smite", "Mass Cure Wounds"],
     },
     # ── Warlock Subclasses ───────────────────────────────────────────────
+    # The Celestial/The Undying below combine two distinct 1st-level
+    # features: their Bonus Cantrip/Among the Dead grant and their own
+    # Expanded Spell List. Char-level-as-spell-level-proxy keying
+    # (1/3/5/7/9) is used for every Warlock patron below, matching the
+    # level a Warlock actually gains access to that spell slot level.
     ("Warlock", "The Celestial"): {
-        1: ["Light", "Sacred Flame"],  # Bonus Cantrips
+        1: ["Light", "Sacred Flame", "Cure Wounds", "Guiding Bolt"],
+        3: ["Flaming Sphere", "Lesser Restoration"],
+        5: ["Daylight", "Revivify"],
+        7: ["Guardian of Faith", "Wall of Fire"],
+        9: ["Flame Strike", "Greater Restoration"],
     },
     ("Warlock", "The Undying"): {
-        1: ["Spare the Dying"],  # Among the Dead
+        1: ["Spare the Dying", "False Life", "Ray of Sickness"],
+        3: ["Blindness/Deafness", "Silence"],
+        5: ["Feign Death", "Speak with Dead"],
+        7: ["Aura of Life", "Death Ward"],
+        9: ["Contagion", "Legend Lore"],
+    },
+    ("Warlock", "The Archfey"): {
+        1: ["Faerie Fire", "Sleep"],
+        3: ["Calm Emotions", "Phantasmal Force"],
+        5: ["Blink", "Plant Growth"],
+        7: ["Dominate Beast", "Greater Invisibility"],
+        9: ["Dominate Person", "Seeming"],
+    },
+    ("Warlock", "The Fathomless"): {
+        1: ["Create or Destroy Water", "Thunderwave"],
+        3: ["Gust of Wind", "Silence"],
+        5: ["Lightning Bolt", "Sleet Storm"],
+        7: ["Control Water", "Summon Elemental"],
+        9: ["Bigby's Hand", "Cone of Cold"],
+    },
+    ("Warlock", "The Great Old One"): {
+        1: ["Dissonant Whispers", "Tasha's Hideous Laughter"],
+        3: ["Detect Thoughts", "Phantasmal Force"],
+        5: ["Clairvoyance", "Sending"],
+        7: ["Dominate Beast", "Evard's Black Tentacles"],
+        9: ["Dominate Person", "Telekinesis"],
+    },
+    ("Warlock", "The Undead"): {
+        1: ["Bane", "False Life"],
+        3: ["Blindness/Deafness", "Phantasmal Force"],
+        5: ["Phantom Steed", "Speak with Dead"],
+        7: ["Death Ward", "Greater Invisibility"],
+        9: ["Antilife Shell", "Cloudkill"],
+    },
+    # The Genie's Expanded Spells table has a kind-independent "Genie
+    # Spells" column (always granted) plus one of 4 kind-specific columns
+    # depending on the genie_kind choice (levelup_panel.py's chooser,
+    # stored in _choices["genie_kind"]) -- that choice-dependent half is
+    # read back in get_bonus_spells() below, same pattern as Death
+    # Domain's Reaper cantrip. This entry is only the kind-independent
+    # half. (The table's extra "9th spell level: wish" row is a 6th tier
+    # beyond the normal 1st-5th-spell-level pattern every other patron
+    # uses, and is not modeled separately here; Wish remains reachable
+    # for a high-level Genie warlock through Mystic Arcanum like any
+    # other Warlock.)
+    ("Warlock", "The Genie"): {
+        1: ["Detect Evil and Good"],
+        3: ["Phantasmal Force"],
+        5: ["Create Food and Water"],
+        7: ["Phantasmal Killer"],
+        9: ["Creation"],
     },
     # ── Bard Subclasses ──────────────────────────────────────────────────
     ("Bard", "College of Spirits"): {
@@ -722,10 +784,7 @@ BONUS_SPELLS = {
         7: ["Fire Shield", "Freedom of Movement"],
         9: ["Destructive Wave", "Flame Strike"],
     },
-    # Core PHB/SCAG domains — verified against real source text. These were
-    # missing entirely (only the Amonkhet/Knowledge domains above were
-    # wired up), so Life/Light/Nature/Tempest/Trickery/War/Death Domain
-    # clerics got none of their always-prepared domain spells.
+    # Core PHB/SCAG domains.
     ("Cleric", "Life Domain"): {
         1: ["Bless", "Cure Wounds"],
         3: ["Lesser Restoration", "Spiritual Weapon"],
@@ -774,6 +833,52 @@ BONUS_SPELLS = {
         5: ["Animate Dead", "Vampiric Touch"],
         7: ["Blight", "Death Ward"],
         9: ["Antilife Shell", "Cloudkill"],
+    },
+    # Supplement (SCAG/XGE/TCE) domains. "Resilient Sphere"/"Telepathic
+    # Bond" are this app's spell-database names for what the source text
+    # calls "Otiluke's Resilient Sphere"/"Rary's Telepathic Bond" -- the
+    # possessive-prefixed names don't exist as separate entries here.
+    ("Cleric", "Arcana Domain"): {
+        1: ["Detect Magic", "Magic Missile"],
+        3: ["Magic Weapon", "Nystul's Magic Aura"],
+        5: ["Dispel Magic", "Magic Circle"],
+        7: ["Arcane Eye", "Leomund's Secret Chest"],
+        9: ["Planar Binding", "Teleportation Circle"],
+    },
+    ("Cleric", "Forge Domain"): {
+        1: ["Identify", "Searing Smite"],
+        3: ["Heat Metal", "Magic Weapon"],
+        5: ["Elemental Weapon", "Protection from Energy"],
+        7: ["Fabricate", "Wall of Fire"],
+        9: ["Animate Objects", "Creation"],
+    },
+    ("Cleric", "Grave Domain"): {
+        1: ["Bane", "False Life"],
+        3: ["Gentle Repose", "Ray of Enfeeblement"],
+        5: ["Revivify", "Vampiric Touch"],
+        7: ["Blight", "Death Ward"],
+        9: ["Antilife Shell", "Raise Dead"],
+    },
+    ("Cleric", "Order Domain"): {
+        1: ["Command", "Heroism"],
+        3: ["Hold Person", "Zone of Truth"],
+        5: ["Mass Healing Word", "Slow"],
+        7: ["Compulsion", "Locate Creature"],
+        9: ["Commune", "Dominate Person"],
+    },
+    ("Cleric", "Peace Domain"): {
+        1: ["Heroism", "Sanctuary"],
+        3: ["Aid", "Warding Bond"],
+        5: ["Beacon of Hope", "Sending"],
+        7: ["Aura of Purity", "Resilient Sphere"],
+        9: ["Greater Restoration", "Telepathic Bond"],
+    },
+    ("Cleric", "Twilight Domain"): {
+        1: ["Faerie Fire", "Sleep"],
+        3: ["Moonbeam", "See Invisibility"],
+        5: ["Aura of Vitality", "Leomund's Tiny Hut"],
+        7: ["Aura of Life", "Greater Invisibility"],
+        9: ["Circle of Power", "Mislead"],
     },
 
     # ── Druid: Circle of the Land (terrain-specific) ────────────────────────
@@ -826,6 +931,24 @@ BONUS_SPELLS = {
         7: ["Greater Invisibility", "Stone Shape"],
         9: ["Cloudkill", "Insect Plague"],
     },
+    # Circle of Spores/Wildfire (TCE) each have their own "Circle Spells"
+    # table too, not just Circle of the Land. Level 2 also grants a bonus
+    # cantrip on top of the table (Chill Touch for Spores; Wildfire's own
+    # table starts at level 2).
+    ("Druid", "Circle of Spores"): {
+        2: ["Chill Touch"],
+        3: ["Blindness/Deafness", "Gentle Repose"],
+        5: ["Animate Dead", "Gaseous Form"],
+        7: ["Blight", "Confusion"],
+        9: ["Cloudkill", "Contagion"],
+    },
+    ("Druid", "Circle of Wildfire"): {
+        2: ["Burning Hands", "Cure Wounds"],
+        3: ["Flaming Sphere", "Scorching Ray"],
+        5: ["Plant Growth", "Revivify"],
+        7: ["Aura of Life", "Fire Shield"],
+        9: ["Flame Strike", "Mass Cure Wounds"],
+    },
 
     # ── Paladin Oaths ────────────────────────────────────────────────────
     ("Paladin", "Oath of Devotion"): {
@@ -874,7 +997,7 @@ BONUS_SPELLS = {
         3: ["Sanctuary", "Sleep"],
         5: ["Calm Emotions", "Hold Person"],
         9: ["Counterspell", "Hypnotic Pattern"],
-        13: ["Otiluke's Resilient Sphere", "Stoneskin"],
+        13: ["Resilient Sphere", "Stoneskin"],
         17: ["Hold Monster", "Wall of Force"],
     },
     ("Paladin", "Oath of the Watchers"): {
@@ -913,6 +1036,20 @@ BONUS_SPELLS = {
         9: ["Gaseous Form"],
         13: ["Arcane Eye"],
         17: ["Insect Plague"],
+    },
+    ("Ranger", "Fey Wanderer"): {
+        3: ["Charm Person"],
+        5: ["Misty Step"],
+        9: ["Dispel Magic"],
+        13: ["Dimension Door"],
+        17: ["Mislead"],
+    },
+    ("Ranger", "Gloom Stalker"): {
+        3: ["Disguise Self"],
+        5: ["Rope Trick"],
+        9: ["Fear"],
+        13: ["Greater Invisibility"],
+        17: ["Seeming"],
     },
 
     # ── Warlock Patrons ──────────────────────────────────────────────────
@@ -988,9 +1125,7 @@ RACIAL_BONUS_SPELLS = {
     ("Gnome", "Deep Gnome"): {3: ["Disguise Self"], 5: ["Nondetection"]},
     ("Gnome", "Svirfneblin"): {3: ["Disguise Self"], 5: ["Nondetection"]},
 
-    # ── Genasi (corrected — the previous version of this data was missing
-    # each type's 1st-level cantrip and had wrong level attributions for
-    # the 5th-level spell) ──────────────────────────────────────────────
+    # ── Genasi ────────────────────────────────────────────────────────
     ("Genasi", "Air"): {1: ["Shocking Grasp"], 3: ["Feather Fall"], 5: ["Levitate"]},
     ("Genasi", "Earth"): {1: ["Blade Ward"], 5: ["Pass without Trace"]},
     ("Genasi", "Fire"): {1: ["Produce Flame"], 3: ["Burning Hands"], 5: ["Flame Blade"]},
@@ -1030,7 +1165,13 @@ def get_bonus_spells(char: dict) -> list[str]:
                     any(terrain.lower() in p.lower() for p in picks)):
                 continue
         else:
-            if sub_key.lower() not in actual_sub.lower():
+            # A prefix check, not "is sub_key anywhere in actual_sub" --
+            # containment would match "Light Domain" against "Twilight
+            # Domain" too, since "light domain" is a substring of
+            # "twilight domain". Every real sub_key here is always the
+            # start of actual_sub, with at most a "(SOURCE)" suffix on
+            # actual_sub's end, so startswith is the correct check.
+            if not actual_sub.lower().startswith(sub_key.lower()):
                 continue
         for req_lvl, spells in by_level.items():
             if lvl >= req_lvl:
@@ -1045,15 +1186,40 @@ def get_bonus_spells(char: dict) -> list[str]:
         reaper_pick = char.get("_choices", {}).get("death_domain_reaper_cantrip", [])
         out.extend(reaper_pick)
 
+    # The Genie: the OTHER half of the Expanded Spells table (see the
+    # ("Warlock", "The Genie") entry above) depends on the genie_kind
+    # choice (levelup_panel.py) -- same read-the-pick-back pattern as
+    # Death Domain's Reaper just above.
+    GENIE_KIND_SPELLS = {
+        "dao":     {1: "Sanctuary",   3: "Spike Growth",  5: "Meld into Stone", 7: "Stone Shape",         9: "Wall of Stone"},
+        "djinni":  {1: "Thunderwave", 3: "Gust of Wind",  5: "Wind Wall",       7: "Greater Invisibility", 9: "Seeming"},
+        "efreeti": {1: "Burning Hands", 3: "Scorching Ray", 5: "Fireball",     7: "Fire Shield",         9: "Flame Strike"},
+        "marid":   {1: "Fog Cloud",   3: "Blur",           5: "Sleet Storm",   7: "Control Water",       9: "Cone of Cold"},
+    }
+    warlock_lvl = cl.get("Warlock", 0)
+    if warlock_lvl >= 1 and "genie" in subs.get("Warlock", "").lower():
+        kind_pick = char.get("_choices", {}).get("genie_kind", [])
+        if kind_pick:
+            kind = kind_pick[0].split("–")[0].strip().lower()
+            for req_lvl, sp_name in GENIE_KIND_SPELLS.get(kind, {}).items():
+                if warlock_lvl >= req_lvl:
+                    out.append(sp_name)
+
     species = char.get("species") or char.get("race", "")
     char_subrace = char.get("subrace", "") or ""
     if species.strip().lower() == "tiefling" and not char_subrace.strip():
         char_subrace = "Asmodeus"  # PHB default bloodline per the race data
     char_lvl = total_level(char)
     for (race_key, subrace_key), by_level in RACIAL_BONUS_SPELLS.items():
-        if race_key.lower() not in species.lower():
+        # Prefix check, not containment -- same reasoning as the
+        # class/subclass loop above: "Elf" is a literal substring of
+        # "Half-Elf", and "Drow" of "Drow Descent", so containment would
+        # match a Half-Elf/Drow Descent character against Elf/Drow's
+        # entry too and grant its Faerie Fire/Darkness on top of their
+        # own correct Half-Elf spells.
+        if not species.lower().startswith(race_key.lower()):
             continue
-        if subrace_key is not None and subrace_key.lower() not in char_subrace.lower():
+        if subrace_key is not None and not char_subrace.lower().startswith(subrace_key.lower()):
             continue
         for req_lvl, spells in by_level.items():
             if char_lvl >= req_lvl:
@@ -1211,9 +1377,12 @@ def get_mark_expanded_spells(char: dict) -> set[str]:
     subrace = char.get("subrace", "") or ""
     out = set()
     for (race_key, subrace_key), by_level in MARK_EXPANDED_SPELLS.items():
-        if race_key.lower() not in species.lower():
+        # Same prefix check as get_bonus_spells() above -- "Elf" is a
+        # substring of "Half-Elf", so a plain containment check could
+        # match the wrong race/subrace pair.
+        if not species.lower().startswith(race_key.lower()):
             continue
-        if subrace_key.lower() not in subrace.lower():
+        if not subrace.lower().startswith(subrace_key.lower()):
             continue
         for spells in by_level.values():
             out.update(spells)

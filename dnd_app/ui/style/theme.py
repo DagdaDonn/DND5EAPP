@@ -503,13 +503,10 @@ def apply_theme(name: str):
     CRIMSON=t["CRIMSON"]; CRIM2=t["CRIM2"]
     PURPLE=t["PURPLE"]; PURP2=t["PURP2"]
     AMBER=t["AMBER"]; AMBE2=t["AMBE2"]
-    # GREEN/GREEN2 used to be theme-invariant globals (defined once at the
-    # top of this file, never reassigned here) -- fine for dark themes,
-    # where the fixed bright green happened to already read fine against
-    # a near-black background, but it meant every light theme kept using
-    # that same bright-on-dark green regardless, failing contrast against
-    # a light background (HP bars, the initiative "Adv" badge, healing
-    # toasts). Now theme-driven like every other accent color.
+    # GREEN/GREEN2 are theme-driven like every other accent color (HP
+    # bars, the initiative "Adv" badge, healing toasts) rather than a
+    # single fixed value, since a bright-on-dark green fails contrast
+    # against a light background.
     GREEN=t.get("GREEN", GREEN); GREEN2=t.get("GREEN2", GREEN2)
     PANELDK=t.get("PANELDK", PANELDK)
     # shared.py (button/card/pill/label factories used app-wide) is a
@@ -519,10 +516,9 @@ def apply_theme(name: str):
     # only ran once, at shared.py's first import, so every color it reads
     # directly rather than receiving as a caller-supplied argument (SURF/
     # SURF2/BORDER/BORDER2/TEXT2/TEXT3/BG inside card()/hline()/_btn()'s
-    # "neutral"/"ghost" variants/_pill()/pill_btn()/badge()) stayed frozen
-    # to whichever theme was active at app startup no matter what the
-    # player picked afterward. Syncing it here, at the one and only place
-    # a theme switch actually happens, fixes that for every caller.
+    # "neutral"/"ghost" variants/_pill()/pill_btn()/badge()) needs an
+    # explicit sync here, at the one place a theme switch actually
+    # happens, to stay current for every caller.
     import dnd_app.ui.shared as _shared
     sync_globals(_shared.__dict__)
     return build_qss(t)

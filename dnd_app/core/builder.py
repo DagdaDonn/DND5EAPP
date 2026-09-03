@@ -329,8 +329,7 @@ def rebuild(char: dict) -> None:
                 grants["tool_profs"].append(tool)
 
         # Hex Warrior (Warlock, The Hexblade, 1st level): proficiency with
-        # medium armor, shields, and martial weapons. Previously missing
-        # entirely — a Hexblade had no way to gain these at all.
+        # medium armor, shields, and martial weapons.
         if cname == "Warlock" and "hexblade" in cls_entry.get("subclass", "").lower():
             grants["armor_profs"].append("Medium armor, shields")
             grants["weapon_profs"].append("Martial weapons")
@@ -477,9 +476,8 @@ def rebuild(char: dict) -> None:
         if current < 2:
             char["skills"][skill] = 2
 
-    # Apply chosen skill expertise from _choices — completes the same
-    # root-cause fix as class_skill_profs above, so expertise choices
-    # made through the normal UI flow are actually re-derivable.
+    # Apply chosen skill expertise from _choices, same as class_skill_profs
+    # above, so expertise choices made through the UI are re-derivable.
     for skill in choices.get("class_skill_expertise", []):
         char["skills"][skill] = 3
 
@@ -598,13 +596,14 @@ def rebuild(char: dict) -> None:
         # For Cleric/Druid/Paladin/Artificer, only exclude names actually
         # dumped into spells_known just above (full_list_dumped_names) —
         # NOT that class's entire theoretical spell list regardless of
-        # level. Using the unfiltered list was a real bug: e.g. a level-1
-        # Cleric (whose dump never reaches 3rd-level spells) multiclassed
-        # with a level-5 Bard who genuinely knows "Speak with Dead" (also
-        # on Cleric's full list, but never actually granted to this
-        # character's Cleric side) silently never got it auto-prepared,
-        # even though nothing ever actually gave it to Cleric to conflict
-        # with. Wizard has no level-filtered dump to compare against (its
+        # level. A level-1 Cleric's dump never reaches 3rd-level spells,
+        # so a level-5 Bard multiclassed onto them who genuinely knows
+        # "Speak with Dead" (also on Cleric's full list, but never
+        # actually granted to this character's Cleric side) must still
+        # get it auto-prepared as their own Bard spell — excluding by the
+        # class's entire theoretical list instead of its actual dump
+        # would wrongly withhold it. Wizard has no level-filtered dump to
+        # compare against (its
         # spellbook is entirely player-built via the browser), so it
         # keeps using its full list — a spell on Wizard's list already
         # requires being on one of the player's own class lists to have

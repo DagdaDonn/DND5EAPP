@@ -12,11 +12,7 @@ from ..shared import *
 # aliases to h/card/hline, which ARE plain names the wildcard import above
 # already brought in).
 from ..shared import _btn, _pill
-# _lbl/_sep/_card used to be local aliases to h()/hline()/card() defined
-# once at the top of the original (pre-split) sheet.py, alongside the
-# rest of its module constants -- re-declared here since this file only
-# got that constants block's siblings (_btn/_pill), not the aliases
-# themselves.
+# Local aliases matching the short names used throughout this file.
 _lbl = h
 _sep = hline
 _card = card
@@ -71,8 +67,7 @@ class RestOptionsDialog(QDialog):
 
     Currently covers: unpreparing all spells to choose new ones (any
     prepared caster, long rest), and the Artificer Armorer's Arcane
-    Armor model swap (confirmed via the actual rule text — short or
-    long rest, smith's tools in hand)."""
+    Armor model swap (short or long rest, smith's tools in hand)."""
 
     def __init__(self, char, rest_type, parent=None):
         super().__init__(parent)
@@ -142,7 +137,7 @@ class RestOptionsDialog(QDialog):
             opts.append({
                 "kind": "armorer_model",
                 "label": "Change Arcane Armor model (Guardian ↔ Infiltrator)",
-                "detail": "Requires smith's tools in hand — confirmed via the actual rule text.",
+                "detail": "Requires smith's tools in hand.",
             })
         # Arcane Recovery (Wizard 1+): short rest only (the rule triggers
         # "when you finish a short rest"), once per day (checked via the
@@ -243,13 +238,11 @@ class RestPreviewDialog(QDialog):
     filters over current character state, not a simulation, so this
     can't drift from what those methods actually do next.
 
-    `options` (from RestOptionsDialog._build_options()) folds in the
-    "anything you'd like to reconfigure on this rest" checklist that
-    used to be its own separate popup shown AFTER the rest completed —
-    two back-to-back confirm dialogs for the same action was exactly
-    the kind of friction this preview dialog was supposed to cut down
-    on, not add to. One dialog, one Confirm, and get_selected() below
-    is read the same way RestOptionsDialog.get_selected() always was."""
+    `options` (from RestOptionsDialog._build_options()) folds the
+    "anything you'd like to reconfigure on this rest" checklist into
+    this same preview dialog rather than a separate confirm step, so
+    the player gets one dialog and one Confirm for the whole rest.
+    get_selected() below is read the same way RestOptionsDialog's is."""
 
     def __init__(self, rest_type: str, preview: dict, options: list, parent=None):
         super().__init__(parent)

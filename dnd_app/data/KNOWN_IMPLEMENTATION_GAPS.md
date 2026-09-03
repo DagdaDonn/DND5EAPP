@@ -10047,3 +10047,132 @@ Domain (SCAG), Forge Domain (XGE), Grave Domain (XGE), Order Domain
 applies — add a `("Cleric", "<Domain> Domain")` entry to `BONUS_SPELLS`
 in `dnd_app/data/phbCommon/spells.py` with each spell verified against
 real source text and against `SPELL_NAMES`.
+
+## The 6 supplement domains — added, plus 2 real bugs found along the way
+
+User provided the full source text for all 6 remaining domains directly
+(SCAG/XGE/TCE), asking why they weren't in `CLASS_REFERENCE.md` — turned
+out they already were, in full, matching the pasted text exactly (used
+this to cross-verify rather than re-typing from scratch). Added all 6 to
+`BONUS_SPELLS` following the established pattern, checking every spell
+name against `SPELL_NAMES` first.
+
+Two names didn't resolve as pasted: "Otiluke's Resilient Sphere" and
+"Rary's Telepathic Bond" only exist in this app's spell database as
+"Resilient Sphere"/"Telepathic Bond" (no possessive prefix) — used the
+app's real names. "Leomund's Secret Chest" (Arcana Domain, 7th level)
+didn't exist under ANY name — a genuinely missing spell, not a naming
+mismatch. Verified its real text (4th-level conjuration, PHB, V/S/M,
+touch, 1 action) via web search and added it as a proper spell entry in
+`ALL_SPELLS`, not just a bare string in `BONUS_SPELLS`.
+
+**Real bug #1**: `get_bonus_spells()`'s class/subclass matching used
+`sub_key.lower() not in actual_sub.lower()` — containment anywhere, not
+a prefix check. Wiring Twilight Domain exposed it immediately: "light
+domain" is a literal substring of "twilight domain", so every Twilight
+Domain cleric was also getting Light Domain's entire spell list on top
+of their own. Fixed to `not actual_sub.lower().startswith(sub_key.lower())`
+— every real `sub_key` in `BONUS_SPELLS` is a genuine prefix of
+`actual_sub` (which may carry a trailing "(SOURCE)"), never a mid-string
+fragment, so this is strictly safer with zero behavior change for every
+correct match. Scanned every class's full `sub_key` list for other
+same-shaped collisions: none found.
+
+**Real bug #2, found while checking whether the same pattern existed
+elsewhere**: `RACIAL_BONUS_SPELLS`'s race/subrace matching had the exact
+same containment bug — "Elf" is a substring of "Half-Elf". Confirmed
+with a live test: a Half-Elf character with subrace "Drow Descent"
+showed `Darkness` in `bonus_spells` at level 5, a spell Half-Elf/Drow
+Descent's own entry doesn't grant at all (it only has a level-1 entry) —
+it was silently inheriting Elf/Drow's spells too, since "Drow" is also a
+substring of "Drow Descent". Fixed with the same prefix check. Also
+applied the same fix to `get_mark_expanded_spells()`'s `MARK_EXPANDED_SPELLS`
+lookup (same Elf/Half-Elf collision shape, currently harmless only
+because no Half-Elf subrace happens to be named "Mark of Shadow") for
+consistency, before it became a real bug too.
+
+Verified via direct `rebuild()` calls: all 6 new domains grant their
+correct spells at levels 1/3/5/7/9; Twilight Domain no longer shows any
+Light Domain spell; Light Domain itself still works correctly
+(regression check); Half-Elf/Drow Descent no longer shows Elf-only
+spells; real Elf/Drow still does. Full scratchpad regression suite
+green throughout.
+
+## Full sweep: every other class's bonus/expanded spell lists
+
+User asked whether every other class's subclass bonus spells were as
+complete as Cleric's domains now are. Cross-referenced BONUS_SPELLS
+against every real subclass in classes.py, using CLASS_REFERENCE.md and
+spells-sublist.md (not memory) for every value, same discipline as the
+Cleric pass. Found and fixed real gaps in Warlock and Ranger, plus 2
+more genuinely-missing spells and 2 more misspelled-in-the-database
+spell names (on top of the 2 found during the Cleric pass), the same
+shape of bug that pass turned up repeatedly.
+
+**Warlock — 5 of 9 patrons had no Expanded Spell List at all**: Archfey,
+Fathomless, Great Old One, and Undead were simply absent. The Genie's
+table is kind-dependent (a "Genie Spells" column always granted, plus
+one of Dao/Djinni/Efreeti/Marid's own column based on the genie_kind
+choice already made via levelup_panel.py's existing chooser) -- wired
+the kind-independent half into BONUS_SPELLS and the kind-dependent half
+as a read-the-pick-back branch in get_bonus_spells(), same pattern as
+Death Domain's Reaper cantrip.
+
+**Two already-wired patrons were modeling the wrong feature**: The
+Celestial's entry only had Light/Sacred Flame (its separate Bonus
+Cantrips feature) with the real Expanded Spell List (Cure Wounds,
+Guiding Bolt, Flaming Sphere, Lesser Restoration, Daylight, Revivify,
+Guardian of Faith, Wall of Fire, Flame Strike, Greater Restoration)
+missing entirely. Same for The Undying (had only Spare the Dying from
+Among the Dead, missing False Life, Ray of Sickness, Blindness/Deafness,
+Silence, Feign Death, Speak with Dead, Aura of Life, Death Ward,
+Contagion, Legend Lore). Added the real list alongside each existing
+cantrip grant rather than replacing it -- both features are real and
+distinct.
+
+**Ranger — 2 of 5 spell-granting conclaves missing**: Gloom Stalker
+(XGE) and Fey Wanderer (TCE) each have the same single-spell-per-level
+"Conclave Magic"-style table as Horizon Walker/Monster Slayer/
+Swarmkeeper, just never added.
+
+**Druid — 2 of 7 circles missing a genuine "Circle Spells" table**:
+Circle of Spores and Circle of Wildfire (both TCE) each have a real
+fixed spell table (Spores also grants Chill Touch free at 2nd level).
+Verified Circle of Dreams/Stars/the Shepherd genuinely have no such
+table (their Circle-defining features are pools of dice/a spellcasting
+focus/a summon, not spells) -- correctly absent, not a gap. Circle of
+the Land was already fully wired (all 8 terrains) before this session.
+
+**2 more spells missing from the database entirely** (not just a naming
+mismatch, like Leomund's Secret Chest during the Cleric pass): Evard's
+Black Tentacles (Great Old One's 7th-slot pick) and Staggering Smite
+(a pre-existing gap in The Hexblade's own already-wired 7th-slot pick,
+found by finally sweeping every BONUS_SPELLS entry's spell names against
+SPELL_NAMES, not just the ones touched this pass). Both added as real
+ALL_SPELLS entries, verified against spells-sublist.md word-for-word.
+
+**2 more spell names wrong in the database itself**: "Thundering Smite"
+should be "Thunderous Smite" (confirmed via spells-sublist.md and a web
+search of the real PHB text) -- renamed the actual ALL_SPELLS entry, not
+just the reference to it, since nothing else in the codebase referenced
+the wrong name. Oath of Redemption's 13th-level pick used "Otiluke's
+Resilient Sphere" (the source-book name) instead of this app's actual
+"Resilient Sphere" entry, same possessive-prefix mismatch as Peace
+Domain's pick during the Cleric pass.
+
+Paladin (all 9 oaths), Artificer (all 4 specialists), and Bard's College
+of Spirits (a single bonus-cantrip grant, not a spell table -- verified
+it has no separate Expanded Spell List in the reference) were already
+complete. Barbarian's Path of the Totem Warrior/Ancestral Guardian
+entries weren't re-examined beyond confirming they exist -- that's a
+different question (whether a limited-use, once-per-rest cast ability
+was correctly simplified into an always-known grant, and whether its
+level gate is right) than "is anything missing," and wasn't chased
+further this pass.
+
+Verified via direct rebuild() calls for every newly-added/fixed entry
+(all 9 Warlock patrons including all 4 Genie kinds and the no-kind-
+picked edge case, both new Ranger conclaves, both new Druid circles),
+a full SPELL_NAMES resolution sweep across BONUS_SPELLS/
+RACIAL_BONUS_SPELLS/MARK_EXPANDED_SPELLS together (0 failures), and the
+full scratchpad regression suite.

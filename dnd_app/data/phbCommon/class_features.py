@@ -537,12 +537,9 @@ CLASS_FEATURE_INDEX: dict[str, dict] = {
     },
 
     "Cleric": {
-        # VERIFIED via web search — standard Cleric domain progression is
-        # 1st/2nd/6th/8th/17th (PHB p.58). The 2nd-level slot is each
-        # domain's own named Channel Divinity option, which the old flat
-        # SUBCLASS_FEATURES lists omitted entirely — that omission was the
-        # actual root cause of the slot/feature count mismatch here, not
-        # a simple missing-entry case like Battle Master's.
+        # Standard Cleric domain progression is 1st/2nd/6th/8th/17th
+        # (PHB p.58). The 2nd-level slot is each domain's own named
+        # Channel Divinity option.
         # The following 4 domains are unofficial, third-party content
         # (Plane Shift: Amonkhet) with no single authoritative source —
         # reconstructed from secondary/fan sources, not verified against

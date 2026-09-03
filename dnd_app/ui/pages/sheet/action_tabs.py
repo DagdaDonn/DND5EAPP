@@ -483,9 +483,9 @@ class ActionTabsMixin:
                             self._refresh_effects_list()
                             self._refresh_combat()
                             return
-                        # Berserker's Frenzy: same disconnection bug as Rage
-                        # had — clicking Use never actually turned it on.
-                        # Requires Rage to already be active (you can only
+                        # Berserker's Frenzy: clicking Use must actually turn
+                        # the effect on, same as Rage. Requires Rage to
+                        # already be active (you can only
                         # frenzy while raging); doesn't consume a turn slot
                         # itself since it's a decision made alongside
                         # raging, not a separate action.
@@ -633,13 +633,11 @@ class ActionTabsMixin:
                                 # resource's own row in the Other tab, which
                                 # already correctly manages active_effects.
                                 # This button is for STARTING the effect, not
-                                # re-affirming one already in progress.
-                                # Previously this check (and the matching
-                                # activation below) only ever fired for the
-                                # literal string "rage" — every other simple
-                                # toggle sharing this fallback had a Use
-                                # button that correctly spent its resource
-                                # but never actually turned the effect on.
+                                # re-affirming one already in progress. This
+                                # check (and the matching activation below)
+                                # must cover every RESOURCE_POOL_TOGGLES
+                                # entry, not just Rage, since each shares the
+                                # same fallback Use button.
                                 if _display in RESOURCE_POOL_TOGGLES and _display in self.char.get("active_effects", []):
                                     self._toast(f"⚡ {_display} already active — use the \"Active\" "
                                                 f"checkbox on its resource row (Other tab) to end it")

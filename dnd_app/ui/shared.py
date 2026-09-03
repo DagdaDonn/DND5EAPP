@@ -97,14 +97,12 @@ def _btn(label, color=None, *, variant="cta", height=28, width=None,
          enabled=True, bg_alpha=None, border_alpha=None, text_color=None,
          hover_text=None, hover_bg_alpha=None, min_height0=False,
          border_width=None):
-    """Shared QPushButton factory covering the ~4 button "shapes" that
-    were previously hand-rolled inline as QSS f-strings at ~79 call
-    sites app-wide (59 in sheet.py alone) — every one of them a
-    variation on one of these with only the accent color (and
-    occasionally the alpha/text-color specifics below) actually
-    differing. NOT a replacement for pill_btn() above (a distinct,
-    already-shared, already-adopted solid/no-border/rounded-pill shape
-    used for the most prominent CTAs like "Create New Character").
+    """Shared QPushButton factory covering the ~4 button "shapes" used
+    at call sites app-wide, each a variation on one of these with only
+    the accent color (and occasionally the alpha/text-color specifics
+    below) actually differing. NOT a replacement for pill_btn() above
+    (a distinct, already-shared solid/no-border/rounded-pill shape used
+    for the most prominent CTAs like "Create New Character").
 
     variant="cta"     (default) — tinted background, thick 2px border
                        in the same color, hover FILLS to solid color.

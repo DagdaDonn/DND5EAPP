@@ -127,12 +127,11 @@ class StartMenu(QWidget):
 
 
 class SettingsDialog(QDialog):
-    """Consolidates the theme chooser (moved out of the menu bar, per
-    user request) and adds a font-size scale option and optional-rules
-    toggles. Only wires toggles for rules that already have real,
-    meaningful enforcement built — feat prerequisites and multiclass
-    ability score requirements, both built this session — rather than
-    adding switches for things with no actual mechanic behind them."""
+    """Consolidates the theme chooser, a font-size scale option, and
+    optional-rules toggles. Only wires toggles for rules that already
+    have real, meaningful enforcement built — feat prerequisites and
+    multiclass ability score requirements — rather than adding
+    switches for things with no actual mechanic behind them."""
 
     def __init__(self, app_window, parent=None):
         super().__init__(parent)
@@ -211,11 +210,10 @@ class SettingsDialog(QDialog):
         root.addWidget(adv_card)
 
         # ── Character Rules, Tasha's Cauldron Options, and DM Secrets are
-        # three separate cards (previously one long "OPTIONAL RULES" card
-        # of 10 checkboxes, which had gotten too crowded to scan) — split
-        # by what kind of toggle each one is: core enforcement rules,
-        # Tasha's Cauldron of Everything's "swap something at an ASI
-        # level" class options, and purely cosmetic flavor toggles.
+        # three separate cards, split by what kind of toggle each one is:
+        # core enforcement rules, Tasha's Cauldron of Everything's "swap
+        # something at an ASI level" class options, and purely cosmetic
+        # flavor toggles.
         rules_card = QFrame(); rules_card.setStyleSheet(
             f"QFrame{{background:{SURF};border:1px solid {BORDER};border-radius:10px;}}")
         rcl = QVBoxLayout(rules_card); rcl.setContentsMargins(14,12,14,14); rcl.setSpacing(8)
@@ -586,8 +584,6 @@ class CharacterCreatorApp(QMainWindow):
                     self._show_cheese_easter_egg()
                     self._cheese_buffer = ""
         # Opt-in trace, off by default -- see dnd_app/ui/diagnostics.py.
-        # (This is how the flashing min/max/close popup on character
-        # load was actually root-caused and fixed -- see abilities.py.)
         if event.type() == QEvent.Show:
             from dnd_app.ui.diagnostics import log_window_show
             log_window_show(obj, event)
@@ -721,13 +717,11 @@ class CharacterCreatorApp(QMainWindow):
                 if was_current_wizard:
                     self._stack.setCurrentWidget(self._wizard)
 
-            # StartMenu was built once at app startup and, like the
-            # sheet before the fix above, never rebuilt on a theme
-            # switch -- if the player switches themes from the start
-            # screen (Settings is reachable from the menu bar regardless
-            # of which screen is showing), it stayed the old colors
-            # underneath the dialog. Rebuilt in place, restoring which
-            # stack widget was current if StartMenu itself was showing.
+            # StartMenu is built once at app startup, so a theme switch
+            # (Settings is reachable from the menu bar regardless of
+            # which screen is showing) needs it explicitly rebuilt in
+            # place, restoring which stack widget was current if
+            # StartMenu itself was showing.
             was_current_start = (self._stack.currentWidget() is self._start)
             self._stack.removeWidget(self._start); self._start.deleteLater()
             self._start = StartMenu(self)
@@ -814,19 +808,17 @@ class CharacterCreatorApp(QMainWindow):
             # genuine independent top-level window as far as Qt/the OS
             # window manager is concerned for that whole window, full
             # min/max/close chrome included, even though nothing here
-            # ever calls .show() on it -- matches a user report of a
-            # full window flashing open and shut on load/create.
-            # StartMenu()/CharacterWizard() construction sites got the
-            # same fix, for the same reason.
+            # ever calls .show() on it -- an unparented sheet would flash
+            # open and shut as a real window during construction.
+            # StartMenu()/CharacterWizard() construction sites need the
+            # same explicit parent, for the same reason.
             self._sheet = CharacterSheet(char, self)
             self._sheet.back_to_menu.connect(self._sheet_back_to_menu)
             self._stack.addWidget(self._sheet)
             self._stack.setCurrentWidget(self._sheet)
         except Exception:
-            # Diagnostic safety net: surface the real failure instead of
-            # letting it fail silently (as it apparently has been) — needed
-            # to actually see what's going wrong without a live PySide6
-            # install available to test against directly.
+            # Safety net: surface the real failure to the player and log
+            # it, instead of letting sheet construction fail silently.
             import traceback
             from dnd_app.ui.shared import write_diagnostic_log
             tb = traceback.format_exc()

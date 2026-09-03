@@ -752,15 +752,14 @@ class FeaturesMixin:
     def _format_multi_para(text: str) -> str:
         """Format a long, multi-ability description (DM rewards like
         Supernatural Gifts, Dark Gifts, Iconoclast's tiers, etc.) for
-        an HTML-rendered popup. Confirmed a real, guaranteed crash —
-        this was called but never defined. Two real problems fixed:
-        (1) the source text has real '\\n\\n' paragraph breaks, but
-        plain newlines are silently collapsed by Qt's HTML rendering,
+        an HTML-rendered popup. Handles two things Qt's HTML rendering
+        won't do on its own: (1) the source text has real '\\n\\n'
+        paragraph breaks, but plain newlines are silently collapsed,
         producing one unreadable wall of text; (2) each distinct
-        ability starts with "Trait Name. description..." (originally
-        markdown bold, flattened to plain text during parsing) — these
-        are re-bolded so each ability reads as its own clearly
-        separated block instead of blending into running prose."""
+        ability starts with "Trait Name. description..." (markdown bold
+        flattened to plain text during parsing) — these are re-bolded
+        so each ability reads as its own clearly separated block
+        instead of blending into running prose."""
         import re
         if not text:
             return ""
@@ -896,8 +895,8 @@ class FeaturesMixin:
             # NOTE: intentionally no "len(item) > 80 → tip = raw" fallback here.
             # Background/race/subrace items already show their FULL description
             # inline in the row label; repeating it verbatim in the tooltip is
-            # just noise (the "doubled text" bug). Only show a tooltip when we
-            # found a genuinely different, shorter lookup via FEATURE_DESCS.
+            # just noise. Only show a tooltip when there's a genuinely
+            # different, shorter lookup via FEATURE_DESCS.
             if tip:
                 display_name = after_colon_no_paren or raw_no_paren
                 tip_formatted = self._break_long_tooltip(tip)

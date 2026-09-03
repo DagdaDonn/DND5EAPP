@@ -264,11 +264,9 @@ class ChoicesMixin:
     def _build_tab_choices(self):
         """Choices tab: Class Manager + Identity cards in a top pane, the
         LevelUpPanel (choices) and Optional Class Features in a bottom pane —
-        split by a draggable handle, same pattern as the Combat tab. This
-        used to be a single QVBoxLayout with the LevelUpPanel forced to
-        stretch and fill all remaining space regardless of how much content
-        it actually had, which meant a character with few pending choices
-        showed a large empty gap with no way to reclaim that space."""
+        split by a draggable handle, same pattern as the Combat tab, so a
+        character with few pending choices doesn't leave a large empty
+        gap with no way to reclaim that space."""
         tab = QWidget()
         outer = QVBoxLayout(tab)
         outer.setContentsMargins(12, 10, 12, 10)
@@ -363,10 +361,9 @@ class ChoicesMixin:
 
         # ── Identity / Character Config card ─────────────────────────────────
         # Title-row-then-content matches the Class Manager/Experience cards
-        # above it (was previously a single QHBoxLayout cramming the title
-        # and all 4 buttons onto one line) — consistent card anatomy across
-        # the whole top pane, and gives the buttons room to show their
-        # current value (see _refresh_identity_buttons) without crowding.
+        # above it — consistent card anatomy across the whole top pane, and
+        # gives the buttons room to show their current value (see
+        # _refresh_identity_buttons) without crowding.
         id_card = QFrame()
         id_card.setStyleSheet(f"QFrame{{background:{SURF};border:1px solid {qa(TEAL,0x33)};border-radius:10px;}}")
         id_cl = QVBoxLayout(id_card); id_cl.setContentsMargins(12,8,12,8); id_cl.setSpacing(6)
@@ -504,12 +501,12 @@ class ChoicesMixin:
 
     def _refresh_identity_buttons(self):
         """Shows the CURRENTLY set value on each Choices-tab Identity
-        button (e.g. "✎  Race: Human") instead of a bare generic label —
-        previously you had to click through each one to see what was
-        already set. Also drives Ancestry's visibility (Dragonborn only),
-        replacing what used to be a separate, easy-to-forget duplicate of
-        this same check. Called from _refresh_stat_bar, so it stays in
-        sync with every controller-driven refresh."""
+        button (e.g. "✎  Race: Human") instead of a bare generic label,
+        so the player can see what's already set without clicking
+        through each one. Also drives Ancestry's visibility (Dragonborn
+        only) from this same single check. Called from
+        _refresh_stat_bar, so it stays in sync with every
+        controller-driven refresh."""
         if not hasattr(self, "_identity_btns"):
             return
         values = {

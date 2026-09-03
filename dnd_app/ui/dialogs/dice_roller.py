@@ -70,9 +70,8 @@ class DiceRollerPanel(QWidget):
         outer.addLayout(title_row)
 
         # ── Result display ────────────────────────────────────────────────────
-        # Moved to the top, above the roll controls: the result is the
-        # whole point of this panel and previously had to compete for
-        # attention at the bottom, below three stacked control groups.
+        # Placed above the roll controls since the result is the whole
+        # point of this panel.
         self.result_frame = QFrame()
         self.result_frame.setMinimumHeight(96)
         self.result_frame.setStyleSheet(
@@ -204,8 +203,7 @@ class DiceRollerPanel(QWidget):
         sides = int(die_str[1:])
         result = random.randint(1, sides)
         # A single quick d20 is exactly a "natural" roll -- give it the
-        # same crit treatment as a bonus roll, which previously only
-        # the "Roll with Bonus" button got.
+        # same crit treatment as the "Roll with Bonus" button.
         is_d20 = (sides == 20)
         self._show_result(result, f"1{die_str}", [result],
                            nat20=(is_d20 and result == 20), nat1=(is_d20 and result == 1))
@@ -279,9 +277,7 @@ class DiceRollerPanel(QWidget):
         # Flash animation, settling to a crit-colored border afterward
         # (rather than always reverting to the plain default) so a nat
         # 20/1 stays visually obvious at a glance even after the flash
-        # fades -- previously the border always reverted, so the only
-        # persistent crit indicator was a small inline emoji in the
-        # detail text.
+        # fades.
         self.result_frame.setStyleSheet(
             f"QFrame{{background:{qa(INDIGO,0x44)};border:2px solid {INDIGO};border-radius:10px;}}")
         QTimer.singleShot(200, lambda bc=border_color: self.result_frame.setStyleSheet(

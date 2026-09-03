@@ -427,9 +427,8 @@ ALL_CLASSES_2024 = [
         },
         subclasses=['Circle of the Land', 'Circle of the Moon', 'Circle of the Sea', 'Circle of the Stars'],
         resources=[
-            # Recovers on a short OR long rest (same "SR" vs "SR/LR" reset
-            # bug pattern already fixed elsewhere in this app -- see the
-            # matching note in classes.py's Wild Shape entry).
+            # Recovers on a short OR long rest, hence "SR/LR" not plain "SR"
+            # (see classes.py's Wild Shape entry).
             dict(name="Wild Shape", key="wild_shape", formula="2", reset="SR/LR", track="uses"),
         ],
         level_choices={
@@ -602,13 +601,7 @@ ALL_CLASSES_2024 = [
                  by_level={2:2,10:3}, sr_recover=1),
             # 2024 PHB (this class's own feature text above, 1st level:
             # "Prof mod uses/LR") changed this from 2014's "1 + CHA
-            # modifier" to a flat Proficiency Bonus -- was "WIS_mod",
-            # which doesn't match either the old or new rule and wasn't
-            # even a supported placeholder's correct use here (Paladin
-            # has no WIS-based features); silently floored to 1 use at
-            # every level via aggregate_resources()'s max(1, ...) formula
-            # floor, though this bug was unreachable before edition was
-            # threaded through (see aggregate_resources()'s edition param).
+            # modifier" to a flat Proficiency Bonus.
             dict(name="Divine Sense", key="divine_sense", formula="PB", reset="LR", track="uses"),
             dict(name="Divine Smite (free cast)", key="smite_free", formula="1", reset="LR", track="uses"),
         ],

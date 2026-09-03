@@ -301,10 +301,7 @@ class ChoiceWidget(QFrame):
         # reaching the required count only ENABLES the Confirm button for
         # a multi-select chooser -- it doesn't submit on its own. Only a
         # genuinely single-item choice (_count == 1) has nothing left to
-        # confirm, so that's the only case that auto-submits. This chooser
-        # was previously auto-submitting the moment the count was reached
-        # regardless of _count, silently skipping the Confirm button/step
-        # for any multi-select tool/weapon-or-tool choice.
+        # confirm, so that's the only case that auto-submits.
         if self._confirm_btn:
             self._confirm_btn.setEnabled(len(self._selected) >= self._count)
         if self._count == 1 and len(self._selected) == 1:
@@ -1069,12 +1066,10 @@ class GrantsSummaryWidget(QFrame):
 # ═══════════════════════════════════════════════════════════════════
 def feat_prereq_met(char: dict, feat: dict) -> tuple[bool, str]:
     """Checks a feat's actual prerequisite against the character's real
-    data. Confirmed this had zero enforcement anywhere before — every
-    feat was shown regardless of prereq, with the prereq text only ever
-    appearing in a tooltip. Returns (met, reason_if_not_met).
-    Campaign-specific prereqs (Planescape/Dragonlance) are left
-    unenforced — the app has no way to know which campaign a table is
-    using, so those stay informational only."""
+    data. Returns (met, reason_if_not_met). Campaign-specific prereqs
+    (Planescape/Dragonlance) are left unenforced — the app has no way to
+    know which campaign a table is using, so those stay informational
+    only."""
     prereq = feat.get("prereq", "")
     if not prereq:
         return True, ""
@@ -1364,7 +1359,7 @@ class LevelUpPanel(QWidget):
             # Aggregate into "tool_profs" — the exact key builder.py's
             # rebuild() reads from (char["tool_proficiencies"] =
             # grants["tool_profs"] + choices.get("tool_profs", [])) — so
-            # this is re-derivable, same fix already applied to skills.
+            # rebuild() can re-derive it, same pattern used for skills.
             choices = self.char["_choices"]
             all_tool_profs = []
             for k, v in choices.items():
@@ -1377,7 +1372,7 @@ class LevelUpPanel(QWidget):
             for skill in selected:
                 self.char["skills"][skill] = 3
             self.char.setdefault("_choices",{})[choice_id] = selected
-            # Same root-cause fix as "_skill_profs" above: aggregate into a
+            # Same pattern as "_skill_profs" above: aggregate into a
             # dedicated key so rebuild() can re-derive expertise choices
             # too, rather than relying entirely on the raw skills dict
             # never being independently cleared.
@@ -2374,11 +2369,9 @@ def _get_subclass_choices(char):
 
 
 def _get_feat_choices(char):
-    """Player-chosen proficiency grants from feats — confirmed these had
-    zero UI selection support at all despite being an explicit, real part
-    of the feat's benefit (a player taking Skilled had no way to actually
-    pick their 3 skills/tools anywhere in the app). Detects a feat was
-    taken by scanning every _choices value for a "feat:Name" entry, the
+    """Player-chosen proficiency grants from feats (e.g. Skilled's 3
+    skill/tool picks). Detects a feat was taken by scanning every
+    _choices value for a "feat:Name" entry, the
     same way it's stored when picked via the ASI-or-feat chooser.
     Weapon Master, Skill Expert, and Prodigy need the same kind of
     treatment but are more complex (weapon pools, an additional
@@ -3008,9 +3001,8 @@ def _get_class_tool_choices(char):
 
 def _get_dm_reward_choices(char):
     """Player-chosen proficiency grants from DM-Granted Bonus Features
-    (dm_rewards.py) — confirmed these had zero mechanical wiring of any
-    kind before this pass, including no way to actually make the
-    choices their own text describes."""
+    (dm_rewards.py) whose reward text names a choice (e.g. "choose one
+    skill") rather than a fixed grant."""
     choices = []
     made = char.get("_choices", {})
     rewards = set(char.get("dm_rewards", []))

@@ -229,12 +229,10 @@ class CombatMixin:
     def _wildshape_resource(self):
         """The formal char['resources'] entry for Wild Shape (key
         'wild_shape') -- the SAME entry the Passive/Other tab's generic
-        resource tracker (_build_resource_rows) reads and writes. This
-        card previously tracked uses via a separate, disconnected
-        char['_wildshape_uses_spent'] counter: transforming here never
-        moved that tab's pips, and editing that tab's spinbox never
-        blocked/allowed a transform here. Returns None if Wild Shape
-        isn't available yet (not a Druid, or below 2nd level)."""
+        resource tracker (_build_resource_rows) reads and writes, so
+        transforming here and editing that tab's spinbox stay in sync.
+        Returns None if Wild Shape isn't available yet (not a Druid, or
+        below 2nd level)."""
         return next((r for r in self.char.get("resources", [])
                      if r.get("key") == "wild_shape"), None)
 
@@ -383,8 +381,7 @@ class CombatMixin:
     def _wildshape_moon_heal(self):
         """Circle of the Moon's Combat Wild Shape: spend a spell slot as
         a bonus action to regain 1d8 HP per level of the slot, while
-        transformed. Confirmed a real feature with zero prior mechanical
-        presence anywhere in the app."""
+        transformed."""
         from dnd_app.data.phbCommon.statblocks import WILDSHAPE_BEASTS
         from dnd_app.core.calculator import subclasses as _sc, class_levels as _clv
         from dnd_app.core.multiclass import compute_all_spell_slots
@@ -555,12 +552,10 @@ class CombatMixin:
         ctrl_row.addStretch()
         hpcl.addLayout(ctrl_row)
         # Death saves — a genuinely tense moment (0 HP, rolling to live or
-        # die) previously rendered as a single plain, borderless row of
-        # tiny 14px checkboxes with no visual weight at all, easy to miss
-        # entirely next to the rest of the app's card-based styling. Now
-        # its own alert-styled card (only shown at 0 HP to begin with, so
-        # it earns the attention) with bigger pips, a live status line,
-        # and per-pip tooltips explaining the actual rule.
+        # die) gets its own alert-styled card (only shown at 0 HP to
+        # begin with, so it earns the attention) with bigger pips, a
+        # live status line, and per-pip tooltips explaining the actual
+        # rule.
         self._death_saves_container = QFrame()
         self._death_saves_container.setStyleSheet(
             f"QFrame{{background:{qa(CRIMSON,0x14)};border:2px solid {qa(CRIMSON,0x66)};"
@@ -751,17 +746,13 @@ class CombatMixin:
         self._action_tabs.setAttribute(Qt.WA_StyledBackground, True)
         # NOT setDocumentMode(True): document mode suppresses the style
         # engine's own ::pane frame/background painting in most Qt styles,
-        # which silently made the "::pane{border:...;background:{SURF};...}"
-        # rule below a no-op -- nothing painted the content area at all, so
-        # it fell through to whatever showed behind it. That was invisible
-        # before the WA_StyledBackground fix above (this widget's own base
-        # never painted its background either), but once WA_StyledBackground
-        # made the base's dark PANELDK gap-strip color paint reliably, it
-        # washed across the *entire* widget including the content area
-        # behind every action row -- a real contrast regression, not the
-        # intended "only the strip past the last tab" look. Leaving document
-        # mode off matches the other 3 QTabWidgets in the app (none of which
-        # set it), letting ::pane's own light background actually render.
+        # making the "::pane{border:...;background:{SURF};...}" rule below
+        # a no-op -- with WA_StyledBackground set above, that would let the
+        # widget's own dark PANELDK gap-strip color wash across the entire
+        # content area behind every action row, instead of just the strip
+        # past the last tab. Leaving document mode off matches the other 3
+        # QTabWidgets in the app (none of which set it), letting ::pane's
+        # own light background actually render.
         self._action_tabs.setTabPosition(QTabWidget.North)
         self._action_tabs.setStyleSheet(
             f"QTabWidget::pane{{border:1px solid {qa(AMBER,0x33)};border-radius:8px;"
@@ -1618,7 +1609,7 @@ class CombatMixin:
 
         # Sacred Weapon (Paladin, Oath of Devotion): Channel Divinity —
         # while active, add CHA mod to attack rolls with the touched
-        # weapon. Previously had no mechanical effect at all.
+        # weapon.
         sacred_weapon_bonus = 0
         if "Sacred Weapon" in self.char.get("active_effects", []):
             sacred_weapon_bonus = ability_mod(self.char, "CHA")
@@ -1716,9 +1707,7 @@ class CombatMixin:
         dueling_bonus = 2 if has_dueling else 0
 
         # Rage: melee weapon attacks using Strength get a damage bonus
-        # while raging. Previously get_rage_damage() was computed and
-        # displayed as a reference stat but never actually added to any
-        # weapon's damage roll — this wires it into the real calculation.
+        # while raging, from get_rage_damage().
         rage_active = "Rage" in self.char.get("active_effects", [])
         rage_bonus = 0
         if rage_active and not is_ranged and stat == "STR":
@@ -2114,11 +2103,10 @@ class CombatMixin:
     def _add_generic_unarmed_strike_row(self):
         """Every character always has a basic Unarmed Strike available —
         per the 2024 rules: attack bonus STR mod + proficiency bonus, 1 +
-        STR mod bludgeoning damage on a hit. Was previously missing
-        entirely for anyone without a better option; this is only a
-        fallback shown when nothing else (Monk Martial Arts, Unarmed
-        Fighting, Tavern Brawler) already covers it, and is blocked under
-        the same conditions as those (Wild Shape/Hybrid Transformation,
+        STR mod bludgeoning damage on a hit. Only a fallback shown when
+        nothing else (Monk Martial Arts, Unarmed Fighting, Tavern
+        Brawler) already covers it, and is blocked under the same
+        conditions as those (Wild Shape/Hybrid Transformation,
         dual-wielding two weapons)."""
         if self._unarmed_strike_blocked() or self._is_dual_wielding():
             return

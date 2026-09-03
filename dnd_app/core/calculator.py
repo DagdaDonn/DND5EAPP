@@ -143,13 +143,11 @@ def get_onhit_damage_bonuses(char: dict) -> list[dict]:
 
 def get_infusion_min_level(infusion_full_text: str) -> int:
     """Parse the "(min level N)" tag from an infusion's full list entry
-    (e.g. "Arcane Propulsion Armor – ... (min level 14)"). Confirmed a
-    real, significant bug: the infusion chooser previously had zero
-    level filtering at all — a 1st-level Artificer could select any
-    infusion in the list, including ones with an explicit 14th-level
-    prerequisite in the real rules. Returns 1 if no tag is present
-    (infusions with no level prerequisite, learnable from 2nd level
-    when Infuse Item is first gained)."""
+    (e.g. "Arcane Propulsion Armor – ... (min level 14)"), so the
+    infusion chooser can filter out infusions above the character's
+    level. Returns 1 if no tag is present (infusions with no level
+    prerequisite, learnable from 2nd level when Infuse Item is first
+    gained)."""
     import re
     m = re.search(r"\(min level (\d+)\)", infusion_full_text)
     return int(m.group(1)) if m else 1
@@ -157,12 +155,11 @@ def get_infusion_min_level(infusion_full_text: str) -> int:
 
 def get_infusion_bonus(infusion_name: str, artificer_lvl: int) -> int:
     """Numerical +N bonus granted by a given Artificer infusion at the
-    character's current level. Confirmed via direct testing this bonus
-    was previously never actually applied anywhere — infusing a weapon
-    with "Enhanced Weapon" only set a cosmetic magic:True flag, with no
-    effect on attack/damage rolls at all. Three infusions scale +1->+2
-    at 10th level; four others grant a flat +1 always; everything else
-    returns 0 (no numerical combat bonus)."""
+    character's current level, applied to attack/damage rolls (an
+    infused weapon's magic:True flag is cosmetic on its own and carries
+    no numerical bonus). Three infusions scale +1->+2 at 10th level;
+    four others grant a flat +1 always; everything else returns 0 (no
+    numerical combat bonus)."""
     scaling = {"Enhanced Weapon", "Enhanced Defense", "Enhanced Arcane Focus"}
     flat_plus_one = {"Radiant Weapon (+1)", "Repeating Shot",
                       "Returning Weapon (+1)", "Repulsion Shield (+1)"}
@@ -175,17 +172,16 @@ def get_infusion_bonus(infusion_name: str, artificer_lvl: int) -> int:
 
 def get_max_active_infusions(char: dict) -> int:
     """Max number of infusions that can be active (actually applied to an
-    item) at once — confirmed via research to be exactly half the number
-    of infusions known, not the same as knowing them. A character can
-    know far more infusions than they can have active simultaneously."""
+    item) at once — exactly half the number of infusions known, not the
+    same as knowing them. A character can know far more infusions than
+    they can have active simultaneously."""
     known = len(char.get("artificer_infusions", []))
     return known // 2
 
 
 def can_ritual_cast(char: dict, spell: dict) -> bool:
     """Whether the character can cast this spell as a ritual (no slot
-    expended, +10 min casting time) per the real 5e rules. Confirmed this
-    concept didn't exist anywhere in the app before.
+    expended, +10 min casting time) per the real 5e rules.
 
     Bard, Cleric, Druid, Wizard, and Artificer can ritual-cast any ritual
     spell they know/have prepared. Other classes need either the Ritual
@@ -569,10 +565,10 @@ def get_ac(char: dict) -> int:
     # transformed (it doesn't fit, and RAW gear either merges into the
     # new form or falls away), so no armor-based bonus applies on top of
     # it either. Using the beast's own AC number avoids relying on the
-    # ability-score override to coincidentally reproduce the right value
-    # through Unarmored Defense's formula, which only worked by chance
-    # for Barbarian/Monk and was wrong for every other class (missing the
-    # beast's own natural armor bonus).
+    # ability-score override to reproduce the right value through
+    # Unarmored Defense's formula, which only happens to match for
+    # Barbarian/Monk and omits the beast's own natural armor bonus for
+    # every other class.
     active_beast = char.get("_wildshape_active")
     if active_beast:
         from dnd_app.data.phbCommon.statblocks import WILDSHAPE_BEASTS
@@ -651,13 +647,12 @@ def _get_ac_base(char: dict) -> int:
         if has_mage_armor:
             candidates.append(13 + dex_mod + shield_bonus + magic_ac)
         # Draconic Resilience (Sorcerer, Draconic Bloodline, 1st level):
-        # AC 13 + DEX while unarmored, always-on. Previously missing.
+        # AC 13 + DEX while unarmored, always-on.
         sorc_lvl_ac = cl.get("Sorcerer", 0)
         if sorc_lvl_ac > 0 and "draconic" in subclasses(char).get("Sorcerer", "").lower():
             candidates.append(13 + dex_mod + shield_bonus + magic_ac)
         # Racial Natural Armor / built-in AC formulas, always-on while
-        # unarmored. Previously descriptive-only in races.py — the trait
-        # text promised these but the AC calculation never applied them.
+        # unarmored.
         species_ac = (char.get("species") or char.get("race", "")).strip().lower()
         if species_ac == "lizardfolk":
             candidates.append(13 + dex_mod + shield_bonus + magic_ac)
@@ -799,13 +794,11 @@ def get_condition_save_status(char: dict, ability: str) -> dict:
 
 def get_condition_attack_status(char: dict) -> dict:
     """Whether the character's own attack rolls currently have
-    advantage/disadvantage from active conditions and exhaustion.
-    Confirmed conditions were previously purely visual/informational —
-    checking "Blinded" or "Poisoned" had zero effect on any actual
-    roll anywhere in the app. Real 5e rule: if a roll would have both
-    advantage and disadvantage from different sources, they cancel and
-    neither applies — handled explicitly here rather than just
-    returning whichever was checked first.
+    advantage/disadvantage from active conditions and exhaustion. Real
+    5e rule: if a roll would have both advantage and disadvantage from
+    different sources, they cancel and neither applies — handled
+    explicitly here rather than just returning whichever was checked
+    first.
     Returns {'advantage': bool, 'disadvantage': bool, 'sources': [str]}."""
     active = set(char.get("conditions", []))
     adv_sources = []
@@ -2210,7 +2203,7 @@ def compute_max_hp(char: dict) -> int:
             hp += (avg + con) * lvl
 
     # Draconic Resilience (Sorcerer, Draconic Bloodline, 1st level):
-    # +1 HP per Sorcerer level. Previously missing entirely.
+    # +1 HP per Sorcerer level.
     from dnd_app.core.character import subclasses as _subclasses_hp, class_levels as _class_levels_hp
     sorc_lvl = _class_levels_hp(char).get("Sorcerer", 0)
     if sorc_lvl > 0 and "draconic" in _subclasses_hp(char).get("Sorcerer", "").lower():

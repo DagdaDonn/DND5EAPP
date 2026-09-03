@@ -124,11 +124,10 @@ WILDSHAPE_BLOCKED_FEATURES = {
 
 # Combat-duration on/off active_effects toggles (Rage, Reckless Attack,
 # Bladesong, etc.) that share a resource pool -- using the resource
-# both flips the effect on and spends a use. Previously duplicated
-# verbatim in two different methods' local scope (each with its own
-# "must be kept in sync" comment); a rest handler needs the same set
-# too (see _short_rest()/_long_rest()), so this is now the one shared
-# definition all three read.
+# both flips the effect on and spends a use. One shared definition read
+# by every method that needs the set, including the rest handlers (see
+# _short_rest()/_long_rest()), so it can't drift out of sync between
+# them.
 RESOURCE_POOL_TOGGLES = {"Hybrid Transformation", "Rage", "Form of Dread", "Starry Form", "Reckless Attack", "Frenzy", "Sacred Weapon", "Invincible Conqueror", "Exalted Champion", "Peerless Athlete", "Hexblade's Curse", "Bladesong", "Radiant Soul (Aasimar)", "Necrotic Shroud", "Gem Flight", "Shifting", "Vow of Enmity", "Living Legend", "Mortal Bulwark", "Elder Champion", "Elemental Gift", "Writhing Tide", "Otherworldly Wings", "Trance of Order", "Umbral Form", "Ghost Walk", "Steps of Night", "Arms of the Astral Self", "Awakened Astral Self", "Giant's Might", "Aspect of the Wyrm", "Spirit Totem", "Radiant Consumption", "Maelstrom Aura"}
 
 ABILITIES = ["STR","DEX","CON","INT","WIS","CHA"]
@@ -142,11 +141,7 @@ SKILL_AB  = {"Acrobatics":"DEX","Animal Handling":"WIS","Arcana":"INT","Athletic
 ALIGNMENTS = ["Lawful Good","Neutral Good","Chaotic Good","Lawful Neutral","True Neutral",
               "Chaotic Neutral","Lawful Evil","Neutral Evil","Chaotic Evil"]
 
-# _lbl/_sep/_card used to be their own local copies of exactly what
-# shared.py already provides as h()/hline()/card() (h/card were never
-# actually adopted anywhere; this file had grown its own instead) —
-# aliased, not deleted outright, so none of this file's ~280 existing
-# call sites need touching.
+# Local aliases matching the short names used throughout this file.
 _lbl = h
 _sep = hline
 _card = card
@@ -552,11 +547,11 @@ class BaseSheetMixin:
         least an hour, RAW) or long rest (8 hours) has actually
         completed, every one of them would already have naturally ended
         long before the rest even started, whether or not the player
-        remembered to manually toggle it off. Previously only each
-        toggle's own RESOURCE reset (uses remaining) was restored by a
-        rest; the on/off state itself was left stuck active indefinitely
-        (a level-up next session could still show "Rage: ON" from days
-        ago), which is a different bug from the resource not resetting."""
+        remembered to manually toggle it off. A rest must clear the
+        on/off state itself, not just each toggle's own RESOURCE reset
+        (uses remaining) — otherwise the state stays stuck active
+        indefinitely (a level-up next session could still show "Rage:
+        ON" from days ago)."""
         fx = self.char.get("active_effects", [])
         cleared = [name for name in fx if name in RESOURCE_POOL_TOGGLES]
         for name in cleared:
@@ -569,8 +564,8 @@ class BaseSheetMixin:
         for effects lasting about an hour or less (a short rest takes at
         least that long per RAW), 'long' for effects that outlast a short
         rest but not a full night. Effects with no duration_category are
-        untouched — same as they were before this existed, manual removal
-        only. Returns the names actually removed, for the rest toast."""
+        untouched -- manual removal only. Returns the names actually
+        removed, for the rest toast."""
         from dnd_app.core.effects import EFFECT_TABLE
         fx = self.char.get("active_effects", [])
         removed = [n for n in fx if EFFECT_TABLE.get(n, {}).get("duration_category") in categories]
@@ -581,14 +576,12 @@ class BaseSheetMixin:
     def _apply_rest_options(self, selected: list):
         """Applies whichever rest-changeable options the player checked
         in RestPreviewDialog's "ALSO RECONFIGURE?" section (built from
-        RestOptionsDialog._build_options()). Used to be its own separate
-        popup shown AFTER the rest completed — folded into the single
+        RestOptionsDialog._build_options()). Folded into the single
         preview-and-confirm dialog shown BEFORE the rest applies, so
         confirming a rest is only ever one dialog, not two back to back.
         A checked option that needs a specific new value (which model,
         which skill, etc.) still asks via its own QInputDialog below —
-        that's an unavoidable, expected follow-up for picking a value,
-        not the same kind of redundant second confirm this replaced."""
+        an unavoidable, expected follow-up for picking a value."""
         if not selected:
             return
         char = self.char
@@ -940,9 +933,8 @@ class BaseSheetMixin:
             f"QPushButton:hover{{border-color:{GOLD};color:{GOLD2};}}")
         hl.addWidget(self._insp_btn)
 
-        # Save/Load/Export used to be icon buttons here too, duplicating
-        # the File menu's Save/Open/Export actions -- consolidated into
-        # File only, per the header-row decluttering pass.
+        # Save/Load/Export live only in the File menu; no duplicate icon
+        # buttons here.
 
         root.addWidget(header)
 
@@ -1287,11 +1279,9 @@ class BaseSheetMixin:
         self.ctrl.refresh()                         # rebuild + update_all + notify
         # _on_char_updated() (subscribed above) already calls both
         # _populate_subclass_combo() and self._levelup_panel.refresh() —
-        # calling them again here duplicated the entire pending-choices
-        # rebuild in immediate succession, which is the likely cause of
-        # the "windows popping up and immediately deleting themselves"
-        # symptom reported specifically during level-up (a manual refresh,
-        # which doesn't go through this doubled path, doesn't show it).
+        # calling them again here would run the entire pending-choices
+        # rebuild twice in immediate succession, momentarily constructing
+        # and tearing down duplicate chooser widgets.
         self._mark_dirty()
 
     def _open_level_down(self):

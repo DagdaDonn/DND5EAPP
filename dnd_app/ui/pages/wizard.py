@@ -137,10 +137,9 @@ class CharacterWizard(QWidget):
                 self.done.emit(self.char)
                 return
         except Exception:
-            # Diagnostic safety net: surface the real failure instead of
-            # letting it fail silently — needed to actually diagnose the
-            # reported "button does nothing" issue without a live PySide6
-            # install to test against.
+            # Safety net: surface the real failure to the player and log
+            # it, instead of letting the Next/Create button silently do
+            # nothing.
             import traceback, os
             from dnd_app.ui.shared import write_diagnostic_log
             tb = traceback.format_exc()
@@ -717,10 +716,9 @@ class Step2Abilities(QWidget):
         mechanics share the asi_flex field: the legacy "each" style
         (Half-Elf: choose N abilities, each flat +1) and the 2024/MPMM
         "distribute" style (choose either a +2/+1 split or three
-        different +1s) — confirmed via user report that every
-        distribute-style race was previously being shown the each-style
-        checkbox picker, which can represent neither valid distribute
-        option correctly."""
+        different +1s) — the each-style checkbox picker can represent
+        neither valid distribute option, so the style must be read from
+        asi_flex_style before deciding which card to show."""
         from dnd_app.data.phb2014.races import RACE_DICT
         race = char.get("race", "")
         rdata = RACE_DICT.get(race, {})
@@ -1445,11 +1443,10 @@ class Step4Spells(QWidget):
 def _weapon_category_pool(category_text: str) -> list:
     """Resolve a starting-equipment placeholder like 'Any simple weapon'
     or 'Any martial melee weapon' to the real, concrete weapon list it
-    refers to. Confirmed a real, reported bug: this always fell through
-    to a weapon pool for ANY "Any X" text, even non-weapon categories
-    like "Any other musical instrument" — which incorrectly resolved to
-    simple weapons, since "martial" isn't in that text either. Now
-    checks for real non-weapon categories first."""
+    refers to. Non-weapon "Any X" categories (e.g. "Any other musical
+    instrument") must be checked first, since neither "simple" nor
+    "martial" appears in that text and a weapon-pool fallback would
+    otherwise wrongly claim it."""
     from dnd_app.data.phbCommon.items import INSTRUMENT_TOOLS, ARTISAN_TOOLS, GAMING_SETS
     t = category_text.lower()
     if "instrument" in t:

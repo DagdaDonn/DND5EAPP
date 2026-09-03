@@ -875,7 +875,7 @@ class GearMixin:
                     self._refresh_magic_items(); return
                 # Artificer attunement scaling: 4 at 10th (Magic Item
                 # Adept), 5 at 14th (Magic Item Savant), 6 at 18th (Magic
-                # Item Master). Previously only Adept's 4 was handled.
+                # Item Master).
                 from dnd_app.core.calculator import class_levels as _cl
                 art_lvl = _cl(self.char).get("Artificer", 0)
                 att_max = 6 if art_lvl >= 18 else 5 if art_lvl >= 14 else 4 if art_lvl >= 10 else 3
@@ -962,10 +962,9 @@ class GearMixin:
     def _study_manual(self, name: str):
         """Study one of the 6 classic ability-score manuals/tomes: permanently
         raises the named ability score by 2 (real 5e rule -- no hard cap on
-        this kind of magical increase) and consumes the book. Confirmed
-        there was no consumption path for these at all before this --
-        equip-based MAGIC_ITEM_EFFECTS can't represent a one-time permanent
-        change, so this writes directly to char["abilities"]."""
+        this kind of magical increase) and consumes the book. Equip-based
+        MAGIC_ITEM_EFFECTS can't represent a one-time permanent change, so
+        this writes directly to char["abilities"]."""
         from dnd_app.core.magic_items import ABILITY_SCORE_MANUALS
         ability = ABILITY_SCORE_MANUALS.get(name)
         if not ability:
@@ -1311,9 +1310,7 @@ class GearMixin:
         active_effects so it's visible on the combat page immediately —
         the same list Rage/Haste/etc. already use — and can be removed by
         hand or fades automatically on a short/long rest per its
-        duration_category. Confirmed there was previously no consumption
-        path for potions at all: they only ever sat in the equipment list
-        as an inert line item with a quantity."""
+        duration_category."""
         eq = self.char.get("equipment", [])
         entry = next((e for e in eq if e.get("name") == name), None)
         if not entry:

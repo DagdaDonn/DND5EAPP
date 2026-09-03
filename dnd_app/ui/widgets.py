@@ -1,18 +1,9 @@
 """Reusable custom widgets for the character creator.
 
 Only FlowLayout/FlowContainer are actually used anywhere in the app
-(imported by sheet.py) — everything else this file used to hold
-(SkillRow, StatBox, HPTracker, ClassEntryRow, SpellSlotBar, SpellRow,
-FeatureCard [defined twice], FeatureSection, ResourceWidget,
-LevelHeader, AbilityWidget, plus their lbl()/hline()/colored_btn()
-helpers) was dead code — an earlier widget set superseded by
-equivalents built directly into sheet.py/shared.py, never actually
-imported from here by anything. Confirmed via a repo-wide grep before
-removing it, as part of the styling-standardization pass (see
-KNOWN_IMPLEMENTATION_GAPS.md) — styling dead code that never renders
-was pointless, and ~600 lines of unreachable classes were exactly the
-kind of duplication-inflating clutter that pass was meant to clear
-out.
+(imported by sheet.py) — the equivalents these components need
+(SkillRow, StatBox, HPTracker, etc.) are built directly into
+sheet.py/shared.py instead.
 
 Author: Ethan O'Brien
 Date: 2026-08-20

@@ -12,11 +12,7 @@ from ..shared import *
 # aliases to h/card/hline, which ARE plain names the wildcard import above
 # already brought in).
 from ..shared import _btn, _pill
-# _lbl/_sep/_card used to be local aliases to h()/hline()/card() defined
-# once at the top of the original (pre-split) sheet.py, alongside the
-# rest of its module constants -- re-declared here since this file only
-# got that constants block's siblings (_btn/_pill), not the aliases
-# themselves.
+# Local aliases matching the short names used throughout this file.
 _lbl = h
 _sep = hline
 _card = card
@@ -288,15 +284,11 @@ class LevelUpMulticlassDialog(QDialog):
 
     def _meets_multiclass_reqs(self, class_name, existing_classes):
         """Delegates to the single canonical check_multiclass_prereq()
-        function rather than re-implementing this logic separately.
-        Confirmed a real bug from doing so previously: this dialog had
-        its own copy of the ability-score-requirement data (via
-        CLASS_DICT's multiclass_reqs field), completely separate from
-        multiclass.py's MULTICLASS_PREREQS_2024 — so the Blood Hunter
-        fix made earlier this session (the real rule is INT 13 AND
-        (STR or DEX) 13, not STR AND INT both required) only ever
-        reached one of the two copies, leaving a Dexterity-based Blood
-        Hunter wrongly grayed out here even after that fix landed."""
+        function rather than keeping a second copy of the ability-score
+        requirements here, so this dialog's eligibility check and
+        multiclass.py's MULTICLASS_PREREQS_2024 can never drift apart
+        (e.g. Blood Hunter's real requirement is INT 13 AND (STR or DEX)
+        13, not STR AND INT both)."""
         from dnd_app.core.multiclass import check_multiclass_prereq
         if not self.char.get("optional_rules", {}).get("multiclass_ability_reqs", True):
             return True, ""

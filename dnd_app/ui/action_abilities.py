@@ -188,11 +188,10 @@ _ARTIFICER_INFUSION_BASE_NAMES = _get_artificer_infusion_base_names()
 
 
 def _optional_feature_enabled(char, feature_name):
-    """Confirmed all optional features in OPTIONAL_CLASS_FEATURES had
-    zero real mechanical wiring — only correctly-gated descriptive
-    text. Checks both real enable mechanisms this app uses (a per-
-    feature toggle, or the broader optional_rules toggle), matching
-    the same dual-check already used for display in sheet.py."""
+    """Checks both real enable mechanisms this app uses for an optional
+    feature (a per-feature toggle, or the broader optional_rules
+    toggle), matching the same dual-check already used for display in
+    sheet.py."""
     enabled = char.get("_choices", {}).get("optional_features", {})
     if enabled.get(feature_name, False):
         return True

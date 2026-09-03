@@ -331,19 +331,15 @@ def aggregate_resources(class_levels: dict, ability_scores: dict,
     Compute all class resources for a multiclassed character.
     Returns list of resource dicts ready for the UI tracker.
 
-    `edition` selects which rule edition's class resource DEFINITIONS to
-    read (2014 PHB vs. 2024 PHB) -- this was previously hardcoded to
-    always use the 2014 CLASS_DICT regardless of the character's actual
-    char["edition"], unlike builder.py/levelup_panel.py/widgets.py,
-    which already correctly branch on it elsewhere. That meant every
-    2024-edition character's class resource counters (Rage, Wild Shape,
-    Ki, Sorcery Points, Channel Divinity, Lay on Hands -- every
-    formula/by_level-driven resource in the game) were silently computed
-    from 2014-edition numbers the whole time, since the two editions'
-    class data files genuinely differ in places (e.g. 2024 Wild Shape is
-    a flat 2 uses with no by_level scaling or "Unlimited at 20" the way
-    2014's is) -- any place the two data files disagree was silently
-    always resolved in 2014's favor."""
+    `edition` must select which rule edition's class resource
+    DEFINITIONS to read (2014 PHB vs. 2024 PHB) from char["edition"],
+    matching how builder.py/levelup_panel.py/widgets.py branch on it
+    elsewhere -- the two editions' class data files genuinely differ in
+    places (e.g. 2024 Wild Shape is a flat 2 uses with no by_level
+    scaling or "Unlimited at 20" the way 2014's is), so every
+    formula/by_level-driven class resource in the game (Rage, Wild
+    Shape, Ki, Sorcery Points, Channel Divinity, Lay on Hands) depends
+    on reading from the correct edition's CLASS_DICT."""
     from dnd_app.data.phb2014.classes import CLASS_DICT as CLASS_DICT_2014
     from dnd_app.data.phb2024.classes_2024 import CLASS_DICT_2024
     CLASS_DICT = CLASS_DICT_2024 if edition == "2024" else CLASS_DICT_2014
@@ -529,9 +525,7 @@ def _add_subclass_resources(resources: list, class_levels: dict,
             _add("Psionic Energy Dice (Soulknife)", "psionic_dice_rogue", "LR",
                  pb * 2, "pool", "d6 pool (scales at 5th/11th/17th); 2x proficiency bonus", "Rogue", "Soulknife")
         # Phantom: Ghost Walk — 13th level, 1 free use per long rest,
-        # reusable by destroying a Soul Trinket. Was missing entirely,
-        # meaning there was no way to actually toggle this transformation
-        # active despite the mechanic existing in text.
+        # reusable by destroying a Soul Trinket.
         if rogue_lvl >= 13 and _has("Rogue", "phantom"):
             _add("Ghost Walk", "ghost_walk", "LR",
                  1, "uses",
@@ -563,9 +557,7 @@ def _add_subclass_resources(resources: list, class_levels: dict,
                      "10 minutes — +2 AC, extra attack with the astral arms",
                      "Monk", "Way of the Astral Self")
         # Way of the Ascendant Dragon: Aspect of the Wyrm — 11th level, 1
-        # free use per long rest, reusable by spending 3 ki. Was missing
-        # entirely, meaning there was no way to actually toggle this
-        # transformation active despite the mechanic existing in text.
+        # free use per long rest, reusable by spending 3 ki.
         if monk_lvl_res >= 11 and _has("Monk", "ascendant dragon"):
             _add("Aspect of the Wyrm", "aspect_of_the_wyrm", "LR",
                  1, "uses",
@@ -629,8 +621,7 @@ def _add_subclass_resources(resources: list, class_levels: dict,
                  "Warlock", "The Genie")
         # Genie: Elemental Gift — 6th level. Resistance to genie kind's
         # damage type is always-on (not tracked here), but the bonus-action
-        # flying speed for 10 minutes needs a trackable resource, which
-        # was missing entirely.
+        # flying speed for 10 minutes needs a trackable resource.
         if warlock_lvl >= 6 and _has("Warlock", "genie"):
             _add("Elemental Gift", "elemental_gift", "LR",
                  max(1, pb), "uses",
@@ -811,9 +802,7 @@ def _add_subclass_resources(resources: list, class_levels: dict,
                  "When you take the Attack action, make one weapon attack as a bonus action",
                  "Cleric", "War Domain")
         # Twilight Domain: Steps of Night — 6th level, proficiency bonus
-        # uses per long rest. Was missing entirely, meaning there was no
-        # way to actually toggle this transformation active despite the
-        # mechanic existing in text.
+        # uses per long rest.
         if cleric_lvl >= 6 and _has("Cleric", "twilight"):
             _add("Steps of Night", "steps_of_night", "LR",
                  max(1, pb), "uses",
@@ -849,9 +838,7 @@ def _add_subclass_resources(resources: list, class_levels: dict,
                  "Action: resistance to bludgeoning/piercing/slashing for 1 hour; "
                  "allies within 30 ft get advantage on death saves and WIS saves",
                  "Paladin", "Oath of the Crown")
-        # Vengeance: Vow of Enmity — Channel Divinity, 1 min duration, but
-        # was missing entirely as a trackable resource (no way to toggle
-        # it active despite the mechanic existing in text).
+        # Vengeance: Vow of Enmity — Channel Divinity, 1 min duration.
         if paladin_lvl >= 3 and _has("Paladin", "vengeance"):
             _add("Vow of Enmity", "vow_of_enmity", "SR/LR",
                  1, "uses",
@@ -1003,9 +990,7 @@ def _add_subclass_resources(resources: list, class_levels: dict,
                      f"Max once per turn.",
                      "Artificer", "Battle Smith")
         # Alchemist: Experimental Elixirs — level-based count (1 from 3rd,
-        # 2 from 6th, 3 from 15th). Previously incorrectly used INT
-        # modifier as the count, which has nothing to do with the real
-        # scaling at all.
+        # 2 from 6th, 3 from 15th), not an ability-modifier count.
         if _has("Artificer", "alchemist"):
             elixir_count = 3 if art_lvl >= 15 else 2 if art_lvl >= 6 else 1
             _add("Experimental Elixirs", "elixirs", "LR",
@@ -1128,12 +1113,12 @@ def get_saving_throw_profs(class_levels: dict) -> set:
     """Return saving throw proficiencies from the character's STARTING
     class only. PHB p.164 (Multiclassing Proficiencies): saving throw
     proficiency is deliberately NOT part of what a multiclass grants —
-    only the very first class taken at 1st level gives it. This
-    previously unioned save_profs across every class in class_levels,
-    incorrectly granting a multiclassed character proficiency in every
-    one of their classes' saves (e.g. a Fighter 1/Wizard 5 showing
-    proficient in INT/WIS saves from Wizard, on top of the correct
-    STR/CON from Fighter).
+    only the very first class taken at 1st level gives it. Unioning
+    save_profs across every class in class_levels would incorrectly
+    grant a multiclassed character proficiency in every one of their
+    classes' saves (e.g. a Fighter 1/Wizard 5 showing proficient in
+    INT/WIS saves from Wizard, on top of the correct STR/CON from
+    Fighter).
 
     Relies on class_levels preserving insertion order matching
     char["classes"] (true for every real caller — they all build it via

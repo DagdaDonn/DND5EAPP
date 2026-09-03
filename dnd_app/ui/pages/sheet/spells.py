@@ -208,16 +208,14 @@ class SpellsMixin:
     def _remove_stale_spell_rows(self):
         """Remove any spell row whose spell is no longer in
         char['spells_known'] at all — the symmetric counterpart to
-        _sync_new_spell_rows(), which only ever adds rows. Confirmed via
-        direct reproduction that a spell becoming stale (e.g. a Circle
-        of the Land Druid switching terrain, dropping their old
-        bonus spells from spells_known) previously left its row
-        lingering on the tab forever, still checked as prepared, since
-        nothing but the manual ✕ button ever removed a row. This is a
-        genuinely different case from what _sync_new_spell_rows()
-        deliberately protects (in-progress edits on spells that are
-        still validly known) — a spell that's not known at all anymore
-        has nothing to preserve."""
+        _sync_new_spell_rows(), which only ever adds rows. Needed since
+        a spell can become stale on its own (e.g. a Circle of the Land
+        Druid switching terrain drops their old bonus spells from
+        spells_known) with nothing but the manual ✕ button otherwise
+        removing its row. This is a genuinely different case from what
+        _sync_new_spell_rows() deliberately protects (in-progress edits
+        on spells that are still validly known) — a spell that's not
+        known at all anymore has nothing to preserve."""
         if not hasattr(self, "_spell_rows"):
             return
         known = set(self.char.get("spells_known", []))
@@ -620,10 +618,9 @@ class SpellsMixin:
     def _spell_progression_tables():
         """Single source of truth for spells-known / cantrips-known
         progression tables, shared by the summary display, the learn-gate,
-        and the multiclass attribution logic below. (Previously duplicated
-        3x across the file, which is exactly how the Metamagic count
-        formula drifted into a bug — keeping one copy avoids that class
-        of error here.)"""
+        and the multiclass attribution logic below — kept as one copy so
+        the three call sites can never drift out of sync with each
+        other."""
         SPELLS_KNOWN = {
             "Bard":     {1:4,2:5,3:6,4:7,5:8,6:9,7:10,8:11,9:12,10:14,11:15,12:15,
                          13:16,14:18,15:19,16:19,17:20,18:22,19:22,20:22},
@@ -688,11 +685,11 @@ class SpellsMixin:
         5e multiclass spellcasting (PHB p.164): each class's spells-known
         is a COMPLETELY SEPARATE pool — a Sorcerer/Warlock doesn't share
         one combined list, and spell slots being shared (multiclass slot
-        table) doesn't change that. This was previously computed as ONE
-        pooled total shown redundantly against EACH class's own cap, which
-        both mis-split multiclass casters and let one class's spells count
-        against another's limit. Cantrips are attributed across EVERY
-        casting class (prepared casters included, since cantrips are
+        table) doesn't change that, so a pooled total shown against EACH
+        class's own cap would both mis-split multiclass casters and let
+        one class's spells count against another's limit. Cantrips are
+        attributed across EVERY casting class (prepared casters included,
+        since cantrips are
         always "known" regardless of prepared/known spellcasting style);
         leveled spells are only attributed across classes with a genuine
         known-spells pool.
@@ -1415,11 +1412,11 @@ class SpellsMixin:
         return text
 
     def _has_beast_spells(self) -> bool:
-        """Beast Spells (Druid, 18th level): confirmed via research this
-        is specifically a Druid class-level threshold, not total
-        character level — checks the character's actual Druid class
-        level, correctly handling a multiclass Druid who hasn't reached
-        18 Druid levels even if their total character level is higher."""
+        """Beast Spells (Druid, 18th level) is a Druid class-level
+        threshold, not total character level — checks the character's
+        actual Druid class level, correctly handling a multiclass Druid
+        who hasn't reached 18 Druid levels even if their total
+        character level is higher."""
         for c in self.char.get("classes", []):
             if c.get("class") == "Druid" and c.get("level", 0) >= 18:
                 return True
@@ -1428,8 +1425,7 @@ class SpellsMixin:
     def _cast_spell_as_ritual(self, spell):
         """Cast a spell as a ritual — no spell slot expended, but it takes
         10 minutes longer than the spell's normal casting time (PHB
-        p.201-202). Confirmed this option never existed anywhere before;
-        _cast_spell() always expended a slot with no alternative."""
+        p.201-202)."""
         if self.char.get("_wildshape_active") and not self._has_beast_spells():
             self._toast(f"\U0001f43e Can't cast {spell['name']} while Wild Shaped — "
                         f"revert to your normal form first")
@@ -1529,13 +1525,11 @@ class SpellsMixin:
         return True
 
     def _mark_spell_cast_time(self, spell):
-        """Confirmed a real, reported gap: casting a spell never
-        consumed anything from the existing turn-economy tracker (which
-        already correctly handles other abilities, including the Haste
-        extra-action case). Maps the spell's real cast_time to the
-        correct bucket, and correctly skips the tracker entirely for
-        longer, out-of-combat casting times that don't fit the per-turn
-        economy at all."""
+        """Feeds casting a spell into the same turn-economy tracker used
+        by other abilities (including the Haste extra-action case).
+        Maps the spell's real cast_time to the correct bucket, and
+        skips the tracker entirely for longer, out-of-combat casting
+        times that don't fit the per-turn economy at all."""
         ct = (spell.get("cast_time") or "1 action").strip().lower()
         is_cantrip = spell.get("level", 1) == 0
         if ct == "1 action":
@@ -1558,12 +1552,12 @@ class SpellsMixin:
                 f"QPushButton:hover{{background:{qa(AMBER,0x22)};color:{AMBE2};}}")
 
     def _classify_action_entry(self, entry):
-        """Confirmed via direct testing: racial trait entries reliably
-        use the character's own base race name as their source, so
-        matching against that is accurate. Magic Item is a deliberate
-        placeholder until that system is properly wired — it currently
-        classifies nothing rather than guess inaccurately from
-        arbitrary source-name text, per explicit direction."""
+        """Racial trait entries reliably use the character's own base
+        race name as their source, so matching against that is
+        accurate. Magic Item is a deliberate placeholder until that
+        system is properly wired — it currently classifies nothing
+        rather than guess inaccurately from arbitrary source-name
+        text."""
         source = entry[2] if len(entry) > 2 else ""
         is_spell = len(entry) > 3 and entry[3] is not None
         if is_spell:
@@ -1573,10 +1567,9 @@ class SpellsMixin:
         return "Common"
 
     def _apply_spell_active_effect(self, spell):
-        """Confirmed a real, reported gap: the active_effects system
-        already existed (Haste, Bless, Shield of Faith, dozens more with
-        real mechanical hooks), but nothing connected actually casting a
-        spell to it — the player had to separately, manually re-add the
+        """Connects casting a spell to the active_effects system (Haste,
+        Bless, Shield of Faith, dozens more with real mechanical hooks)
+        so the player doesn't have to separately, manually re-add the
         same effect through a dropdown after casting it. Self-only
         spells auto-apply with no ambiguity. Spells with a real range
         prompt for self-vs-another, since these buff spells can target

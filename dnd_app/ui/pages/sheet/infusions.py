@@ -58,11 +58,10 @@ from .base import _lbl, _sep, _card
 class InfusionsMixin:
     def _sync_infusions_tab(self):
         """Add/remove the Infusions tab as eligibility changes, and refresh
-        its content while present. Confirmed this tab previously could
-        never appear after initial sheet construction — __init__ builds
-        the tab list once, before a freshly-created or just-leveled-up
-        character has any infusions known yet, and nothing ever
-        re-checked eligibility afterward."""
+        its content while present. Needed since __init__ builds the tab
+        list once, before a freshly-created or just-leveled-up character
+        has any infusions known yet, so eligibility must be re-checked
+        on every refresh rather than only at construction."""
         eligible = self._has_infuse_item_access()
         current_index = None
         for i in range(self._tabs.count()):
@@ -138,12 +137,11 @@ class InfusionsMixin:
         self._infusions_list_lay.addStretch()
 
     def _use_soul_of_artifice(self):
-        """Soul of Artifice (Artificer, 20th level) — confirmed this had
-        no real implementation beyond the +1-save-per-attuned-item half
-        (already correctly handled in calculator.py). The "end an
-        infusion to drop to 1 HP instead of 0" half is now buildable
-        since active_infusions tracking exists — reuses the exact same
-        deactivation logic as the Infusions tab."""
+        """Soul of Artifice (Artificer, 20th level) — the
+        +1-save-per-attuned-item half is handled in calculator.py; this
+        is the "end an infusion to drop to 1 HP instead of 0" half,
+        reusing the exact same deactivation logic as the Infusions
+        tab."""
         active = self.char.get("active_infusions", [])
         if not active:
             QMessageBox.information(self, "Soul of Artifice",

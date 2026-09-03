@@ -99,8 +99,7 @@ class CompanionsMixin:
         # Find Steed / Find Greater Steed — same underlying mount system,
         # since casting either spell is summoning a mount, just one that
         # happens to be a celestial/fey/fiend spirit rather than a mundane
-        # animal. Previously casting these spells did nothing beyond the
-        # normal spell-casting flow — no way to actually add the steed.
+        # animal.
         from dnd_app.data.phbCommon.statblocks import FIND_GREATER_STEED_OPTIONS
         steed_row = QHBoxLayout(); steed_row.setSpacing(8)
         steed_row.addWidget(_lbl("Find Steed / Find Greater Steed:", TEAL2, FS_SMALL, bold=True, wrap=False))
@@ -257,14 +256,13 @@ class CompanionsMixin:
 
     def _summon_companion(self, key: str):
         """Handler for a requires_summon_action companion's Summon
-        button (Drake Companion, Dancing Item, Wildfire Spirit).
-        Confirmed via the user's own request: spends the linked
-        resource charge (or a Wild Shape use, for Wildfire Spirit,
-        which shares that pool rather than having its own dedicated
-        resource), marks the companion active so its stat block card
-        appears, and resets its tracked HP to full — matching a fresh
-        summon rather than picking up mid-fight with whatever HP was
-        left from a previous card render."""
+        button (Drake Companion, Dancing Item, Wildfire Spirit). Spends
+        the linked resource charge (or a Wild Shape use, for Wildfire
+        Spirit, which shares that pool rather than having its own
+        dedicated resource), marks the companion active so its stat
+        block card appears, and resets its tracked HP to full —
+        matching a fresh summon rather than picking up mid-fight with
+        whatever HP was left from a previous card render."""
         from dnd_app.data.phbCommon.statblocks import COMPANION_STATBLOCKS
         tmpl = COMPANION_STATBLOCKS.get(key)
         if not tmpl:
@@ -341,12 +339,10 @@ class CompanionsMixin:
 
     def _build_summoned_creatures_section(self):
         """Summon Celestial, Summon Undead, Summon Fiend, and the rest of
-        the Tasha's/Fizban's/Book of Many Things summon-a-spirit spells —
-        previously casting any of these did nothing beyond the normal
-        spell-casting flow; there was no way to actually add the summoned
-        creature anywhere. Each entry stores (spell, cast level, form) so
-        the stat block can be recomputed correctly if you look at it again
-        (e.g. after leveling up your spell save DC)."""
+        the Tasha's/Fizban's/Book of Many Things summon-a-spirit spells.
+        Each entry stores (spell, cast level, form) so the stat block
+        can be recomputed correctly if you look at it again (e.g. after
+        leveling up your spell save DC)."""
         from dnd_app.data.phbCommon.statblocks import SCALING_SUMMONS, resolve_scaling_summon
 
         sc = _card(TEAL+"55")
@@ -393,11 +389,6 @@ class CompanionsMixin:
             if not sb:
                 continue
             card = self._build_statblock_card(sb, hp_key=f"summon_{i}")
-            # remove_btn was previously referenced here without ever being
-            # constructed in this loop (no `= QPushButton(...)`) -- a real
-            # NameError waiting for the first character with any owned
-            # summoned creature, caught while converting this button's
-            # style to the shared _btn() factory.
             remove_btn = _btn("✕ Remove", CRIMSON, variant="danger", radius=5,
                                border_width=1, text_color=CRIM2, hover_text="white",
                                font_size=FS_SMALL, padding="4px 10px")

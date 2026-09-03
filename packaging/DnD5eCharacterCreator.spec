@@ -77,12 +77,12 @@ _DEAD_WEIGHT_MARKERS = [
     os.sep + 'sensorgestures' + os.sep, os.sep + 'canbus' + os.sep,
     os.sep + 'tls' + os.sep, os.sep + 'networkinformation' + os.sep,
     os.sep + 'geoservices' + os.sep, os.sep + 'geometryloaders' + os.sep,
-    # SVG support (QtSvg/QtSvgWidgets, also excluded above): confirmed via
-    # grep that this app has zero .svg/QSvg usage anywhere — its icons are
-    # .ico/.png/.gif only — so the SVG icon-engine and image-format
-    # plugins (iconengines/qsvgicon.*, imageformats/qsvg.*) are dead
-    # weight too. os.sep-prefixed so it only matches a path component,
-    # not e.g. a data file that happens to contain "qsvg" mid-string.
+    # SVG support (QtSvg/QtSvgWidgets, also excluded above): this app's
+    # icons are .ico/.png/.gif only, with zero .svg/QSvg usage anywhere,
+    # so the SVG icon-engine and image-format plugins (iconengines/
+    # qsvgicon.*, imageformats/qsvg.*) are dead weight too. os.sep-prefixed
+    # so it only matches a path component, not e.g. a data file that
+    # happens to contain "qsvg" mid-string.
     os.sep + 'qsvg',
 ]
 
@@ -168,10 +168,9 @@ QT_EXCLUDES = [
     'PySide6.QtWebView',
     'PySide6.QtWebSockets',
     'PySide6.QtXml',
-    # Found via an actual build log showing these still being analyzed
-    # despite being unused — see the _DEAD_WEIGHT_MARKERS filter above for
-    # why module-level excludes alone weren't enough to keep them out of
-    # the final binary; both layers now cover the same set of modules.
+    # Module-level excludes alone aren't enough to keep these out of the
+    # final binary -- see the _DEAD_WEIGHT_MARKERS filter above, which
+    # covers the same set of modules at the file level.
     'PySide6.Qt3DAnimation',
     'PySide6.Qt3DCore',
     'PySide6.Qt3DRender',
@@ -212,12 +211,11 @@ STDLIB_EXCLUDES = [
     'email',
     'html',
     'http',
-    # NOTE: 'urllib' was previously excluded here, but PyInstaller's own
-    # runtime hooks (pyi_rth_inspect -> zipfile._path -> pathlib) import it
+    # NOTE: do not add 'urllib' to this list. PyInstaller's own runtime
+    # hooks (pyi_rth_inspect -> zipfile._path -> pathlib) import it
     # transitively, so excluding it makes EVERY build fail at startup with
     # "ModuleNotFoundError: No module named 'urllib'" before the app's own
-    # code ever runs. Confirmed by an actual test build, not just source
-    # inspection. Do not re-add it.
+    # code ever runs.
     'xmlrpc',
     'curses',
     'readline',
