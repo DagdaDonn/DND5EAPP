@@ -104,12 +104,18 @@ def load_character(filepath: str) -> dict:
     return migrate_character(data)
 
 
-def list_saved_characters() -> list[dict]:
-    ensure_save_dir()
+def list_saved_characters(directory: str = None) -> list[dict]:
+    """List saved characters in `directory` (default: the desktop app's
+    SAVE_DIR). ui_android passes its own platform Documents-equivalent
+    directory here instead, so both UIs share this one implementation
+    without desktop's fixed SAVE_DIR leaking into Android's file layout."""
+    if directory is None:
+        directory = SAVE_DIR
+    os.makedirs(directory, exist_ok=True)
     results = []
-    for fname in os.listdir(SAVE_DIR):
+    for fname in os.listdir(directory):
         if fname.endswith(".json"):
-            fpath = os.path.join(SAVE_DIR, fname)
+            fpath = os.path.join(directory, fname)
             try:
                 with open(fpath, "r", encoding="utf-8") as f:
                     data = json.load(f)
@@ -118,12 +124,35 @@ def list_saved_characters() -> list[dict]:
                     "classes": data.get("classes", []),
                     "filepath": fpath,
                     "modified": data.get("modified", ""),
+                    "folder": data.get("folder", "") or "",
                 })
             except Exception:
                 import logging
                 logging.getLogger("dnd_app.save_load").exception(
                     "Failed to read saved character %s", fpath)
     return sorted(results, key=lambda x: x.get("modified", ""), reverse=True)
+
+
+def list_character_folders(directory: str = None) -> list[str]:
+    """Sorted list of distinct non-empty folder/campaign names in use
+    among saved characters in `directory` -- for populating a "move to
+    folder" picker's list of existing folders. Characters with no
+    folder ("" -- shown as "Uncategorized" in the UI) aren't included
+    here since it's not something you "move to" via typing a name."""
+    folders = {e["folder"] for e in list_saved_characters(directory) if e.get("folder")}
+    return sorted(folders)
+
+
+def set_character_folder(filepath: str, folder: str) -> None:
+    """Move a saved character into a different campaign/folder grouping
+    by patching just the `folder` field directly on disk, without going
+    through save_character() -- a purely organizational edit shouldn't
+    bump `modified` or re-run full validation/migration."""
+    with open(filepath, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    data["folder"] = (folder or "").strip()
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
 
 def delete_character(filepath: str) -> bool:
@@ -348,7 +377,7 @@ def export_character_text(char: dict) -> str:
 
     # ── Actions / Bonus Actions / Reactions / Passives ───────────────────────
     try:
-        from dnd_app.ui.action_abilities import build_action_abilities
+        from dnd_app.ui_desktop.action_abilities import build_action_abilities
         buckets = build_action_abilities(char)
         for bucket in ("Action", "Bonus Action", "Reaction", "Passive"):
             entries = buckets.get(bucket, [])
@@ -373,7 +402,16 @@ def export_character_text(char: dict) -> str:
         add(f"  {conc}")
         add("")
 
-    if char.get("notes"):
+    notes_pages = [p for p in char.get("notes_pages", []) if p.get("text", "").strip()]
+    if notes_pages:
+        add("── NOTES ──")
+        for page in notes_pages:
+            add(f"[{page.get('title', 'Notes')}]")
+            add(page.get("text", ""))
+            add("")
+    elif char.get("notes"):
+        # Pre-tabs characters that haven't opened the sheet (and so never
+        # ran the notes_pages migration) still have their notes here.
         add("── NOTES ──")
         add(char["notes"])
 

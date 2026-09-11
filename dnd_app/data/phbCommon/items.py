@@ -406,6 +406,37 @@ OTHER_TOOLS = [
     "Poisoner's kit", "Thieves' tools",
 ]
 
+
+def weapon_category_pool(category_text: str) -> list:
+    """Resolve a starting-equipment placeholder like 'Any simple weapon'
+    or 'Any martial melee weapon' to the real, concrete weapon list it
+    refers to. Non-weapon "Any X" categories (e.g. "Any other musical
+    instrument") must be checked first, since neither "simple" nor
+    "martial" appears in that text and a weapon-pool fallback would
+    otherwise wrongly claim it."""
+    t = category_text.lower()
+    if "instrument" in t:
+        return list(INSTRUMENT_TOOLS)
+    if "artisan" in t:
+        return list(ARTISAN_TOOLS)
+    if "gaming set" in t:
+        return list(GAMING_SETS)
+    is_martial = "martial" in t
+    is_melee = "melee" in t
+    is_ranged = "ranged" in t
+    pools = []
+    if is_melee:
+        pools.append(MARTIAL_MELEE if is_martial else SIMPLE_MELEE)
+    elif is_ranged:
+        pools.append(MARTIAL_RANGED if is_martial else SIMPLE_RANGED)
+    else:
+        pools.append(MARTIAL_MELEE if is_martial else SIMPLE_MELEE)
+        pools.append(MARTIAL_RANGED if is_martial else SIMPLE_RANGED)
+    names = []
+    for p in pools:
+        names.extend(w[0] for w in p)
+    return names
+
 VEHICLE_PROFS = ["Vehicles (land)", "Vehicles (water)", "Vehicles (air)"]
 
 ALL_TOOLS = (ARTISAN_TOOLS + GAMING_SETS + INSTRUMENT_TOOLS +

@@ -1,0 +1,11 @@
+module Mimic
+singleton Theme 1.0 Theme.qml
+MButton 1.0 MButton.qml
+MCheckBox 1.0 MCheckBox.qml
+MFullPageDialog 1.0 MFullPageDialog.qml
+MPickerDialog 1.0 MPickerDialog.qml
+MToggleButton 1.0 MToggleButton.qml
+MSpinBox 1.0 MSpinBox.qml
+MStatblockCard 1.0 MStatblockCard.qml
+MTextField 1.0 MTextField.qml
+SheetHeader 1.0 SheetHeader.qml

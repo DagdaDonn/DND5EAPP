@@ -118,15 +118,25 @@ A splash screen appears immediately and animates while the app loads in the back
 
 ### Windows
 ```bat
-installer\build_exe.bat
+installer\windows\build_exe.bat
 ```
 
 ### macOS / Linux
 ```bash
-./installer/build_exe.sh
+./installer/windows/build_exe.sh
 ```
 
-**Output:** `dist/MIMIC.exe` (Windows) or `dist/MIMIC` (macOS/Linux). See [`installer/BUILD_EXE.md`](installer/BUILD_EXE.md) for the full guide.
+**Output:** `dist/MIMIC.exe` (Windows) or `dist/MIMIC` (macOS/Linux). See [`packaging/windows/BUILD_EXE.md`](packaging/windows/BUILD_EXE.md) for the full guide.
+
+---
+
+## Getting MIMIC on Your Android Phone
+
+A touch-first version of the app is in progress (`dnd_app/ui_android/`).
+To build it into an `.apk` you can install on your own phone, see
+[`packaging/android/BUILD_APK.md`](packaging/android/BUILD_APK.md) —
+a plain-language, numbered walkthrough (install a couple of free
+programs once, then run `installer\android\build_apk.bat`).
 
 ---
 
@@ -140,7 +150,7 @@ pip install PySide6
 ### Executable starts but immediately closes
 1. Run from a terminal or command prompt to see error output.
 2. Delete the `build/` and `dist/` folders and rebuild.
-3. Check that `dnd_app/ui/splash/` and `dnd_app/ui/icon.ico` exist before building.
+3. Check that `dnd_app/ui_desktop/splash/` and `dnd_app/ui_desktop/icon.ico` exist before building.
 
 ### Splash screen looks frozen or doesn't animate
 Make sure you're on current source — the heavy startup import runs on a background thread specifically so the splash animation keeps playing while it loads.
@@ -151,7 +161,7 @@ Make sure you're on current source — the heavy startup import runs on a backgr
 
 ```
 dnd_app/
-  data/                    # Static game-rules data
+  data/                    # Static game-rules data (shared by every platform)
     phb2014/               #   Races + classes, 2014 PHB edition
     phb2024/                #   Species + classes, 2024 PHB edition
     phbCommon/              #   Everything edition-shared: feats, items,
@@ -159,8 +169,8 @@ dnd_app/
     5E_CharacterSheet_Fillable.pdf   # Official fillable PDF template
     KNOWN_IMPLEMENTATION_GAPS.md     # Running changelog/known-gaps doc
   core/                    # Character model, calculator, builder, save/load
-                            #   (non-UI application logic)
-  ui/                       # PySide6 widgets
+                            #   (non-UI application logic, shared by every platform)
+  ui_desktop/               # PySide6 QtWidgets UI (Windows/macOS/Linux)
     style/                  #   Theme/QSS engine + cosmetic text helpers
     pages/                  #   Top-level app screens
       main_window.py         #     Start menu / main window
@@ -172,13 +182,21 @@ dnd_app/
     action_abilities.py      #   Action economy classification logic
     widgets.py                #   FlowLayout/FlowContainer
     icon.ico                  #   App icon
-run_dnd_creator.py     # Entry point
-installer/               # Build tooling
-  build_exe.bat / build_exe.sh #   One-command build scripts
-  BUILD_EXE.md            #   Full build guide
-packaging/                # Build-target manifests
-  DnD5eCharacterCreator.spec #  PyInstaller build spec
-  requirements.txt
+  ui_android/               # v3 scaffold: touch-first Qt Quick/QML UI
+                             #   (not yet implemented -- see its own README)
+run_dnd_creator.py     # Desktop entry point
+installer/
+  windows/                #   Windows build tooling
+    build_exe.bat / build_exe.sh #   One-command build scripts
+  android/                #   Android build tooling
+    build_apk.bat / build_apk.sh #   One-command build scripts
+packaging/
+  windows/                #   Windows build-target manifest
+    DnD5eCharacterCreator.spec #  PyInstaller build spec
+    requirements.txt
+    BUILD_EXE.md          #   Full build guide
+  android/                #   Android build-target manifest
+    BUILD_APK.md          #   Full build guide
 ```
 
 ---
