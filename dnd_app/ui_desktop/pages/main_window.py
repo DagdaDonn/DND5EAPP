@@ -21,6 +21,7 @@ from .sheet import CharacterSheet
 from dnd_app.core.character import new_character
 from dnd_app.core.save_load import (
     list_saved_characters, load_character, delete_character, set_character_folder,
+    rename_character_folder, delete_character_folder,
 )
 
 # ── Recent files helpers ──────────────────────────────────────────────────────
@@ -129,7 +130,24 @@ class StartMenu(QWidget):
                 f"QPushButton:hover{{color:{GOLD};}}"
             )
             header_btn.clicked.connect(lambda checked, f=folder: self._toggle_folder(f))
-            il.addWidget(header_btn)
+            header_row = QHBoxLayout(); header_row.setSpacing(4)
+            header_row.addWidget(header_btn, 1)
+            # "Uncategorized" (folder == "") isn't a real campaign -- just
+            # the default bucket for characters with no folder set -- so
+            # it can't be renamed or deleted the way a named folder can.
+            if folder:
+                rename_btn = _btn("✎", SURF2, variant="ghost", width=28, height=24, radius=6,
+                                   border_alpha=0x55, text_color=TEXT3, font_size=12)
+                rename_btn.setToolTip("Rename folder…")
+                rename_btn.clicked.connect(lambda checked, f=folder: self._rename_folder(f))
+                header_row.addWidget(rename_btn)
+                delfolder_btn = _btn("🗑", CRIMSON, variant="ghost", width=28, height=24, radius=6,
+                                      border_alpha=0x55, text_color=TEXT3, font_size=12)
+                delfolder_btn.setToolTip("Delete folder…")
+                delfolder_btn.clicked.connect(
+                    lambda checked, f=folder, n=len(groups[folder]): self._delete_folder(f, n))
+                header_row.addWidget(delfolder_btn)
+            il.addLayout(header_row)
             if collapsed:
                 continue
             for entry in groups[folder]:
@@ -172,6 +190,36 @@ class StartMenu(QWidget):
             self._collapsed_folders.discard(folder)
         else:
             self._collapsed_folders.add(folder)
+        self._rebuild_saved_list()
+
+    def _rename_folder(self, folder: str):
+        new_name, ok = QInputDialog.getText(
+            self, "Rename Folder", f"New name for “{folder}”:", text=folder,
+        )
+        if not ok:
+            return
+        new_name = new_name.strip()
+        if not new_name or new_name == folder:
+            return
+        rename_character_folder(None, folder, new_name)
+        self._rebuild_saved_list()
+
+    def _delete_folder(self, folder: str, count: int):
+        """Permanently deletes every character currently filed under
+        `folder` -- a real bulk delete, not just un-filing them to
+        Uncategorized. Requires typing the word "Delete" to confirm
+        when it's non-empty, since a single misclick here could
+        otherwise destroy hours of someone's work with no way back."""
+        if count > 0:
+            confirm_text, ok = QInputDialog.getText(
+                self, "Delete Folder",
+                f"This will PERMANENTLY delete all {count} character"
+                f"{'s' if count != 1 else ''} in “{folder}”. "
+                f"This cannot be undone.\n\nType Delete to confirm:",
+            )
+            if not ok or confirm_text.strip() != "Delete":
+                return
+        delete_character_folder(None, folder)
         self._rebuild_saved_list()
 
     def _move_saved_row(self, path: str, named_folders: list[str]):

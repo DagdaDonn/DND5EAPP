@@ -51,6 +51,7 @@ from dnd_app.core.save_load import (
     save_character, load_character, list_saved_characters,
     delete_character, validate_character, migrate_character,
     export_character_text, list_character_folders, set_character_folder,
+    rename_character_folder, delete_character_folder,
 )
 from dnd_app.core.pdf_export import export_official_pdf, TEMPLATE_PATH
 
@@ -153,6 +154,26 @@ class SaveLoadBridge(QObject):
     def moveCharacterToFolder(self, filepath: str, folder: str):
         set_character_folder(filepath, folder)
         self.savedListChanged.emit()
+
+    @Slot(str, str, result=int)
+    def renameFolder(self, old_name: str, new_name: str) -> int:
+        """Re-tags every character in `old_name` to `new_name` -- returns
+        how many were moved, for a confirmation toast."""
+        moved = rename_character_folder(_documents_dir(), old_name, new_name)
+        self.savedListChanged.emit()
+        return moved
+
+    @Slot(str, result=int)
+    def deleteFolder(self, folder: str) -> int:
+        """Permanently deletes every character currently filed under
+        `folder` -- a real bulk delete, not just un-filing them to
+        Uncategorized. The QML side is expected to have already
+        confirmed this with the player (savedCharacterFolders already
+        tells it how many characters are in play) before calling this.
+        Returns how many were deleted."""
+        deleted = delete_character_folder(_documents_dir(), folder)
+        self.savedListChanged.emit()
+        return deleted
 
     @Slot()
     def refresh(self):

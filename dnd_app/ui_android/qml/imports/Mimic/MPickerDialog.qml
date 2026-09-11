@@ -31,6 +31,10 @@ Popup {
     onOpened: search.text = ""
 
     background: Rectangle { color: Theme.surf; radius: 12; border.color: Theme.border }
+    // Matches MFullPageDialog.qml's dimming -- Qt Quick Controls'
+    // default modal overlay is a much lighter wash that looked glaringly
+    // bright against this app's dark theme (direct user report).
+    Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.8) }
 
     ColumnLayout {
         anchors.fill: parent

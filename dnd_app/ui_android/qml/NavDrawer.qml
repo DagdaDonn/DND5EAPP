@@ -45,7 +45,7 @@ Drawer {
     // the screen the drawer covers read as black at partial opacity
     // instead.
     Overlay.modal: Rectangle {
-        color: Qt.rgba(0, 0, 0, 0.6)
+        color: Qt.rgba(0, 0, 0, 0.8)
     }
 
     ColumnLayout {

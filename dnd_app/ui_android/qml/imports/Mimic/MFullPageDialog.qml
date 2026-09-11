@@ -27,7 +27,7 @@ Popup {
     padding: 0
 
     background: Rectangle { color: Theme.bg }
-    Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.6) }
+    Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.8) }
 
     enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 120 } }
     exit: Transition { NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 120 } }

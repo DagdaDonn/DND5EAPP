@@ -77,6 +77,9 @@ Flickable {
         parent: Overlay.overlay
         anchors.centerIn: parent
         background: Rectangle { color: Theme.surf; radius: 12; border.color: Theme.border }
+        // Matches MFullPageDialog.qml's dimming -- the default modal
+        // overlay is a much lighter wash than this app's dark theme calls for.
+        Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.8) }
 
         ColumnLayout {
             anchors.fill: parent
@@ -117,6 +120,138 @@ Flickable {
                 }
             }
         }
+    }
+
+    // "Rename Folder" -- same shape as moveNewFolderDialog.
+    property string pendingRenameFolder: ""
+    Popup {
+        id: renameFolderDialog
+        objectName: "renameFolderDialog"
+        modal: true
+        focus: true
+        width: 280
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        background: Rectangle { color: Theme.surf; radius: 12; border.color: Theme.border }
+        // Matches MFullPageDialog.qml's dimming -- the default modal
+        // overlay is a much lighter wash than this app's dark theme calls for.
+        Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.8) }
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+            Label {
+                text: "Rename “" + root.pendingRenameFolder + "”"
+                color: Theme.gold
+                font.pixelSize: Theme.fsBody
+                font.bold: true
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            MTextField {
+                id: renameFolderField
+                objectName: "renameFolderField"
+                Layout.fillWidth: true
+                placeholderText: "New campaign name…"
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                MButton {
+                    objectName: "renameFolderCancelButton"
+                    text: "Cancel"
+                    primary: false
+                    Layout.fillWidth: true
+                    onClicked: renameFolderDialog.close()
+                }
+                MButton {
+                    objectName: "renameFolderConfirmButton"
+                    text: "Rename"
+                    Layout.fillWidth: true
+                    onClicked: {
+                        var name = renameFolderField.text.trim()
+                        if (name.length > 0 && name !== root.pendingRenameFolder) {
+                            slBridge.renameFolder(root.pendingRenameFolder, name)
+                        }
+                        renameFolderDialog.close()
+                    }
+                }
+            }
+        }
+    }
+
+    // "Delete Folder" -- a real, permanent bulk delete of every
+    // character in the folder (not just un-filing them to
+    // Uncategorized), so it requires typing the exact folder name to
+    // confirm, same as desktop's StartMenu. Shown only when the folder
+    // actually has characters in it -- an empty folder can't exist in
+    // this UI (a folder is just a field on a character, so it only
+    // ever appears here because it has at least one), but the check is
+    // kept explicit rather than assumed.
+    property string pendingDeleteFolder: ""
+    property int pendingDeleteFolderCount: 0
+    Popup {
+        id: deleteFolderDialog
+        objectName: "deleteFolderDialog"
+        modal: true
+        focus: true
+        width: 300
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        background: Rectangle { color: Theme.surf; radius: 12; border.color: Theme.border }
+        // Matches MFullPageDialog.qml's dimming -- the default modal
+        // overlay is a much lighter wash than this app's dark theme calls for.
+        Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.8) }
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+            Label {
+                text: "Delete “" + root.pendingDeleteFolder + "”"
+                color: Theme.crimson2
+                font.pixelSize: Theme.fsBody
+                font.bold: true
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            Label {
+                text: "This will PERMANENTLY delete all " + root.pendingDeleteFolderCount
+                      + " character" + (root.pendingDeleteFolderCount === 1 ? "" : "s")
+                      + " in this folder. This cannot be undone.\n\nType Delete to confirm:"
+                color: Theme.text2
+                font.pixelSize: Theme.fsSmall
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            MTextField {
+                id: deleteFolderField
+                objectName: "deleteFolderField"
+                Layout.fillWidth: true
+                placeholderText: "Delete"
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                MButton {
+                    objectName: "deleteFolderCancelButton"
+                    text: "Cancel"
+                    primary: false
+                    Layout.fillWidth: true
+                    onClicked: deleteFolderDialog.close()
+                }
+                MButton {
+                    objectName: "deleteFolderConfirmButton"
+                    text: "Delete"
+                    Layout.fillWidth: true
+                    enabled: deleteFolderField.text === "Delete"
+                    onClicked: {
+                        slBridge.deleteFolder(root.pendingDeleteFolder)
+                        deleteFolderDialog.close()
+                    }
+                }
+            }
+        }
+        onOpened: deleteFolderField.text = ""
     }
 
     ColumnLayout {
@@ -248,28 +383,64 @@ Flickable {
                     Layout.fillWidth: true
                     spacing: 6
 
-                    ItemDelegate {
-                        objectName: "folderHeader_" + section.modelData.folder
+                    RowLayout {
                         Layout.fillWidth: true
-                        height: 32
-                        background: null
-                        contentItem: RowLayout {
-                            spacing: 6
-                            Label {
-                                text: root.collapsedFolders[section.modelData.folder] ? "▶" : "▼"
-                                color: Theme.gold2
-                                font.pixelSize: Theme.fsBody
+                        spacing: 4
+
+                        ItemDelegate {
+                            objectName: "folderHeader_" + section.modelData.folder
+                            Layout.fillWidth: true
+                            height: 32
+                            background: null
+                            contentItem: RowLayout {
+                                spacing: 6
+                                Label {
+                                    text: root.collapsedFolders[section.modelData.folder] ? "▶" : "▼"
+                                    color: Theme.gold2
+                                    font.pixelSize: Theme.fsBody
+                                }
+                                Label {
+                                    text: "📁  " + (section.modelData.folder.length > 0 ? section.modelData.folder : "Uncategorized")
+                                          + "  (" + section.modelData.characters.length + ")"
+                                    color: Theme.gold2
+                                    font.pixelSize: Theme.fsBody
+                                    font.bold: true
+                                    Layout.fillWidth: true
+                                }
                             }
-                            Label {
-                                text: "📁  " + (section.modelData.folder.length > 0 ? section.modelData.folder : "Uncategorized")
-                                      + "  (" + section.modelData.characters.length + ")"
-                                color: Theme.gold2
-                                font.pixelSize: Theme.fsBody
-                                font.bold: true
-                                Layout.fillWidth: true
+                            onClicked: root.toggleFolder(section.modelData.folder)
+                        }
+
+                        // "Uncategorized" (folder === "") isn't a real
+                        // campaign -- just the default bucket for
+                        // characters with no folder set -- so it can't
+                        // be renamed or deleted the way a named folder can.
+                        MButton {
+                            objectName: "renameFolderButton_" + section.modelData.folder
+                            visible: section.modelData.folder.length > 0
+                            primary: false
+                            implicitWidth: 40
+                            height: 32
+                            text: "✎"
+                            onClicked: {
+                                root.pendingRenameFolder = section.modelData.folder
+                                renameFolderField.text = section.modelData.folder
+                                renameFolderDialog.open()
                             }
                         }
-                        onClicked: root.toggleFolder(section.modelData.folder)
+                        MButton {
+                            objectName: "deleteFolderButton_" + section.modelData.folder
+                            visible: section.modelData.folder.length > 0
+                            primary: false
+                            implicitWidth: 40
+                            height: 32
+                            text: "🗑"
+                            onClicked: {
+                                root.pendingDeleteFolder = section.modelData.folder
+                                root.pendingDeleteFolderCount = section.modelData.characters.length
+                                deleteFolderDialog.open()
+                            }
+                        }
                     }
 
                     Repeater {

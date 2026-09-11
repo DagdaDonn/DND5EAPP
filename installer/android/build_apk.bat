@@ -1,84 +1,62 @@
 @echo off
-setlocal enabledelayedexpansion
-REM Run from the repo root regardless of where this script is invoked
-REM from -- same convention as installer\windows\build_exe.bat. This
-REM script lives two levels down, in installer\android\, so it takes
-REM two ".." to reach the repo root.
-cd /d "%~dp0..\.."
-echo === MIMIC - Android APK Builder (Windows) ===
-echo.
-echo NOTE: untested in this sandbox -- there's no Android SDK/NDK here
-echo to run against. pyside6-android-deploy has supported Windows as a
-echo host OS since PySide6 6.5, but this script itself has only been
-echo checked for correctness, not run against a real toolchain. See
-echo packaging\android\BUILD_APK.md and packaging\android\README.md
-echo before relying on it.
-echo.
+setlocal
+REM ============================================================
+REM  MIMIC Android APK build
+REM  Runs buildozer inside WSL. Produces dist\MIMIC-*.apk
+REM ============================================================
 
-set SPEC_FILE=packaging\android\pysidedeploy.spec
-
-echo [1/4] Checking prerequisites...
-if "%ANDROID_SDK_ROOT%"=="" (
-    echo ERROR: ANDROID_SDK_ROOT is not set.
-    echo   Install the Android SDK and set ANDROID_SDK_ROOT to its path
-    echo   ^(System Properties -^> Environment Variables, or "setx ANDROID_SDK_ROOT ..."^).
-    pause & exit /b 1
-)
-if "%ANDROID_NDK_ROOT%"=="" (
-    echo ERROR: ANDROID_NDK_ROOT is not set.
-    echo   Install the Qt-pinned NDK version and set ANDROID_NDK_ROOT to its path.
-    echo   See packaging\android\README.md -- "whatever's newest" is usually the wrong version.
-    pause & exit /b 1
-)
-if not exist "%SPEC_FILE%" (
-    echo ERROR: %SPEC_FILE% not found.
-    echo   Generate it first with:
-    echo     pyside6-android-deploy --init --input-file dnd_app\ui_android\main.py
-    echo   then move the generated pysidedeploy.spec into packaging\android\
-    echo   and adjust it per packaging\android\README.md before retrying.
-    pause & exit /b 1
-)
-echo   ANDROID_SDK_ROOT=%ANDROID_SDK_ROOT%
-echo   ANDROID_NDK_ROOT=%ANDROID_NDK_ROOT%
-echo   Spec file: %SPEC_FILE%
+set "PROJECT_WIN=C:\Users\OBRIET\Dev\Projects\Extra\DND\DND5EAPP"
+set "PROJECT_WSL=/mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP"
 
 echo.
-echo [2/4] Installing/upgrading PySide6...
-python -m pip install --upgrade pip --quiet
-python -m pip install --upgrade PySide6 --quiet
-if %errorlevel% neq 0 (
-    echo ERROR: pip install failed. Make sure Python is in PATH.
-    pause & exit /b 1
+echo === MIMIC Android build ===
+echo Project: %PROJECT_WIN%
+echo.
+
+if not exist "%PROJECT_WIN%\dnd_app\ui_android\buildozer.spec" (
+    echo ERROR: buildozer.spec not found at:
+    echo   %PROJECT_WIN%\dnd_app\ui_android\buildozer.spec
+    echo Check PROJECT_WIN in this script.
+    exit /b 1
+)
+
+echo === Ensuring build environment ===
+wsl.exe bash -lc "set -e; cd '%PROJECT_WSL%'; if [ ! -f shiboken6-6.11.2-6.11.2-cp311-cp311-android_aarch64.whl ]; then cp packaging/android/wheels/*.whl .; fi; cd dnd_app/ui_android; if [ ! -e .buildozer ]; then ln -s ../../deployment/.buildozer .buildozer; fi"
+if errorlevel 1 (
+    echo ERROR: failed to prepare build environment
+    exit /b 1
 )
 
 echo.
-echo [3/4] Verifying pyside6-android-deploy is available...
-where pyside6-android-deploy >nul 2>nul
-if %errorlevel% neq 0 (
-    echo ERROR: pyside6-android-deploy not found on PATH after installing PySide6.
-    echo   Check your Python environment/venv is the one pip installed into.
-    pause & exit /b 1
-)
-
-echo.
-echo [4/4] Running pyside6-android-deploy ^(this can take a while on a
-echo first build -- it compiles a full python-for-android distribution,
-echo not just freezes already-installed packages^)...
-pyside6-android-deploy --config-file "%SPEC_FILE%"
-if %errorlevel% neq 0 (
+echo === Running buildozer ===
+wsl.exe bash -lc "set -e; cd '%PROJECT_WSL%/dnd_app/ui_android'; python3.11 -m buildozer android debug"
+if errorlevel 1 (
     echo.
-    echo ERROR: Build failed. See packaging\android\BUILD_APK.md's
-    echo troubleshooting table for common causes ^(NDK version mismatch
-    echo is the most frequent one^).
-    pause & exit /b 1
+    echo === BUILD FAILED ===
+    exit /b 1
 )
 
 echo.
-echo === Done! ===
-echo Look for the built .apk in the deploy tool's output directory
-echo ^(reported above by pyside6-android-deploy itself -- its exact
-echo location depends on the spec file's configured build directory^).
-echo This is a DEBUG-signed build, fine for sideloading onto your own
-echo phone via USB or a file transfer -- see packaging\android\BUILD_APK.md
-echo for release signing if you ever need to distribute it more widely.
-pause
+echo === Locating APK ===
+set "APK_NAME="
+for /f "delims=" %%F in ('dir /b /o-d "%PROJECT_WIN%\dnd_app\ui_android\MIMIC-*.apk" 2^>nul') do (
+    set "APK_NAME=%%F"
+    goto :found
+)
+echo ERROR: no APK found in dnd_app\ui_android\
+exit /b 1
+
+:found
+echo Found: %APK_NAME%
+if not exist "%PROJECT_WIN%\dist" mkdir "%PROJECT_WIN%\dist"
+move /y "%PROJECT_WIN%\dnd_app\ui_android\%APK_NAME%" "%PROJECT_WIN%\dist\" >nul
+
+echo.
+echo === BUILD COMPLETE ===
+echo APK: %PROJECT_WIN%\dist\%APK_NAME%
+echo.
+echo Install on phone with:
+echo   adb install -r "%PROJECT_WIN%\dist\%APK_NAME%"
+echo.
+
+endlocal

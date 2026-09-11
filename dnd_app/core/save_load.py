@@ -163,6 +163,33 @@ def delete_character(filepath: str) -> bool:
         return False
 
 
+def rename_character_folder(directory: str, old_name: str, new_name: str) -> int:
+    """Renames a campaign/folder by re-tagging every character currently
+    in `old_name` to `new_name` -- there's no separate "folder" entity
+    on disk, just a field on each character, so a rename is a bulk
+    set_character_folder() over whoever's in it. Returns how many
+    characters were moved."""
+    new_name = (new_name or "").strip()
+    count = 0
+    for entry in list_saved_characters(directory):
+        if entry.get("folder", "") == old_name:
+            set_character_folder(entry["filepath"], new_name)
+            count += 1
+    return count
+
+
+def delete_character_folder(directory: str, folder_name: str) -> int:
+    """Permanently deletes every character currently filed under
+    `folder_name` -- a real, irreversible bulk delete (not just
+    un-filing them to Uncategorized). Returns how many were deleted."""
+    count = 0
+    for entry in list_saved_characters(directory):
+        if entry.get("folder", "") == folder_name:
+            if delete_character(entry["filepath"]):
+                count += 1
+    return count
+
+
 def export_character_text(char: dict) -> str:
     """Export character as a human-readable text block."""
     from .character import total_level, class_levels, ability_mod

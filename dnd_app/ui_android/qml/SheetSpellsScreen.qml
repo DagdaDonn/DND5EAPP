@@ -41,6 +41,9 @@ Page {
         parent: Overlay.overlay
         anchors.centerIn: parent
         background: Rectangle { color: Theme.surf; radius: 12; border.color: Theme.border }
+        // Matches MFullPageDialog.qml's dimming -- the default modal
+        // overlay is a much lighter wash than this app's dark theme calls for.
+        Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.8) }
 
         ColumnLayout {
             anchors.fill: parent
