@@ -30,6 +30,7 @@ android.apptheme = "@android:style/Theme.NoTitleBar"
 
 # PySide6-specific: this is the Qt bootstrap, not SDL2
 p4a.bootstrap = qt
+p4a.branch = v2024.01.21
 
 # Local recipes provide the Qt bootstrap glue
 p4a.local_recipes = /mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/recipes

@@ -17,7 +17,13 @@ dist/
 # building the APK; never commit it.
 deployment/.buildozer/
 deployment/jar/
-deployment/recipes/
+deployment/recipes/*
+
+# Exception: hand-patched python3 recipe that disables broken 3.14
+# patches in p4a 2026.05.09. This is not regenerable from the wheels;
+# losing it forces us to re-disable 6 patches by hand.
+!deployment/recipes/python3/
+!deployment/recipes/python3/__init__.py
 
 # Android build artifacts / tooling state
 *.apk
