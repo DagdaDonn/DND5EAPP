@@ -30,6 +30,7 @@ android.permissions = android.permission.INTERNET,android.permission.ACCESS_NETW
 # android:theme=""@android:style/...""  in the generated manifest,
 # which is invalid XML and fails Gradle at processDebugMainManifest.
 android.apptheme = @android:style/Theme.NoTitleBar
+android.icon = /mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/packaging/android/icon.png
 
 # PySide6-specific: this is the Qt bootstrap, not SDL2
 p4a.bootstrap = qt
@@ -68,7 +69,7 @@ p4a.hook = /mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/recipe
 android.add_jars = /mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/jar/PySide6/jar/Qt6Android.jar,/mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/jar/PySide6/jar/Qt6AndroidBindings.jar
 
 # Extra args to p4a — matches what pysidedeploy.spec passes
-p4a.extra_args = --load-local-libs=plugins_platforms_qtforandroid --qt-libs=Quick,Core,Qml,Gui,QuickControls2,OpenGL,Network
+p4a.extra_args = --load-local-libs=plugins_platforms_qtforandroid --qt-libs=Quick,Core,Qml,Gui,QuickControls2,OpenGL,Network --icon=/mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/packaging/android/icon.png
 
 [buildozer]
 log_level = 2
