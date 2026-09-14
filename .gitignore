@@ -25,6 +25,11 @@ deployment/recipes/*
 !deployment/recipes/python3/
 !deployment/recipes/python3/__init__.py
 
+# Exception: p4a.hook file that patches PythonActivity.java and
+# copies Qt .so / libc++_shared.so into the APK. Hand-written, not
+# regenerable from wheels. Reference from buildozer.spec via p4a.hook.
+!deployment/recipes/p4a_hook.py
+
 # Android build artifacts / tooling state
 *.apk
 *.aab
