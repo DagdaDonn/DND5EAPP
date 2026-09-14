@@ -31,6 +31,12 @@ deployment/recipes/*
 *.ap_
 .gradle/
 
+# dnd_app/ui_android/buildozer.spec is hand-edited and IS committed
+# (see installer/android/build_apk.sh/.bat) -- only a stray copy at the
+# repo root (which pyside6-android-deploy/buildozer can drop there) is
+# ignored, since that one really is transient/regeneratable.
+/buildozer.spec
+
 # Downloaded PySide6/Shiboken Android wheels -- large binaries,
 # regenerated from https://download.qt.io/official_releases/QtForPython/
 packaging/android/wheels/*.whl

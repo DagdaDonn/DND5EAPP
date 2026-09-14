@@ -136,7 +136,7 @@ A touch-first version of the app is in progress (`dnd_app/ui_android/`).
 To build it into an `.apk` you can install on your own phone, see
 [`packaging/android/BUILD_APK.md`](packaging/android/BUILD_APK.md) —
 a plain-language, numbered walkthrough (install a couple of free
-programs once, then run `installer\android\build_apk.bat`).
+programs once, then run `build_android.bat`).
 
 ---
 
@@ -185,6 +185,8 @@ dnd_app/
   ui_android/               # v3 scaffold: touch-first Qt Quick/QML UI
                              #   (not yet implemented -- see its own README)
 run_dnd_creator.py     # Desktop entry point
+build_android.bat / build_android.sh   # Android build (repo root wrappers)
+install_android.bat / install_android.sh # adb install the built APK
 installer/
   windows/                #   Windows build tooling
     build_exe.bat / build_exe.sh #   One-command build scripts
@@ -195,8 +197,9 @@ packaging/
     DnD5eCharacterCreator.spec #  PyInstaller build spec
     requirements.txt
     BUILD_EXE.md          #   Full build guide
-  android/                #   Android build-target manifest
+  android/                #   Android build-target manifest + one-time setup
     BUILD_APK.md          #   Full build guide
+    setup_buildozer_spec.bat #  One-time buildozer.spec path setup (Windows)
 ```
 
 ---

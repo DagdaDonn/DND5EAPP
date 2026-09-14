@@ -149,7 +149,7 @@ _card = card
 
 
 class BaseSheetMixin:
-    def __init__(self, char: dict, parent=None):
+    def __init__(self, char: dict, parent=None, save_path: str = None):
         super().__init__(parent)
         from dnd_app.ui_desktop.style.theme import sync_globals as _sg
         _sg(globals())
@@ -193,7 +193,13 @@ class BaseSheetMixin:
         self._resource_widgets: list = []   # populated by _build_resource_rows
         self._blocking_refresh = False
         self._dirty = False
-        self._save_path = None
+        # The exact file this character was loaded from (None for a
+        # brand-new character) -- _save() reuses this instead of always
+        # re-deriving a path from the current name, or renaming the
+        # character (editing the header name field, then Save) would
+        # silently create a second file under the new name and leave
+        # the original one behind as an orphan.
+        self._save_path = save_path
         self.ctrl.subscribe(self._on_char_updated)
         self._build_ui()
         self.ctrl.refresh()
@@ -742,13 +748,22 @@ class BaseSheetMixin:
 
     def _save(self):
         """Save current character to disk."""
-        from dnd_app.core.save_load import save_character
+        from dnd_app.core.save_load import save_character, character_filename
         import os
-        name = self.char.get("name","Unknown").strip() or "Unknown"
-        save_dir = os.path.expanduser("~/.dnd_characters")
-        os.makedirs(save_dir, exist_ok=True)
-        path = os.path.join(save_dir, f"{name}.json")
+        # Overwrite the exact file this character was loaded from, when
+        # known -- otherwise (a brand-new character) derive one from its
+        # name via character_filename(), which must match how every
+        # other writer (initial wizard save, autosave, Duplicate
+        # Character) names files, or Save would create a different file
+        # than the one already on disk. Without _save_path, renaming a
+        # character (editing the header field) and then hitting Save --
+        # e.g. via File > Save, which flushes that field into self.char
+        # first -- would silently create a second file under the new
+        # name and leave the original behind as an orphan, since the
+        # path was always re-derived from whatever the current name is.
+        path = self._save_path or character_filename(self.char)
         save_character(self.char, path)
+        self._save_path = path
         self._dirty = False
         self._update_title()
         self._toast(f"💾 Saved to {os.path.basename(path)}")

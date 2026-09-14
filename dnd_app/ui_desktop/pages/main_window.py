@@ -821,7 +821,13 @@ class CharacterCreatorApp(QMainWindow):
                 char = self._sheet.char
                 char["theme"] = name
                 cur_tab = self._sheet._tabs.currentIndex()
-                self._show_sheet(char)
+                # This rebuilds the SAME character (just re-themed), not
+                # a different one being loaded -- must carry over its
+                # existing _save_path, or the freshly-constructed sheet
+                # would fall back to a name-derived path on its next
+                # Save, discarding the file identity it already had.
+                save_path = self._sheet._save_path
+                self._show_sheet(char, save_path=save_path)
                 if self._sheet:
                     self._sheet._tabs.setCurrentIndex(cur_tab)
             else:
@@ -898,11 +904,11 @@ class CharacterCreatorApp(QMainWindow):
 
     def _go_sheet_from_path(self, path: str):
         try:
-            char = load_character(path); self._show_sheet(char)
+            char = load_character(path); self._show_sheet(char, save_path=path)
         except Exception as e:
             QMessageBox.warning(self, "Load Error", str(e))
 
-    def _show_sheet(self, char: dict):
+    def _show_sheet(self, char: dict, save_path: str = None):
         from dnd_app.ui_desktop.style import theme
         theme.set_font_scale(char.get("ui_font_scale", "Medium (default)"))
         self._apply_name_easter_egg(char)
@@ -951,7 +957,7 @@ class CharacterCreatorApp(QMainWindow):
             # open and shut as a real window during construction.
             # StartMenu()/CharacterWizard() construction sites need the
             # same explicit parent, for the same reason.
-            self._sheet = CharacterSheet(char, self)
+            self._sheet = CharacterSheet(char, self, save_path=save_path)
             self._sheet.back_to_menu.connect(self._sheet_back_to_menu)
             self._stack.addWidget(self._sheet)
             self._stack.setCurrentWidget(self._sheet)
@@ -1062,9 +1068,9 @@ class CharacterCreatorApp(QMainWindow):
         dup = copy.deepcopy(self._sheet.char)
         dup["name"] = dup.get("name","Character") + " (Copy)"
         dup["_id"] = f"char_{int(time.time())}"
-        self._show_sheet(dup)
         path = character_filename(dup)
         save_character(dup, path)
+        self._show_sheet(dup, save_path=path)
         _save_recent(path)
         if hasattr(self,"_recent_menu"): self._rebuild_recent_menu()
         self.statusBar().showMessage(f"Duplicated → {dup['name']}", 3000)

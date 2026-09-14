@@ -187,8 +187,21 @@ class SaveLoadBridge(QObject):
             self._set_error("Can't save yet: " + "; ".join(errors))
             return False
         directory = _documents_dir()
-        filename = _safe_filename(self.char.get("name", "")) + ".json"
-        filepath = os.path.join(directory, filename)
+        # Overwrite the exact file this character was loaded from, as
+        # long as it's one we manage (inside our own Documents folder) --
+        # otherwise (a brand-new character, or one loaded from outside
+        # our sandbox, e.g. Downloads or a content:// picker result)
+        # fall back to a fresh name-derived path. Always recomputing the
+        # path from the current name here used to silently create a
+        # second file next to the original whenever "the existing
+        # character" wasn't already saved under that exact name in this
+        # folder -- exactly the case for any character loaded via
+        # "Load from Downloads / Browse" instead of the in-app list.
+        if self._last_saved_path and os.path.dirname(self._last_saved_path) == directory:
+            filepath = self._last_saved_path
+        else:
+            filename = _safe_filename(self.char.get("name", "")) + ".json"
+            filepath = os.path.join(directory, filename)
         try:
             self._last_saved_path = save_character(self.char, filepath=filepath)
         except OSError as e:
@@ -208,7 +221,7 @@ class SaveLoadBridge(QObject):
         except (OSError, ValueError) as e:
             self._set_error(f"Couldn't load: {e}")
             return False
-        self._apply_loaded(data)
+        self._apply_loaded(data, loaded_path=filepath)
         self.toastRequested.emit(f"\U0001f4c2 Loaded {os.path.basename(filepath)}")
         return True
 
@@ -258,13 +271,20 @@ class SaveLoadBridge(QObject):
         alongside this from App.qml's Start Menu handler."""
         self._apply_loaded(new_character())
 
-    def _apply_loaded(self, data: dict):
+    def _apply_loaded(self, data: dict, loaded_path: str = ""):
         # Every wizard bridge holds a reference to this SAME dict object
         # (see main.py) -- mutate it in place rather than rebinding, or
         # every other bridge would keep pointing at the old, stale one.
         self.char.clear()
         self.char.update(data)
         self._set_error("")
+        # Reset (or set) which file counts as "the one this character
+        # came from" for saveCharacter() to overwrite -- must happen on
+        # every load/new-character, not just loadCharacterFrom(), or a
+        # stale path from a PREVIOUSLY loaded character would still pass
+        # saveCharacter()'s "inside our own folder" check and silently
+        # overwrite that other character's file with this one's data.
+        self._last_saved_path = loaded_path
         self.characterLoaded.emit()
 
     @Slot(str, result=bool)

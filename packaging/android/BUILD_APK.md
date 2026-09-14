@@ -2,89 +2,181 @@
 
 This turns the app into an `.apk` file you can copy to your phone and
 install, the same way `installer\windows\build_exe.bat` turns it into
-`MIMIC.exe`. Android just needs more one-time setup first, because
+`MIMIC.exe`. Android needs a lot more one-time setup first, because
 Google's own Android build tools (not this project) require it —
 nothing here is MIMIC-specific complexity.
 
-**Untested in this sandbox** — there's no Android SDK/NDK here to run
-against. Everything below should work, but if a step doesn't match
-what you see on your machine, that's the kind of thing to fix as you
-go rather than a sign you did something wrong.
+The build runs through **buildozer** (a wrapper around
+[python-for-android](https://github.com/kivy/python-for-android))
+invoked directly, inside WSL on Windows. An earlier attempt used
+`pyside6-android-deploy` instead, but it has a race condition on `/mnt/c/`
+paths: it writes `buildozer.spec`, then immediately fails to find the
+file it just wrote, and silently falls back to a stock Kivy/SDL2
+template instead of the Qt bootstrap this app actually needs — the
+APKs it produced crashed on launch. `dnd_app/ui_android/buildozer.spec`
+in this repo (hand-written, not generated) is the canonical config;
+`pysidedeploy.spec` in this folder is a leftover from that abandoned
+path and not read by the current build.
+
+**Untested in this sandbox** — there's no Android SDK/NDK/WSL here to
+run against. Everything below matches what's actually worked on a real
+Windows+WSL machine for this project, but if a step doesn't match what
+you see on yours, that's the kind of thing to fix as you go rather than
+a sign you did something wrong.
 
 ## First-time setup (do this once)
 
-1. **Install a JDK (Java).** Get [Eclipse Temurin 17](https://adoptium.net/) —
-   pick the installer for your OS, run it, done.
-2. **Install Android Studio.** Get it from
-   [developer.android.com/studio](https://developer.android.com/studio).
-   You will NOT write any Android code — you're only using its
-   installer to get the Android SDK and NDK, which is far easier than
-   installing those two by hand.
-3. **Open Android Studio once, then install the NDK through it:**
-   - `More Actions` (or `Tools`) → `SDK Manager`
-   - `SDK Tools` tab → tick **NDK (Side by side)** → `Apply`
-   - Note the folder path shown at the top of that window (the
-     "Android SDK Location") — you need it in the next step.
-4. **Tell your computer where those live.** Two settings, set once:
-   - `ANDROID_SDK_ROOT` = the SDK Location path from step 3
-     (something like `C:\Users\<you>\AppData\Local\Android\Sdk`)
-   - `ANDROID_NDK_ROOT` = the same path, plus `\ndk\<version folder>`
-     (the SDK Manager's NDK entry shows the exact version number)
-
-   **Windows:** Start menu → search "environment variables" → "Edit
-   the system environment variables" → `Environment Variables...` →
-   `New...` under "User variables" for each of the two above. (Or, in
-   a Command Prompt: `setx ANDROID_SDK_ROOT "C:\path\to\Sdk"` — close
-   and reopen the terminal afterward for it to take effect.)
-
-   **macOS/Linux:** add two lines like
-   `export ANDROID_SDK_ROOT=$HOME/Android/Sdk` to your shell's profile
-   file (`~/.zshrc`, `~/.bashrc`, etc.), then restart the terminal.
-5. **Generate the one config file the build needs**, from the repo root:
+1. **Install WSL** (Windows Subsystem for Linux), if you don't already
+   have it: `wsl --install` from an admin Command Prompt, then restart.
+2. **Install Python 3.11 inside WSL.** python-for-android's `python3`
+   recipe (pinned to `v2024.01.21` in `buildozer.spec` — see "Why this
+   specific p4a version" below) targets Python 3.11.5 specifically:
+   ```bash
+   sudo apt install python3.11 python3.11-venv
+   # or: pyenv install 3.11.9 && pyenv global 3.11.9
    ```
-   pip install PySide6
-   pyside6-android-deploy --init --input-file dnd_app/ui_android/main.py
+3. **Install buildozer and cython for that Python**, inside WSL:
+   ```bash
+   python3.11 -m pip install --user buildozer cython
    ```
-   This creates `pysidedeploy.spec` in the folder you ran it from —
-   move it into `packaging/android/`. See `packaging/android/README.md`
-   for the handful of fields worth checking/adjusting in it (what to
-   bundle, the app's package name, etc.) — skippable on a first try,
-   the generated defaults are usually enough to get a working APK.
+4. **Install a JDK (Java).** Get [Eclipse Temurin 17](https://adoptium.net/)
+   inside WSL (`sudo apt install temurin-17-jdk` or follow Adoptium's
+   instructions) — 17 is the current Qt-recommended version.
+5. **Get the Android SDK and NDK.** Easiest path: install
+   [Android Studio](https://developer.android.com/studio) (Windows or
+   inside WSL), open it once, then `More Actions`/`Tools` → `SDK
+   Manager` → `SDK Tools` tab → tick **NDK (Side by side)** → `Apply`.
+   Note the "Android SDK Location" path shown at the top of that
+   window — you need it in the next step. python-for-android
+   `v2024.01.21` recommends NDK 25b; a newer NDK (e.g. r28c) has worked
+   too, with a warning.
+6. **Get the Android-target PySide6/Shiboken6 wheels.** These are
+   *not* the regular desktop `pip install PySide6` — they're
+   cross-compiled for `android_aarch64`. Download the matching version
+   (see `PYSIDE_VER`/`PY_TAG`/`ARCH_TAG` at the top of
+   `setup_buildozer_spec.bat`) from
+   [download.qt.io](https://download.qt.io/official_releases/QtForPython/)
+   and place both `.whl` files in `packaging/android/wheels/`.
+7. **Run the setup script** to write the paths from steps 4-6 into
+   `dnd_app/ui_android/buildozer.spec`:
+   ```
+   packaging\android\setup_buildozer_spec.bat
+   ```
+   It searches common install locations, downloads the wheels for you
+   if step 6 was skipped, extracts the Qt Android jars from those
+   wheels, and rewrites `buildozer.spec`'s `source.dir`,
+   `android.sdk_path`, `android.ndk_path`, `p4a.local_recipes`,
+   `android.add_jars`, and `p4a.hook` lines. It's idempotent (safe to
+   re-run any time your paths change) and backs up the spec first. It
+   never touches `p4a.branch` — see below for why that one's off-limits.
+8. **Create `deployment/recipes/p4a_hook.py`.** This is a build hook
+   this project needs that isn't generated by anything — it's local to
+   each machine (`deployment/` is gitignored) and load-bearing: without
+   it, Qt refuses to load at runtime (missing `libc++_shared.so`) *and*
+   the Java compile fails (Qt 6.11 removed the method p4a
+   `v2024.01.21`'s template still calls). See "Why `p4a.hook` exists"
+   below for exactly what it does and does not do — do not skip this
+   step or improvise a different version without understanding both
+   failure modes it prevents.
 
 That's the whole one-time setup. You won't need to repeat any of it
-for future builds — steps 1-4 install real programs on your computer,
-and step 5's file stays in the repo once created.
+for future builds unless you move the repo or reinstall the SDK/NDK.
 
 ## Every time you want a new build
 
-**Windows:** double-click `installer\android\build_apk.bat` (or run it
-from a Command Prompt).
+`build_android.bat` (Windows, at the repo root) / `build_android.sh`
+(macOS/Linux/WSL) run the build and copy the resulting APK to
+`dist/MIMIC-0.1-arm64-v8a-debug.apk`. They wrap
+`dnd_app/ui_android/build_and_dist.sh`, which runs
+`python3.11 -m buildozer android debug` and locates the newest APK
+(from `dnd_app/ui_android/bin/`, or `.buildozer/` as a fallback).
 
-**macOS/Linux:** run `installer/android/build_apk.sh` from the repo
-root (or from inside `installer/android/`).
+`installer/android/build_apk.bat`/`.sh` do the same underlying
+`buildozer android debug` call with slightly different path handling
+(hardcoded project paths, a `.buildozer` symlink into the shared
+cache) — both exist right now; treat `build_android.bat`/`.sh` at the
+repo root as the current one if the two ever give different results.
 
-Either script checks your setup, installs/updates PySide6, and runs
-the actual Android build tool. **The first build is slow** — 15-40
-minutes isn't unusual, since it's compiling a full Python-for-Android
-distribution, not just packaging already-installed files the way the
-Windows build does. Later builds are faster.
+**The first build is slow** — buildozer downloads and compiles a full
+Python-for-Android distribution (CPython, OpenSSL, sqlite, libffi, the
+Qt bootstrap) from source; 20-40 minutes isn't unusual. Later builds
+reuse that cache (`deployment/.buildozer/`, gitignored — do not delete
+it) and finish in under 2 minutes when only `.py`/`.qml` files changed.
+A build after touching `p4a_hook.py` or any recipe is slow again (the
+cache doesn't know those changed).
 
-When it finishes, it prints where the `.apk` file landed. **Copy that
-file to your phone** (USB cable, email it to yourself, a cloud drive —
-any way you'd normally move a file over) and tap it there to install.
-Your phone will warn about installing from an unknown source the first
-time — that's normal for any app not from the Play Store; allow it for
-this one file.
+When it finishes, **copy the APK to your phone** (USB cable, email it
+to yourself, a cloud drive — any way you'd normally move a file over)
+and tap it there to install, or run `install_android.bat`/`.sh` (also
+at the repo root) if `adb` and a connected/authorized device are
+available — it uninstalls any previous copy and installs the fresh
+one (`adb install -r` alone is also fine if the icon/package didn't
+change). Your phone will warn about installing from an unknown source
+the first time — that's normal for any app not from the Play Store;
+allow it for this one file.
 
 ---
+
+## Why this specific p4a version
+
+`buildozer.spec` pins `p4a.branch = v2024.01.21`. This matters: p4a's
+`master` branch (as of `2026.05.09`) targets Python 3.14, and its
+`python3` recipe still carries several patches written for Python
+3.7-3.11 that fail to apply on 3.14 — the build breaks before it even
+starts compiling. `v2024.01.21` targets Python 3.11.5, where all of
+those patches apply cleanly. **Never remove or change `p4a.branch`** —
+buildozer re-clones python-for-android from whatever URL/branch is in
+the spec on every run (it tracks this in its own state, not git), so
+without the pin it silently resets to `master` and you're back to the
+Python 3.14 patch wall.
+
+## Why `p4a.hook` exists
+
+`buildozer.spec` points `p4a.hook` at `deployment/recipes/p4a_hook.py`
+(gitignored, not in this repo — see step 8 above). p4a runs this at
+two points during the build and it fixes two separate, otherwise-fatal
+problems with p4a `v2024.01.21`'s Qt bootstrap template:
+
+- **`before_apk_build`** copies `libc++_shared.so` from the NDK into
+  the dist's `libs/arm64-v8a/` and `src/main/jniLibs/arm64-v8a/`.
+  Without it, Qt refuses to load and the app crashes immediately on
+  launch — the build *succeeds*, only the installed app fails, which
+  makes this easy to misdiagnose as an app-code bug instead of a
+  packaging one.
+- **`before_apk_assemble`** patches the dist's generated
+  `PythonActivity.java`, replacing
+  `QtNative.setEnvironmentVariable(...)` with
+  `android.system.Os.setenv(...)`. Qt 6.11 removed
+  `setEnvironmentVariable`, but p4a `v2024.01.21`'s bundled template
+  still calls it — without this patch, the build fails at the Java
+  compile step, before an APK is even produced.
+
+Do not modify or delete `p4a_hook.py` without testing a full rebuild
+afterward — a mistake there (or a missing file entirely) reproduces
+one of the two failures above, and either surfaces only after the
+slow 20-40 minute path since both hook points run late in the build.
 
 ## Good to know
 
 - This produces a **debug-signed** APK. That's completely fine for
   installing on your own phone. It only matters if you ever want to
   publish MIMIC on the Play Store — see "Signing" below for that case.
-- `pyside6-android-deploy` runs natively on Windows (since PySide6
-  6.5) — you do not need WSL or a separate Linux machine.
+- Don't run `buildozer android clean` or delete `deployment/.buildozer/`
+  — that cache holds the downloaded/compiled Python-for-Android
+  distribution, and clearing it turns every future build back into a
+  30-50 minute one.
+- If a build is interrupted (Ctrl+C) partway through extracting or
+  configuring a component, the next run can find that component in a
+  broken, half-extracted state and fail confusingly. If a build fails
+  right after being interrupted, deleting just that component's folder
+  under `deployment/.buildozer/android/platform/build-*/build/other_builds/`
+  to force a fresh extract is usually enough — no need to nuke the
+  whole cache.
+- Don't uninstall the app between iterations unless the icon or
+  package name changed — `adb install -r` (what `install_android.bat`/
+  `.sh` do) overwrites an existing install fine.
+- Don't add a jar already listed in `android.add_jars` a second time —
+  duplicate entries break Gradle's classpath resolution.
 
 ## Signing (only needed for a Play Store release, not for your own phone)
 
@@ -92,17 +184,22 @@ this one file.
    — **do not commit this file to the repo**; treat it like a password.
    Losing it means losing the ability to publish updates to an
    already-published app listing.
-2. Sign the build's output with `apksigner`, or set the keystore
-   path/alias directly in `pysidedeploy.spec` if your installed
-   version supports that (`pyside6-android-deploy --help`).
+2. Point buildozer at it via `android.release_artifact`/
+   `android.keystore`-equivalent keys in `buildozer.spec` (check
+   `buildozer android release --help` for your installed version), or
+   sign the debug APK yourself afterward with `apksigner`.
 
 ## Troubleshooting
 
 | Symptom | Likely cause |
 |---|---|
-| "ANDROID_SDK_ROOT is not set" / "...NDK_ROOT is not set" | Step 4 above didn't take effect — close and reopen your terminal (or restart your computer) after setting it |
-| "pysidedeploy.spec not found" | Step 5 above wasn't done yet, or the generated file wasn't moved into `packaging/android/` |
-| Build fails deep inside `python-for-android` mentioning a missing NDK component | NDK version mismatch — this tooling wants the exact NDK version your Qt release expects, not "whatever's newest"; check `packaging/android/README.md` |
-| `ModuleNotFoundError` for `dnd_app.core`/`dnd_app.data` at runtime on-device | Those folders aren't listed in the spec's "extra files to include" field — see `packaging/android/README.md`'s "App data" note |
-| QML files load a blank screen on-device but work in desktop testing | The QML/`Mimic` import files weren't bundled — same cause as above |
-| Save/Export crashes or silently does nothing on-device | Expected until the storage-permissions item in `packaging/android/README.md` is resolved |
+| `git clone -b 'master', ...` appears in the log even though `buildozer.spec` sets `p4a.branch` | The spec's `p4a.branch` line got removed or the local p4a checkout's remembered URL/branch drifted — re-check `dnd_app/ui_android/buildozer.spec` |
+| A patch fails to apply deep inside the `python3` recipe | You're on p4a `master` (Python 3.14), not the pinned `v2024.01.21` — see "Why this specific p4a version" above |
+| `sh.CommandNotFound: .../python3/config.guess` | A stale, partially-extracted Python source tree from an earlier interrupted build — delete that component's folder under `deployment/.buildozer/.../other_builds/python3/` to force a fresh extract |
+| "ANDROID_SDK_ROOT is not set" / NDK not found | Re-run `packaging\android\setup_buildozer_spec.bat` — it searches and writes the paths directly into `buildozer.spec` rather than relying on env vars |
+| Build succeeds but the app crashes instantly on launch | `p4a_hook.py`'s `before_apk_build` step (bundling `libc++_shared.so`) didn't run or is missing — see "Why `p4a.hook` exists" above |
+| Java compile fails on `QtNative.setEnvironmentVariable` / "cannot find symbol" | `p4a_hook.py`'s `before_apk_assemble` patch didn't run — same section above |
+| Gradle fails at `processDebugMainManifest` | `android.apptheme`'s value got wrapped in quotes — it must NOT be quoted (`android.apptheme = @android:style/Theme.NoTitleBar`, no `"`) |
+| Java compile fails with "package org.qtproject.qt.android.bindings does not exist" | `android.add_jars` is missing, wrong, or has a duplicate entry — check it points at both `Qt6Android.jar` and `Qt6AndroidBindings.jar`, each listed once |
+| `ModuleNotFoundError` for `dnd_app.core`/`dnd_app.data` at runtime on-device | Check `buildozer.spec`'s `source.include_exts`/`source.include_patterns` cover the files that are missing |
+| Save/Export doesn't behave as expected on-device | See the storage-permissions note in `packaging/android/README.md` |
