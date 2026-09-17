@@ -6,7 +6,7 @@ package.domain = org.mimic
 
 source.dir = /mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP
 source.include_exts = py,qml,png,jpg,jpeg,ico,gif,svg,pdf,json,md,ttf
-source.include_patterns = dnd_app/**,main.py,packaging/android/icon.png
+source.include_patterns = packaging/android/icon.png
 source.exclude_dirs = .git,build,dist,deployment,.buildozer,packaging/windows,installer,mimic_app_reference
 source.exclude_patterns = *.whl,*.pyc,*.pyo,buildozer.spec,buildozer.spec.*,pysidedeploy.spec
 
@@ -69,7 +69,7 @@ p4a.hook = /mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/recipe
 android.add_jars = /mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/jar/PySide6/jar/Qt6Android.jar,/mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/jar/PySide6/jar/Qt6AndroidBindings.jar
 
 # Extra args to p4a — matches what pysidedeploy.spec passes
-p4a.extra_args = --private=/tmp/mimic-app-staging --load-local-libs=plugins_platforms_qtforandroid --qt-libs=Quick,Core,Qml,Gui,QuickControls2,OpenGL,Network --icon=/mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/packaging/android/icon.png
+p4a.extra_args = --load-local-libs=plugins_platforms_qtforandroid --qt-libs=Quick,Core,Qml,Gui,QuickControls2,OpenGL,Network --icon=/mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/packaging/android/icon.png
 
 [buildozer]
 log_level = 2
