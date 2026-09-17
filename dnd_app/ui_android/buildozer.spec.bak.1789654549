@@ -16,7 +16,7 @@ source.include_patterns = dnd_app/**,main.py,packaging/android/icon.png
 source.exclude_dirs = .git,build,dist,deployment,.buildozer,packaging/windows,installer,mimic_app_reference
 source.exclude_patterns = *.whl,*.pyc,*.pyo,buildozer.spec,buildozer.spec.*,pysidedeploy.spec
 
-version = 0.2.0
+version = 0.1
 requirements = python3,shiboken6,PySide6
 
 orientation = portrait
@@ -36,9 +36,6 @@ android.permissions = android.permission.INTERNET,android.permission.ACCESS_NETW
 # android:theme=""@android:style/...""  in the generated manifest,
 # which is invalid XML and fails Gradle at processDebugMainManifest.
 android.apptheme = @android:style/Theme.NoTitleBar
-android.debug = 1
-android.release_artifact = apk
-p4a.build_mode = release
 android.icon = /mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/packaging/android/icon.png
 
 # PySide6-specific: this is the Qt bootstrap, not SDL2

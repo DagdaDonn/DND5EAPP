@@ -1,3 +1,6 @@
+import os as _os
+_os.environ["QML_DISABLE_DISK_CACHE"] = "1"
+
 #!/usr/bin/env python3
 """Entry point for MIMIC's touch-first (Qt Quick/QML) UI. Scaffold --
 currently launches straight into the Race step of the creation wizard;
