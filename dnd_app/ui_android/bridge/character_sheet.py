@@ -14,6 +14,7 @@ refresh() is the Android equivalent of that same call.
 """
 import random
 import re
+import sys
 
 from PySide6.QtCore import QObject, Signal, Slot, Property
 
@@ -1285,6 +1286,12 @@ class CharacterSheetBridge(QObject):
             self._maybe_critical_flavor_toast()
             self.statsChanged.emit()
             return
+        # Taking any damage while already at 0 HP is an automatic death
+        # save failure (PHB p.197) -- on top of whatever HP/temp-HP
+        # bookkeeping the hit still does below. Checked before that
+        # bookkeeping runs since dropping to 0 THIS hit doesn't itself
+        # count (only being hit again while ALREADY down does).
+        was_down = char.get("current_hp", 0) <= 0 and not char.get("is_dead")
         remaining = amount
         temp = char.get("temp_hp", 0)
         if temp > 0:
@@ -1292,6 +1299,10 @@ class CharacterSheetBridge(QObject):
             char["temp_hp"] = temp - absorbed
             remaining -= absorbed
         char["current_hp"] = max(0, char.get("current_hp", 0) - remaining)
+        if was_down:
+            self._set_death_saves(self.deathSaveSuccesses, self.deathSaveFailures + 1)
+            if not char.get("is_dead"):
+                self.toastRequested.emit("Damaged at 0 HP -- automatic death save failure")
         self.statsChanged.emit()
 
     @Slot(int)
@@ -1446,6 +1457,14 @@ class CharacterSheetBridge(QObject):
         else:
             current.discard(name)
         self.char["conditions"] = sorted(current)
+        # Conditions like Prone/Restrained/Petrified/Grappled feed into
+        # AC, speed, and advantage/disadvantage via calculator.py's
+        # update_all() -- without this refresh() the toggle only updated
+        # the raw list, so the checkbox and "Active" card would show the
+        # condition but none of its mechanical effects would actually
+        # apply to the sheet (matches setExhaustionLevel's same call
+        # just above).
+        self.ctrl.refresh()
         self.statsChanged.emit()
 
     # ── Actions economy + resources ──────────────────────────────────
@@ -1472,7 +1491,18 @@ class CharacterSheetBridge(QObject):
 
     @Property(list, notify=statsChanged)
     def actionAbilities(self):
-        buckets = build_action_abilities(self.char)
+        try:
+            buckets = build_action_abilities(self.char)
+        except Exception:
+            # A Property getter that raises leaves QML with an empty
+            # list and no visible error at all -- reported as "actions
+            # tab goes blank" with nothing in the UI to explain why.
+            # Logging here at least gets the real traceback into
+            # logcat instead of losing it silently.
+            import traceback
+            print("actionAbilities: build_action_abilities() raised:", file=sys.stderr)
+            traceback.print_exc()
+            return []
         out = []
         for key, label in self._ACTION_BUCKET_LABELS.items():
             items = buckets.get(key, [])
@@ -2254,6 +2284,13 @@ class CharacterSheetBridge(QObject):
         fx = self.char.setdefault("active_effects", [])
         if name not in fx:
             fx.append(name)
+            # Bless/Haste/Shield of Faith/etc. feed their actual bonus
+            # (AC, saves, attack rolls...) into calculator.py's
+            # update_all() -- without this refresh() the spell would
+            # show up in Active Effects but its mechanical bonus would
+            # never actually land on the sheet (same bug/fix as
+            # toggleResourceEffect and setConditionActive above).
+            self.ctrl.refresh()
             self.toastRequested.emit(f"{name} added to Active Effects")
             self.statsChanged.emit()
 
@@ -3258,20 +3295,27 @@ class CharacterSheetBridge(QObject):
     # via the single generic apply_choice() call.
     @Property(list, notify=statsChanged)
     def levelUpClassOptions(self):
-        out = []
-        for c in self.char.get("classes", []):
-            out.append({"name": c["class"], "currentLevel": c["level"], "isNew": False})
-        taken = {c["class"] for c in self.char.get("classes", [])}
+        taken = {c["class"]: c["level"] for c in self.char.get("classes", [])}
         # Matches desktop's _meets_multiclass_reqs: when the optional
         # rule is off, every class is eligible regardless of score.
         enforce = self.char.get("optional_rules", {}).get("multiclass_ability_reqs", True)
         scores = {ab: ability_score(self.char, ab) for ab in ABILITIES}
+        out = []
+        for cname in taken:
+            out.append({"name": cname, "currentLevel": taken[cname], "isNew": False})
         for cname in CLASS_DICT:
             if cname in taken:
                 continue
             met, reason = (True, "") if not enforce else check_multiclass_prereq(cname, scores)
             if met:
                 out.append({"name": cname, "currentLevel": 0, "isNew": True})
+        # Sorted by name, not "taken classes first" -- a class's row
+        # must stay in the same visual slot regardless of whether
+        # multiclassing into it (or leveling/removing another class)
+        # changes which group it's in, or a tap aimed at one class's
+        # button can land on a different class's row that just shifted
+        # into its place.
+        out.sort(key=lambda o: o["name"])
         return out
 
     @Slot(str)
@@ -3284,9 +3328,16 @@ class CharacterSheetBridge(QObject):
         else:
             add_class(self.char, class_name, level=1)
         self.ctrl.refresh()
-        self.toastRequested.emit(f"{class_name} is now level "
-                                  f"{get_class_entry(self.char, class_name)['level']}")
+        msg = (f"{class_name} is now level "
+               f"{get_class_entry(self.char, class_name)['level']}")
+        if self.hasPendingChoices:
+            msg += " -- go to Choices to pick your new options"
+        self.toastRequested.emit(msg)
         self.statsChanged.emit()
+
+    @Property(bool, notify=statsChanged)
+    def hasPendingChoices(self):
+        return bool(self._raw_choices_needed())
 
     def _raw_choices_needed(self):
         # _get_subclass_choices is the single biggest source here despite
@@ -3482,7 +3533,7 @@ class CharacterSheetBridge(QObject):
                 continue
             met, reason = feat_prereq_met(self.char, f)
             out.append({"name": name, "source": f.get("source", ""), "special": f.get("special", ""),
-                        "prereq": f.get("prereq", ""), "metPrereq": met})
+                        "desc": f.get("special", ""), "prereq": f.get("prereq", ""), "metPrereq": met})
         return out
 
     # ── TCE/TCoE Versatility swaps (Eldritch/Martial/Bardic/Sorcerous) ──

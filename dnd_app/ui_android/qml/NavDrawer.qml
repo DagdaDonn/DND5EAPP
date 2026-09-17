@@ -85,9 +85,14 @@ Drawer {
             ToolButton {
                 objectName: "drawerHomeButton"
                 Layout.preferredWidth: actionRow.unit
-                text: "⌂"   // house glyph
+                // A real emoji (Android's universal Noto Color Emoji
+                // font) instead of the plain "⌂" house glyph (U+2302,
+                // Miscellaneous Technical block) -- that symbol isn't
+                // guaranteed present in every device's font stack,
+                // unlike true emoji, which always render.
+                text: "🏠"
                 font.pixelSize: 20
-                onClicked: Window.window.goToStartMenu()
+                onClicked: Window.window.requestGoToStartMenu()
             }
             MButton {
                 Layout.preferredWidth: actionRow.unit * 2
@@ -116,7 +121,10 @@ Drawer {
             ToolButton {
                 objectName: "drawerRefreshButton"
                 Layout.preferredWidth: actionRow.unit
-                text: "⟳"
+                // Same reasoning as drawerHomeButton above: "⟳"
+                // (U+27F3, Supplemental Arrows-A) isn't a true emoji,
+                // so it isn't guaranteed to render everywhere.
+                text: "🔄"
                 font.pixelSize: 18
                 onClicked: Window.window.sheetBridge.refresh()
             }
@@ -179,9 +187,39 @@ Drawer {
                                 visible: navRow.hasSections
                                 Layout.preferredWidth: 40
                                 Layout.fillHeight: true
-                                text: navRow.expanded ? "▾" : "▸"
-                                font.pixelSize: 14
                                 onClicked: navRow.expanded = !navRow.expanded
+
+                                // Drawn instead of "▸"/"▾" text glyphs
+                                // (U+25B8/U+25BE, Geometric Shapes block)
+                                // -- not guaranteed present in every
+                                // Android device's font stack, same
+                                // reasoning as App.qml's hamburger
+                                // button. A right-pointing chevron built
+                                // from two crossed bars, rotated 90°
+                                // when expanded to point down instead --
+                                // never depends on any font.
+                                contentItem: Item {
+                                    anchors.centerIn: parent
+                                    width: 12
+                                    height: 12
+                                    rotation: navRow.expanded ? 90 : 0
+                                    Rectangle {
+                                        width: 7; height: 2; radius: 1
+                                        color: Theme.text2
+                                        anchors.right: parent.right
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        transformOrigin: Item.Right
+                                        rotation: 45
+                                    }
+                                    Rectangle {
+                                        width: 7; height: 2; radius: 1
+                                        color: Theme.text2
+                                        anchors.right: parent.right
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        transformOrigin: Item.Right
+                                        rotation: -45
+                                    }
+                                }
                             }
                         }
 

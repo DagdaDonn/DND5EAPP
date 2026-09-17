@@ -11,6 +11,11 @@ SpinBox {
     id: control
     from: 0
     to: 99
+    // Lets the player type a value directly (e.g. a big damage number)
+    // instead of only tapping +/- one at a time -- the contentItem
+    // below was already built to support this (readOnly: !editable),
+    // it just never got turned on.
+    editable: true
 
     contentItem: TextInput {
         text: control.textFromValue(control.value, control.locale)

@@ -41,25 +41,35 @@ Page {
                     ]
                     delegate: Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 70
+                        Layout.preferredHeight: Math.max(70, statCol.height + 20)
                         radius: 10
                         color: Theme.surf
                         border.color: Theme.border
                         Column {
+                            id: statCol
                             anchors.centerIn: parent
+                            width: parent.width - 12
                             spacing: 4
                             Label {
                                 text: modelData.value
                                 color: Theme.teal2
                                 font.pixelSize: Theme.fsHead
                                 font.bold: true
-                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: parent.width
+                                horizontalAlignment: Text.AlignHCenter
                             }
                             Label {
+                                // "Passive Perception" (and longer labels
+                                // under a bigger font-scale setting) could
+                                // overflow this card's ~1/3-of-screen
+                                // width -- wrap instead of clipping/
+                                // escaping the card's edges.
                                 text: modelData.label
                                 color: Theme.text3
                                 font.pixelSize: Theme.fsSmall
-                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: parent.width
+                                wrapMode: Text.WordWrap
+                                horizontalAlignment: Text.AlignHCenter
                             }
                         }
                         // Only the Initiative card is rollable (a tap-to-
@@ -69,6 +79,61 @@ Page {
                             anchors.fill: parent
                             enabled: modelData.rollBonus !== undefined
                             onClicked: sheetBridge.rollQuickCheck("Initiative", modelData.rollBonus)
+                        }
+                    }
+                }
+            }
+
+            // ── Turn tracker ────────────────────────────────────────────
+            // Action-economy tracker (matches ui_desktop's combat.py
+            // Turn Tracker card) -- lives here rather than on Spells
+            // since it tracks the Action/Bonus Action/Reaction economy
+            // for the whole turn, not just spellcasting; castSpell()'s
+            // bonus-action-spell rule check and the Actions tab's
+            // ability buttons both read the same sheetBridge.turnCounts.
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: turnCol.height + 16
+                radius: 10
+                color: Theme.surf
+                border.color: Theme.border
+
+                ColumnLayout {
+                    id: turnCol
+                    x: 10; y: 8
+                    width: parent.width - 20
+                    spacing: 6
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label { text: "Turn Tracker"; color: Theme.gold; font.pixelSize: Theme.fsSmall; font.bold: true; Layout.fillWidth: true }
+                        MButton {
+                            primary: false
+                            height: 28
+                            text: "New Turn"
+                            onClicked: sheetBridge.newTurn()
+                        }
+                    }
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Label {
+                            text: "Action " + sheetBridge.turnCounts.action + "/" + sheetBridge.turnCounts.actionLimit
+                            color: sheetBridge.turnCounts.action >= sheetBridge.turnCounts.actionLimit ? Theme.text3 : Theme.teal2
+                            font.pixelSize: Theme.fsSmall
+                            font.bold: true
+                        }
+                        Label {
+                            text: "Bonus Action " + sheetBridge.turnCounts.bonusAction + "/1"
+                            color: sheetBridge.turnCounts.bonusAction >= 1 ? Theme.text3 : Theme.teal2
+                            font.pixelSize: Theme.fsSmall
+                            font.bold: true
+                        }
+                        Label {
+                            text: "Reaction " + sheetBridge.turnCounts.reaction + "/1"
+                            color: sheetBridge.turnCounts.reaction >= 1 ? Theme.text3 : Theme.teal2
+                            font.pixelSize: Theme.fsSmall
+                            font.bold: true
                         }
                     }
                 }
@@ -174,6 +239,67 @@ Page {
                             font.pixelSize: Theme.fsSmall
                             height: maxHpSpin.height
                             verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+            }
+
+            // Only shown at 0 HP -- matches ui_desktop's combat.py, where
+            // the death-saves container's visibility is likewise tied
+            // to current_hp <= 0 rather than being a permanent fixture.
+            // Placed directly below HP (rather than after Hit Dice/Wild
+            // Shape) so it's impossible to miss the moment a character
+            // actually drops to 0.
+            Rectangle {
+                visible: sheetBridge.showDeathSaves
+                Layout.fillWidth: true
+                Layout.preferredHeight: deathCol.height + 24
+                radius: 10
+                color: Theme.surf
+                border.color: Theme.crimson
+
+                Column {
+                    id: deathCol
+                    x: 14; y: 12
+                    width: parent.width - 28
+                    spacing: 10
+
+                    Label { text: "Death Saves"; color: Theme.crimson2; font.pixelSize: Theme.fsSmall; font.bold: true }
+                    Label {
+                        text: sheetBridge.deathStatusText
+                        color: Theme.text
+                        font.pixelSize: Theme.fsBody
+                        font.bold: true
+                    }
+                    Row {
+                        spacing: 24
+                        Column {
+                            spacing: 4
+                            Label { text: "Successes"; color: Theme.teal2; font.pixelSize: Theme.fsSmall }
+                            Row {
+                                spacing: 6
+                                Repeater {
+                                    model: 3
+                                    delegate: CheckBox {
+                                        checked: sheetBridge.deathSaveSuccesses > index
+                                        onToggled: sheetBridge.setDeathSaveSuccess(index, checked)
+                                    }
+                                }
+                            }
+                        }
+                        Column {
+                            spacing: 4
+                            Label { text: "Failures"; color: Theme.crimson2; font.pixelSize: Theme.fsSmall }
+                            Row {
+                                spacing: 6
+                                Repeater {
+                                    model: 3
+                                    delegate: CheckBox {
+                                        checked: sheetBridge.deathSaveFailures > index
+                                        onToggled: sheetBridge.setDeathSaveFailure(index, checked)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -290,64 +416,6 @@ Page {
                             enabled: beastPicker.model.length > 0
                                      && (sheetBridge.wildShapeUsesLeft < 0 || sheetBridge.wildShapeUsesLeft > 0)
                             onClicked: sheetBridge.transformWildShape(beastPicker.currentValue)
-                        }
-                    }
-                }
-            }
-
-            // Only shown at 0 HP -- matches ui_desktop's combat.py, where
-            // the death-saves container's visibility is likewise tied
-            // to current_hp <= 0 rather than being a permanent fixture.
-            Rectangle {
-                visible: sheetBridge.showDeathSaves
-                Layout.fillWidth: true
-                Layout.preferredHeight: deathCol.height + 24
-                radius: 10
-                color: Theme.surf
-                border.color: Theme.crimson
-
-                Column {
-                    id: deathCol
-                    x: 14; y: 12
-                    width: parent.width - 28
-                    spacing: 10
-
-                    Label { text: "Death Saves"; color: Theme.crimson2; font.pixelSize: Theme.fsSmall; font.bold: true }
-                    Label {
-                        text: sheetBridge.deathStatusText
-                        color: Theme.text
-                        font.pixelSize: Theme.fsBody
-                        font.bold: true
-                    }
-                    Row {
-                        spacing: 24
-                        Column {
-                            spacing: 4
-                            Label { text: "Successes"; color: Theme.teal2; font.pixelSize: Theme.fsSmall }
-                            Row {
-                                spacing: 6
-                                Repeater {
-                                    model: 3
-                                    delegate: CheckBox {
-                                        checked: sheetBridge.deathSaveSuccesses > index
-                                        onToggled: sheetBridge.setDeathSaveSuccess(index, checked)
-                                    }
-                                }
-                            }
-                        }
-                        Column {
-                            spacing: 4
-                            Label { text: "Failures"; color: Theme.crimson2; font.pixelSize: Theme.fsSmall }
-                            Row {
-                                spacing: 6
-                                Repeater {
-                                    model: 3
-                                    delegate: CheckBox {
-                                        checked: sheetBridge.deathSaveFailures > index
-                                        onToggled: sheetBridge.setDeathSaveFailure(index, checked)
-                                    }
-                                }
-                            }
                         }
                     }
                 }

@@ -6,6 +6,12 @@ package.domain = org.mimic
 
 source.dir = /mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP
 source.include_exts = py,qml,png,jpg,jpeg,ico,gif,svg,pdf,json,md,ttf
+# dnd_app/** and main.py explicit: the --private staging dir (see
+# p4a.extra_args below) needs main.py + dnd_app/ (ui_desktop included --
+# several ui_android bridges import pure-logic pieces of it, e.g.
+# character_sheet.py's theme/flavor-text/level-up-choice-table reuse)
+# copied into it, not just whatever source.include_exts happens to
+# glob from source.dir.
 source.include_patterns = dnd_app/**,main.py,packaging/android/icon.png
 source.exclude_dirs = .git,build,dist,deployment,.buildozer,packaging/windows,installer,mimic_app_reference
 source.exclude_patterns = *.whl,*.pyc,*.pyo,buildozer.spec,buildozer.spec.*,pysidedeploy.spec
@@ -53,11 +59,12 @@ android.qt_libs = Quick,Core,Qml,Gui,QuickControls2,OpenGL,Network
 # Don't run setup.py
 p4a.setup_py = false
 
-# Build hook (deployment/recipes/p4a_hook.py, gitignored/local to each
-# machine -- not tracked in this repo): before_apk_build bundles
-# libc++_shared.so into the dist (Qt refuses to load without it);
-# before_apk_assemble patches the dist's PythonActivity.java to replace
-# QtNative.setEnvironmentVariable(...), removed in Qt 6.11, with
+# Build hook (deployment/recipes/p4a_hook.py -- tracked despite living
+# under gitignored deployment/, see .gitignore's exception for it):
+# before_apk_build bundles libc++_shared.so into the dist (Qt refuses
+# to load without it); before_apk_assemble patches the dist's
+# PythonActivity.java to replace QtNative.setEnvironmentVariable(...),
+# removed in Qt 6.11, with
 # android.system.Os.setenv(...) (p4a v2024.01.21's template still
 # calls the removed method, which fails the Java compile otherwise).
 p4a.hook = /mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/recipes/p4a_hook.py
@@ -68,7 +75,12 @@ p4a.hook = /mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/recipe
 # duplicates break Gradle classpath resolution.
 android.add_jars = /mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/jar/PySide6/jar/Qt6Android.jar,/mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/jar/PySide6/jar/Qt6AndroidBindings.jar
 
-# Extra args to p4a — matches what pysidedeploy.spec passes
+# Extra args to p4a — matches what pysidedeploy.spec passes.
+# --private=/tmp/mimic-app-staging: a real, populated staging directory
+# (must contain main.py + dnd_app/, ui_desktop included) p4a copies the
+# app's Python source from, rather than trusting source.include_* alone
+# to have assembled the right tree in source.dir itself.
+# --icon: matches android.icon above.
 p4a.extra_args = --private=/tmp/mimic-app-staging --load-local-libs=plugins_platforms_qtforandroid --qt-libs=Quick,Core,Qml,Gui,QuickControls2,OpenGL,Network --icon=/mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/packaging/android/icon.png
 
 [buildozer]

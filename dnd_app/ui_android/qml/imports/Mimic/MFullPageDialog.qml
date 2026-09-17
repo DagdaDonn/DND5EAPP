@@ -52,9 +52,37 @@ Popup {
             }
             ToolButton {
                 objectName: "dialogCloseButton"
-                text: "✕"
-                font.pixelSize: 18
+                width: 40
+                height: 40
                 onClicked: root.close()
+
+                // Drawn instead of a "✕" text glyph -- that Unicode
+                // symbol (U+2715, Dingbats block) isn't guaranteed
+                // present in every Android device's font stack, unlike
+                // true emoji. Two crossed bars can never fail to render
+                // since they don't depend on any font (same fix as
+                // App.qml's hamburger button).
+                contentItem: Item {
+                    anchors.centerIn: parent
+                    width: 18
+                    height: 18
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: parent.width
+                        height: 2
+                        radius: 1
+                        color: Theme.text
+                        rotation: 45
+                    }
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: parent.width
+                        height: 2
+                        radius: 1
+                        color: Theme.text
+                        rotation: -45
+                    }
+                }
             }
         }
         Rectangle { Layout.fillWidth: true; height: 1; color: Theme.border }

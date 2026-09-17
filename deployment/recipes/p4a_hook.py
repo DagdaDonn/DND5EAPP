@@ -210,6 +210,42 @@ PRELOAD_QT_LIBS = '''        // Qt 6.11 preload: System.loadLibrary() each Qt li
 '''
 
 
+
+DARK_SYSTEM_BARS_JAVA = '''        // Force dark system bars (status + navigation) to match the app's
+        // dark Material theme. Without this, Qt 6.11's default Android
+        // appearance applies APPEARANCE_LIGHT_NAVIGATION_BARS and the
+        // navigation bar renders white on Android 15+.
+        try {
+            android.view.Window __w = getWindow();
+            if (__w != null) {
+                android.view.View __decor = __w.getDecorView();
+                if (__decor != null) {
+                    if (android.os.Build.VERSION.SDK_INT >= 30) {
+                        android.view.WindowInsetsController __ctrl =
+                            __decor.getWindowInsetsController();
+                        if (__ctrl != null) {
+                            __ctrl.setSystemBarsAppearance(
+                                0,
+                                android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                                    | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+                            );
+                        }
+                    }
+                    int __flags = __decor.getSystemUiVisibility();
+                    __flags &= ~android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                    __flags &= ~android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                    __decor.setSystemUiVisibility(__flags);
+                }
+                __w.setNavigationBarColor(android.graphics.Color.BLACK);
+                __w.setStatusBarColor(android.graphics.Color.BLACK);
+            }
+            android.util.Log.v("PythonActivity", "->> dark system bars applied");
+        } catch (Throwable __t) {
+            android.util.Log.e("PythonActivity", "Failed to set dark system bars: " + __t);
+        }
+'''
+
+
 def _patch_java_file(path):
     p = Path(path)
     if not p.exists():
@@ -220,10 +256,16 @@ def _patch_java_file(path):
     if STALE_REFLECTION_BLOCK in src:
         src = src.replace(STALE_REFLECTION_BLOCK, "")
 
-    src = src.replace("QtNative.setEnvironmentVariable(", "setEnvironmentVariable(")
+    # Ensure QtNative import is present
+    if "import org.qtproject.qt.android.QtNative;" not in src:
+        if "import android.os.Bundle;\n" in src:
+            src = src.replace(
+                "import android.os.Bundle;\n",
+                "import android.os.Bundle;\nimport org.qtproject.qt.android.QtNative;\n",
+                1,
+            )
 
-    if "QtNative." not in src:
-        src = src.replace("import org.qtproject.qt.android.QtNative;\n", "")
+    src = src.replace("QtNative.setEnvironmentVariable(", "setEnvironmentVariable(")
 
     marker = "    @Override\n"
     if (marker in src
@@ -238,6 +280,21 @@ def _patch_java_file(path):
             if opener in src:
                 src = src.replace(opener, opener + PRELOAD_QT_LIBS, 1)
                 break
+
+    # Inject startApplication + dark bars right after super.onCreate()
+    if "dark system bars applied" not in src:
+        log_marker = "        super.onCreate(savedInstanceState);"
+        if log_marker in src:
+            inject = (
+                log_marker + "\n"
+                "        android.util.Log.v(\"PythonActivity\", "
+                "\"->> Returned from super.onCreate(), invoking QtNative.startApplication\");\n"
+                "        QtNative.startApplication(\"org.kivy.android.PythonActivity\", \"\");\n"
+                "        android.util.Log.v(\"PythonActivity\", "
+                "\"->> QtNative.startApplication returned\");\n"
+                + DARK_SYSTEM_BARS_JAVA
+            )
+            src = src.replace(log_marker, inject, 1)
 
     if src != orig:
         p.write_text(src)

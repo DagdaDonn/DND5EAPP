@@ -285,6 +285,9 @@ powershell.exe -NoProfile -Command ^
   "} else {" ^
   "  $c = [regex]::Replace($c, '(?m)^p4a\.setup_py\s*=.*$', '$0' + [Environment]::NewLine + $hookLine)" ^
   "}" ^
+  "$icon = $root + '/packaging/android/icon.png';" ^
+  "$c = [regex]::Replace($c, '(?m)^android\.icon\s*=.*$', 'android.icon = ' + $icon);" ^
+  "$c = [regex]::Replace($c, '--icon=\S+', '--icon=' + $icon);" ^
   "Set-Content -NoNewline $spec $c"
 
 if errorlevel 1 (
@@ -297,7 +300,7 @@ REM  6. Verify
 REM ---------------------------------------------------------------------------
 echo [6/6] Verifying spec...
 echo.
-findstr /B /C:"source.dir" /C:"android.sdk_path" /C:"android.ndk_path" /C:"android.add_jars" /C:"p4a.local_recipes" /C:"p4a.branch" /C:"p4a.hook" /C:"android.apptheme" "%SPEC_WIN%"
+findstr /B /C:"source.dir" /C:"android.sdk_path" /C:"android.ndk_path" /C:"android.add_jars" /C:"android.icon" /C:"p4a.local_recipes" /C:"p4a.branch" /C:"p4a.hook" /C:"p4a.extra_args" /C:"android.apptheme" "%SPEC_WIN%"
 
 echo.
 echo === Done ===

@@ -56,6 +56,7 @@ ApplicationWindow {
     // property.
     property var pendingSpellDetail: ({})
     property var pendingDmRewardDetail: ({})
+    property var pendingFeatDetail: ({})
 
     // Whether a character is actually being viewed right now -- NOT
     // the same as `sheetMode` above, which reads sheetBridge.hasCharacter
@@ -97,7 +98,6 @@ ApplicationWindow {
     Component { id: sheetEquipmentComp; SheetEquipmentScreen {} }
     Component { id: sheetCompanionsComp; SheetCompanionsScreen {} }
     Component { id: sheetFeaturesComp; SheetFeaturesScreen {} }
-    Component { id: sheetLevelUpComp; SheetLevelUpScreen {} }
     Component { id: sheetInfusionsComp; SheetInfusionsScreen {} }
     Component { id: sheetChoicesComp; SheetChoicesScreen {} }
     Component { id: sheetNotesComp; SheetNotesScreen {} }
@@ -141,7 +141,6 @@ ApplicationWindow {
         { label: "Companions", screen: sheetCompanionsComp, enabled: true,
           sections: ["Mounts", "Vehicles", "Summoned Creatures", "Wild Shape"] },
         { label: "Features", screen: sheetFeaturesComp, enabled: true },
-        { label: "Level Up", screen: sheetLevelUpComp, enabled: true },
     ]
     // Infusions only makes sense for Artificers -- everyone else never
     // sees the entry at all, rather than a permanently "(finish
@@ -180,6 +179,22 @@ ApplicationWindow {
         Theme.applyTheme(appSettingsBridge.theme)
         stackView.replace(startMenuComp)
         drawer.close()
+    }
+
+    // Entry point for the drawer's Home button -- goToStartMenu() itself
+    // stays a plain, unconditional navigation (used elsewhere after a
+    // save/load already completes), but jumping to it straight from
+    // mid-wizard or an open sheet used to silently discard every
+    // unsaved edit with no warning at all. saveLoadBridge owns the
+    // shared character dict's "has this changed since the last load/
+    // save" snapshot, so it's asked fresh here rather than cached --
+    // this only ever runs right when the player taps Home.
+    function requestGoToStartMenu() {
+        if (saveLoadBridge.hasUnsavedChanges()) {
+            unsavedChangesDialog.open()
+        } else {
+            goToStartMenu()
+        }
     }
 
     // Start Menu / wizard-completion actions -- kept here (rather than
@@ -259,6 +274,69 @@ ApplicationWindow {
         { label: "Credits", icon: "©", enabled: true, onOpen: function() { creditsDialog.open() } },
     ]
 
+    Popup {
+        id: unsavedChangesDialog
+        objectName: "unsavedChangesDialog"
+        modal: true
+        focus: true
+        width: 300
+        anchors.centerIn: parent
+        background: Rectangle { color: Theme.surf; radius: 12; border.color: Theme.border }
+        Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.8) }
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 12
+            Label {
+                text: "Unsaved Changes"
+                color: Theme.gold
+                font.pixelSize: Theme.fsBody
+                font.bold: true
+            }
+            Label {
+                text: "This character has changes that haven't been saved yet. Leaving now will lose them."
+                color: Theme.text2
+                font.pixelSize: Theme.fsSmall
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            MButton {
+                objectName: "unsavedSaveAndExitButton"
+                Layout.fillWidth: true
+                text: "Save & Exit"
+                onClicked: {
+                    if (saveLoadBridge.saveCharacter()) {
+                        unsavedChangesDialog.close()
+                        goToStartMenu()
+                    }
+                    // On failure saveLoadBridge already raised its own
+                    // error (see errorMessage/toastRequested) -- leave
+                    // the dialog open so the player can fix it (most
+                    // likely an incomplete-wizard validation failure)
+                    // or fall back to Discard/Cancel instead.
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                MButton {
+                    objectName: "unsavedDiscardButton"
+                    Layout.fillWidth: true
+                    primary: false
+                    text: "Discard & Exit"
+                    onClicked: { unsavedChangesDialog.close(); goToStartMenu() }
+                }
+                MButton {
+                    objectName: "unsavedCancelButton"
+                    Layout.fillWidth: true
+                    primary: false
+                    text: "Cancel"
+                    onClicked: unsavedChangesDialog.close()
+                }
+            }
+        }
+    }
+
     MFullPageDialog {
         id: settingsDialog
         objectName: "settingsDialog"
@@ -295,9 +373,29 @@ ApplicationWindow {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             anchors.leftMargin: 4
-            text: "☰"
-            font.pixelSize: 20
+            width: 44
+            height: 44
             onClicked: drawer.open()
+
+            // Drawn instead of a "☰" text glyph -- that Unicode symbol
+            // (U+2630) isn't covered by every Android device's font
+            // stack (confirmed missing on a real device, unlike true
+            // emoji glyphs elsewhere in this app, which ride Android's
+            // universal Noto Color Emoji font). Three plain bars can
+            // never fail to render since they don't depend on any font.
+            contentItem: Column {
+                anchors.centerIn: parent
+                spacing: 4
+                Repeater {
+                    model: 3
+                    Rectangle {
+                        width: 22
+                        height: 2
+                        radius: 1
+                        color: Theme.text
+                    }
+                }
+            }
         }
         Label {
             // Centered on the whole bar (not just the space left of the

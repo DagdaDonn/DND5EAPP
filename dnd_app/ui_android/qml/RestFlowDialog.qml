@@ -30,8 +30,27 @@ MFullPageDialog {
     property int page: 0
 
     function start(type) {
+        // Resets EVERY piece of this dialog's state, not just the
+        // preview/options/hit-dice fields -- a rest started again
+        // shortly after a previous one (or one backed out of via the
+        // phone's back button mid-flow, before its option queue ever
+        // finished) used to carry over stale selectedOptionKinds/
+        // optionQueueIndex/pendingOptionKind, which could leave the
+        // second rest's follow-up option queue reading leftover state
+        // from the first. open() itself is deliberately never preceded
+        // by a defensive close() here -- that's exactly the "two
+        // Popups transitioning at once" timing hazard NavDrawer's own
+        // rest buttons already had to work around once (see its
+        // onClicked comment); open() is a no-op when already open, so
+        // resetting every property below and calling it unconditionally
+        // refreshes the visible state either way, with no transition
+        // race to depend on.
         restType = type
         page = 0
+        selectedOptionKinds = []
+        optionQueueIndex = 0
+        pendingOptionKind = ""
+        pendingAstralSkill = ""
         previewLabel.text = sheetBridge.restPreviewLines(type).join("\n")
         optionsRepeater.model = sheetBridge.restOptions(type)
         hitDiceSpin.to = sheetBridge.hitDiceAvailableForRest

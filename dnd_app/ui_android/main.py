@@ -6,6 +6,18 @@ see dnd_app/ui_android/README.md for the overall plan.
 import os
 import sys
 
+# --- Vendored pure-Python deps -----------------------------------------
+# The Android bundler doesn't install pypdf into site-packages, so we
+# ship it inside the app package and add it to sys.path at startup.
+# pypdf's internal `from pypdf.x import y` imports rely on finding
+# itself under its canonical name, so the path shim (rather than a
+# renamed package) is the correct approach.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_VENDOR = os.path.abspath(os.path.join(_HERE, "..", "_vendor"))
+if os.path.isdir(_VENDOR) and _VENDOR not in sys.path:
+    sys.path.insert(0, _VENDOR)
+# -------------------------------------
+
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)

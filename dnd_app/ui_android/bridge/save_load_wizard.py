@@ -88,6 +88,21 @@ class SaveLoadBridge(QObject):
         self.char = char
         self._error = ""
         self._last_saved_path = ""
+        self._clean_snapshot = self._serialize()
+
+    def _serialize(self) -> str:
+        # A full JSON snapshot rather than a per-field "dirty" flag
+        # threaded through every mutating slot across every bridge
+        # (there are dozens, across race/ability/class/equipment
+        # wizards and the sheet itself) -- comparing this against a
+        # fresh snapshot at "has anything changed since the last
+        # load/save" time is the one place that needs to know, and it
+        # can't miss a mutation the way a manually-set flag could.
+        return json.dumps(self.char, sort_keys=True, default=str)
+
+    @Slot(result=bool)
+    def hasUnsavedChanges(self) -> bool:
+        return self._serialize() != self._clean_snapshot
 
     @Property(str, constant=True)
     def documentsDir(self):
@@ -208,6 +223,7 @@ class SaveLoadBridge(QObject):
             self._set_error(f"Couldn't save: {e}")
             return False
         self._set_error("")
+        self._clean_snapshot = self._serialize()
         self.characterSaved.emit()
         self.savedListChanged.emit()
         self.toastRequested.emit(f"\U0001f4be Saved to {os.path.basename(filepath)}")
@@ -285,6 +301,11 @@ class SaveLoadBridge(QObject):
         # saveCharacter()'s "inside our own folder" check and silently
         # overwrite that other character's file with this one's data.
         self._last_saved_path = loaded_path
+        # A fresh "nothing's changed yet" baseline for hasUnsavedChanges()
+        # -- otherwise a character freshly loaded (or a brand-new one)
+        # would immediately compare as "dirty" against whatever the
+        # PREVIOUS character's snapshot was.
+        self._clean_snapshot = self._serialize()
         self.characterLoaded.emit()
 
     @Slot(str, result=bool)

@@ -172,61 +172,6 @@ Page {
                 }
             }
 
-            // ── Turn tracker ────────────────────────────────────────────
-            // First slice of ui_desktop's action-economy tracker
-            // (combat.py's Turn Tracker card) -- just enough to drive
-            // castSpell()'s real bonus-action-spell rule check. Not
-            // ported yet: Sneak Attack toggle, freeform active-effect
-            // add/remove, and surfacing this same tracker on the
-            // Actions tab's ability buttons too.
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: turnCol.height + 16
-                radius: 10
-                color: Theme.surf
-                border.color: Theme.border
-
-                ColumnLayout {
-                    id: turnCol
-                    x: 10; y: 8
-                    width: parent.width - 20
-                    spacing: 6
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Label { text: "Turn Tracker"; color: Theme.gold; font.pixelSize: Theme.fsSmall; font.bold: true; Layout.fillWidth: true }
-                        MButton {
-                            primary: false
-                            height: 28
-                            text: "New Turn"
-                            onClicked: sheetBridge.newTurn()
-                        }
-                    }
-                    Flow {
-                        Layout.fillWidth: true
-                        spacing: 8
-                        Label {
-                            text: "Action " + sheetBridge.turnCounts.action + "/" + sheetBridge.turnCounts.actionLimit
-                            color: sheetBridge.turnCounts.action >= sheetBridge.turnCounts.actionLimit ? Theme.text3 : Theme.teal2
-                            font.pixelSize: Theme.fsSmall
-                            font.bold: true
-                        }
-                        Label {
-                            text: "Bonus Action " + sheetBridge.turnCounts.bonusAction + "/1"
-                            color: sheetBridge.turnCounts.bonusAction >= 1 ? Theme.text3 : Theme.teal2
-                            font.pixelSize: Theme.fsSmall
-                            font.bold: true
-                        }
-                        Label {
-                            text: "Reaction " + sheetBridge.turnCounts.reaction + "/1"
-                            color: sheetBridge.turnCounts.reaction >= 1 ? Theme.text3 : Theme.teal2
-                            font.pixelSize: Theme.fsSmall
-                            font.bold: true
-                        }
-                    }
-                }
-            }
-
             // ── Slots ─────────────────────────────────────────────────
             Label {
                 id: slotsAnchor
