@@ -13,8 +13,138 @@ python-for-android hook:
 """
 import os
 import shutil
+from fnmatch import fnmatch
+import subprocess
 from pathlib import Path
 from pythonforandroid.logger import info, warning
+
+
+BUNDLE_PRUNE_PATTERNS = [
+    "libav*.so",
+    "libQt6Designer*.so",
+    "libQt6Pdf*.so",
+    "libQt6Charts*.so",
+    "libQt6Graphs*.so",
+    "libQt6DataVisualization*.so",
+    "libQt6ShaderTools*.so",
+    "libQt6Quick3D*.so",
+    "libQt63D*.so",
+    "libQt6Location*.so",
+    "libQt6Positioning*.so",
+    "libQt6Web*.so",
+    "libQt6VirtualKeyboard*.so",
+    "libQt6Multimedia*.so",
+    "libQt6SpatialAudio*.so",
+    "libQt6Test*.so",
+    "libQt6Sql*.so",
+    "libQt6Help*.so",
+    "libQt6Nfc*.so",
+    "libQt6Sensors*.so",
+    "libQt6Serial*.so",
+    "libQt6RemoteObjects*.so",
+    "libQt6Scxml*.so",
+    "libQt6StateMachine*.so",
+    "libQt6TextToSpeech*.so",
+    "libQt6UiTools*.so",
+    "libQt6PrintSupport*.so",
+    "libQt6Concurrent*.so",
+    "libQt6DBus*.so",
+    "libQt6QuickControls2Imagine*.so",
+    "libQt6QuickControls2Universal*.so",
+    "libQt6QuickControls2FluentWinUI3*.so",
+    "libQt6QuickControls2iOS*.so",
+    "libQt6QuickControls2MacOS*.so",
+    "libQt6QuickControls2Windows*.so",
+    "libqml_QtQuick_Controls_FluentWinUI3_*.so",
+    "libqml_QtQuick_Controls_Imagine_*.so",
+    "libqml_QtQuick_Controls_Universal_*.so",
+    "libplugins_assetimporters_*.so",
+]
+
+
+def _patch_blacklist(bl_path: Path) -> None:
+    """Append bundle prune patterns to blacklist.txt, deduped."""
+    if not bl_path.exists():
+        return
+    try:
+        lines = bl_path.read_text().splitlines()
+    except Exception as e:
+        warning(f"p4a_hook: could not read {bl_path}: {e}")
+        return
+    existing = set(lines)
+    added = 0
+    for pat in BUNDLE_PRUNE_PATTERNS:
+        if pat not in existing:
+            lines.append(pat)
+            existing.add(pat)
+            added += 1
+    if added:
+        bl_path.write_text("\n".join(lines) + "\n")
+        info(f"p4a_hook: added {added} patterns to {bl_path}")
+
+
+# Qt modules the app does not use. Add to this list as you confirm more
+# are unused. Any library NOT on this list is kept unconditionally, so
+# the default is safe: unknown libraries stay.
+PRUNE_QT_PATTERNS = [
+    # FFmpeg stubs
+    "libav*.so",
+    # Qt Designer
+    "libQt6Designer*.so",
+    # Qt PDF
+    "libQt6Pdf*.so",
+    # Charts, Graphs, DataVisualization
+    "libQt6Charts*.so",
+    "libQt6Graphs*.so",
+    "libQt6DataVisualization*.so",
+    # ShaderTools, 3D, 3D Render
+    "libQt6ShaderTools*.so",
+    "libQt6Quick3D*.so",
+    "libQt63D*.so",
+    # Location, Positioning
+    "libQt6Location*.so",
+    "libQt6Positioning*.so",
+    # Web*
+    "libQt6Web*.so",
+    # VirtualKeyboard
+    "libQt6VirtualKeyboard*.so",
+    # Multimedia, SpatialAudio
+    "libQt6Multimedia*.so",
+    "libQt6SpatialAudio*.so",
+    # Misc unused
+    "libQt6Test*.so",
+    "libQt6Sql*.so",
+    "libQt6Help*.so",
+    "libQt6Nfc*.so",
+    "libQt6Sensors*.so",
+    "libQt6Serial*.so",
+    "libQt6RemoteObjects*.so",
+    "libQt6Scxml*.so",
+    "libQt6StateMachine*.so",
+    "libQt6TextToSpeech*.so",
+    "libQt6UiTools*.so",
+    "libQt6PrintSupport*.so",
+    "libQt6Concurrent*.so",
+    "libQt6DBus*.so",
+    # Qt Quick Controls styles we don't use (keep Material, Basic, Fusion)
+    "libQt6QuickControls2Imagine*.so",
+    "libQt6QuickControls2Universal*.so",
+    "libQt6QuickControls2FluentWinUI3*.so",
+    "libQt6QuickControls2iOS*.so",
+    "libQt6QuickControls2MacOS*.so",
+    "libQt6QuickControls2Windows*.so",
+    # QML plugin for the FluentWinUI3 style
+    "libqml_QtQuick_Controls_FluentWinUI3_*.so",
+    "libqml_QtQuick_Controls_Imagine_*.so",
+    "libqml_QtQuick_Controls_Universal_*.so",
+    # Assimp (3D asset importer)
+    "libplugins_assetimporters_*.so",
+]
+
+
+def is_pruned(name: str) -> bool:
+    return any(fnmatch(name, pat) for pat in PRUNE_QT_PATTERNS)
+
 
 
 HELPER_METHOD = '''    public void setEnvironmentVariable(String key, String value) {
@@ -171,6 +301,8 @@ def _copy_all_runtime_libs(dist):
         if not so.is_file() or so.is_symlink():
             return
         name = so.name
+        if is_pruned(name):
+            return
         if name in seen:
             return
         target = dest / name
@@ -209,8 +341,48 @@ def _copy_all_runtime_libs(dist):
 
     info(f"p4a_hook: copied {copied} native .so files into {dest}")
 
+    # Strip debug symbols from every .so in libs/. Recovers 50-70% of
+    # the size of each library with zero functionality risk.
+    ndk = os.environ.get("ANDROIDNDK")
+    if not ndk:
+        warning("p4a_hook: ANDROIDNDK unset; skipping strip")
+        return
+
+    strip_candidates = list(Path(ndk).rglob("llvm-strip"))
+    if not strip_candidates:
+        warning("p4a_hook: llvm-strip not found in NDK; skipping strip")
+        return
+    strip_bin = str(strip_candidates[0])
+
+    # Do NOT strip these — Python loads them directly and strip has
+    # been observed to break some shiboken entry points.
+    SKIP_STRIP = {
+        "libshiboken6.abi3.so",
+        "libpyside6.abi3.so",
+        "libpyside6qml.abi3.so",
+    }
+
+    info(f"p4a_hook: stripping .so files with {strip_bin}")
+    stripped = 0
+    for so in dest.glob("*.so"):
+        if so.name in SKIP_STRIP:
+            continue
+        try:
+            subprocess.run(
+                [strip_bin, "--strip-unneeded", str(so)],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            stripped += 1
+        except Exception as e:
+            warning(f"p4a_hook: strip failed on {so}: {e}")
+    info(f"p4a_hook: stripped {stripped} .so files")
+
 
 def before_apk_build(toolchain, *args, **kwargs):
+    dist = _dist_dir(toolchain)
+    _patch_blacklist(dist / "blacklist.txt")
     info("p4a_hook: before_apk_build — ensuring libc++_shared.so and Qt libs are present")
     dist = _dist_dir(toolchain)
     info(f"p4a_hook: dist = {dist}")
@@ -237,6 +409,11 @@ def before_apk_build(toolchain, *args, **kwargs):
         warning("p4a_hook: ANDROIDNDK not set; cannot locate libc++_shared.so")
 
     _copy_all_runtime_libs(dist)
+
+    # qt bootstrap source blacklist (regenerated on re-clone)
+    p4a_root = dist.parent.parent.parent.parent  # .../python-for-android
+    qt_bl = p4a_root / "pythonforandroid/bootstraps/qt/build/blacklist.txt"
+    _patch_blacklist(qt_bl)
 
 
 def before_apk_assemble(toolchain, *args, **kwargs):
