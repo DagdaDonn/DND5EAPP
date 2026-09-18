@@ -176,28 +176,33 @@ STALE_REFLECTION_BLOCK = '''        android.util.Log.v("PythonActivity", "->> Re
 '''
 
 
-PRELOAD_QT_LIBS = '''        // Qt 6.11 preload: System.loadLibrary() each Qt library in dependency
-        // order so its JNI_OnLoad runs on the main thread with JVM cached.
+PRELOAD_QT_LIBS = '''        // Qt 6.11 preload: System.loadLibrary("Qt6Core_arm64-v8a") only.
+        //
+        // Qt6Core_arm64-v8a.so is the sole Qt library in this APK that
+        // exports JNI_OnLoad (confirmed with readelf -sW: it has
+        // JNI_OnLoad@@Qt_6; QuickTemplates2 / QuickControls2 /
+        // QuickControls2Impl / etc. have no JNI_OnLoad symbol at all).
+        //
+        // Android's JNI machinery calls JNI_OnLoad for *every* library
+        // in a System.loadLibrary call's DT_NEEDED closure, even when
+        // the target library and its deps are already loaded. Since
+        // every Qt library here transitively NEEDEDs libQt6Core, each
+        // loadLibrary() call re-enters Qt6Core's JNI_OnLoad, which is
+        // not idempotent and returns JNI_ERR on the second and
+        // subsequent invocations. Android then reports the failure
+        // against whichever library was the subject of the loadLibrary
+        // call -- hence "JNI_ERR returned from JNI_OnLoad in
+        // libQt6QuickTemplates2_arm64-v8a.so" even though that library
+        // has no JNI_OnLoad. That error caused the QML runtime to be
+        // half-initialized and QtNative.startApplication() to never
+        // reach the point where the p4a bootstrap runs, so Python
+        // never logged its "Initializing Python for Android" line.
+        //
+        // All other Qt libraries resolve via DT_NEEDED when
+        // QtNative.startApplication() / the platform plugin
+        // (libplugins_platforms_qtforandroid_arm64-v8a.so) loads them.
         String[] qtPreloadLibs = {
             "Qt6Core_arm64-v8a",
-            "Qt6Network_arm64-v8a",
-            "Qt6Gui_arm64-v8a",
-            "Qt6OpenGL_arm64-v8a",
-            "Qt6Qml_arm64-v8a",
-            "Qt6QmlModels_arm64-v8a",
-            "Qt6QmlWorkerScript_arm64-v8a",
-            "Qt6QmlMeta_arm64-v8a",
-            "Qt6QmlNetwork_arm64-v8a",
-            "Qt6QuickTemplates2_arm64-v8a",
-            "Qt6QuickControls2Impl_arm64-v8a",
-            "Qt6QuickControls2_arm64-v8a",
-            "Qt6QuickLayouts_arm64-v8a",
-            "Qt6QuickEffects_arm64-v8a",
-            "Qt6QuickShapes_arm64-v8a",
-            "Qt6QuickVectorImage_arm64-v8a",
-            "Qt6QuickDialogs2Utils_arm64-v8a",
-            "Qt6QuickDialogs2_arm64-v8a",
-            "Qt6Quick_arm64-v8a",
         };
         for (String qtLib : qtPreloadLibs) {
             try {
@@ -253,6 +258,25 @@ def _patch_java_file(path):
         return False
     src = p.read_text()
     orig = src
+
+    # Remove the old 19-library preload block if a prior run of this
+    # hook injected it. Keyed on the string only the old block has.
+    # Without this, the "preloaded " guard below sees the old block's
+    # log line and skips injecting the new single-library version.
+    #
+    # Requires two consecutive brace-only lines (the catch block's
+    # close, then the for-loop's own close) so the match consumes the
+    # whole for-loop rather than stopping at the first inner "}" --
+    # stopping early would leave a dangling "}" that prematurely closes
+    # onCreate() itself and breaks compilation.
+    if '"Qt6QuickTemplates2_arm64-v8a",' in src:
+        src = re.sub(
+            r"\n[ \t]*// Qt 6\.11 preload:.*?\n[ \t]*\}\n[ \t]*\}\n",
+            "\n",
+            src,
+            count=1,
+            flags=re.DOTALL,
+        )
 
     if STALE_REFLECTION_BLOCK in src:
         src = src.replace(STALE_REFLECTION_BLOCK, "")
@@ -486,6 +510,13 @@ def _copy_all_runtime_libs(dist):
         "libshiboken6.abi3.so",
         "libpyside6.abi3.so",
         "libpyside6qml.abi3.so",
+        # Diagnostic: this is the one Qt library whose System.loadLibrary()
+        # preload consistently fails with "JNI_ERR returned from
+        # JNI_OnLoad" (reproduced across multiple cold launches), while
+        # every other stripped libQt6*.so preloads fine. Excluding it from
+        # stripping to test whether --strip-unneeded is corrupting
+        # something JNI_OnLoad depends on. Revert if this doesn't fix it.
+        "libQt6QuickTemplates2_arm64-v8a.so",
     }
 
     info(f"p4a_hook: stripping .so files with {strip_bin}")
@@ -596,3 +627,13 @@ def before_apk_assemble(toolchain, *args, **kwargs):
         info(f"p4a_hook: PATCHED {target}")
     else:
         info(f"p4a_hook: no change needed {target}")
+
+    _src = target.read_text()
+    for needle in ("Qt6Core_arm64-v8a",
+                   "invoking QtNative.startApplication",
+                   "QtNative.startApplication returned"):
+        if needle not in _src:
+            raise SystemExit(
+                f"FATAL: p4a_hook patch missing from compiled PythonActivity.java: {needle!r}"
+            )
+    info("p4a_hook: PythonActivity.java contains all expected patches")

@@ -36,9 +36,15 @@ android.permissions = android.permission.INTERNET,android.permission.ACCESS_NETW
 # android:theme=""@android:style/...""  in the generated manifest,
 # which is invalid XML and fails Gradle at processDebugMainManifest.
 android.apptheme = @android:style/Theme.NoTitleBar
-android.debug = 1
-android.release_artifact = apk
-p4a.build_mode = release
+# android.debug=1 + android.release_artifact=apk + p4a.build_mode=release
+# were briefly added here and are a contradictory combination -- reverted.
+# The last confirmed-working build (packaging/android/snapshots/
+# working-20260917-1224/) did not have them. A release build task can
+# enable R8/ProGuard minification, which strips/renames classes by
+# default; the hook's reflection call (Class.forName(
+# "org.qtproject.qt.android.QtNative")) would silently break under that
+# without an explicit keep rule. Prime suspect for "this used to work
+# and now doesn't" until proven otherwise by a clean debug build.
 android.icon = /mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/packaging/android/icon.png
 
 # PySide6-specific: this is the Qt bootstrap, not SDL2
