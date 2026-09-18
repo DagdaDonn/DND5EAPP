@@ -281,8 +281,14 @@ def _patch_java_file(path):
                 src = src.replace(opener, opener + PRELOAD_QT_LIBS, 1)
                 break
 
-    # Inject startApplication + dark bars right after super.onCreate()
-    if "dark system bars applied" not in src:
+    # Inject the reflection-based QtNative.startApplication call AND the
+    # dark-bars block after super.onCreate. QtLoader.loadQtLibraries()
+    # fails on some OEM ROMs (it looks for QtQuick.abi3.so at a path
+    # that Android may not populate). The reflection call bypasses Qt's
+    # own loader and invokes the JNI start entry directly.
+    # Guard keys off the reflection log line, not the dark-bars line,
+    # so a partial prior injection doesn't cause this to be skipped.
+    if "invoking QtNative.startApplication" not in src:
         log_marker = "        super.onCreate(savedInstanceState);"
         if log_marker in src:
             inject = (
@@ -483,6 +489,27 @@ def before_apk_build(toolchain, *args, **kwargs):
 def before_apk_assemble(toolchain, *args, **kwargs):
     info("p4a_hook: before_apk_assemble — patching PythonActivity.java")
     dist = _dist_dir(toolchain)
+
+    # p4a's own "Copying libs" step (which runs after our before_apk_build)
+    # copies every .so from libs_collections/ into libs/arm64-v8a/, ignoring
+    # our prune list. Remove the pruned files here, after that step has run
+    # and before Gradle packages them.
+    libs_dir = dist / "libs" / "arm64-v8a"
+    if libs_dir.exists():
+        pruned = []
+        for so in libs_dir.glob("*.so"):
+            if is_pruned(so.name):
+                try:
+                    size_kb = so.stat().st_size // 1024
+                    so.unlink()
+                    pruned.append(f"{so.name} ({size_kb} KB)")
+                except Exception as e:
+                    warning(f"p4a_hook: failed to remove {so}: {e}")
+        if pruned:
+            info(f"p4a_hook: removed {len(pruned)} pruned .so files from libs/")
+        else:
+            info("p4a_hook: no pruned .so files to remove from libs/")
+
     target = dist / "src/main/java/org/kivy/android/PythonActivity.java"
     if not target.exists():
         warning(f"p4a_hook: PythonActivity.java not found at {target}")

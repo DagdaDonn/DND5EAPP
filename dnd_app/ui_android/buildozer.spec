@@ -22,7 +22,7 @@ requirements = python3,shiboken6,PySide6
 orientation = portrait
 fullscreen = 0
 
-android.api = 31
+android.api = 33
 android.minapi = 21
 android.ndk_api = 21
 android.sdk_path = /home/eobrien/.pyside6_android_deploy/android-sdk
