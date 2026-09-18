@@ -333,13 +333,15 @@ def _copy_all_runtime_libs(dist):
       - PySide6/Qt/lib/       — libQt6*.so, libav*.so, FFmpeg stubs
       - PySide6/Qt/plugins/   — Qt plugins (platform, images, styles, etc.)
       - PySide6/Qt/qml/       — QML plugins (each module has a plugin .so)
-      - PySide6/*.so          — top-level bindings (libpyside6.abi3.so, etc.)
+      - PySide6/*.so          — top-level bindings: lib*.so (e.g.
+                                libpyside6.abi3.so) AND the Qt*.abi3.so
+                                Python-extension-shaped shims (QtCore.abi3.so,
+                                QtQuick.abi3.so, etc.) -- despite the name,
+                                Qt 6.11's Android bootstrap loads the latter
+                                natively via System.loadLibrary() too, so
+                                both are copied and neither should be
+                                stripped of symbols later in this function.
       - shiboken6/*.so        — libshiboken6.abi3.so
-
-    Two kinds of .so file get filtered out from the top-level dirs:
-      - Qt*.abi3.so           — Python extension modules, loaded by Python's
-                                import system, not by Android's loader
-      - Shiboken.abi3.so      — same, Python extension module
     """
     dest = dist / "libs" / "arm64-v8a"
     dest.mkdir(parents=True, exist_ok=True)
@@ -436,6 +438,17 @@ def _copy_all_runtime_libs(dist):
     stripped = 0
     for so in dest.glob("*.so"):
         if so.name in SKIP_STRIP:
+            continue
+        # Also skip every Qt*.abi3.so shim (QtCore.abi3.so, QtQuick.abi3.so,
+        # etc.) -- despite the ".abi3" suffix looking like a plain Python
+        # extension module, the top_level_lib_only loop above copies these
+        # into libs/arm64-v8a/ precisely because Qt 6.11's Android
+        # bootstrap calls System.loadLibrary() on them by name during
+        # onCreate, same as any other native library. Stripping one has
+        # produced "fail loading Qt*.abi3.so" at runtime -- same risk
+        # class as the shiboken/pyside files above, just not caught by
+        # the original SKIP_STRIP set.
+        if fnmatch(so.name, "Qt*.abi3.so"):
             continue
         try:
             subprocess.run(
