@@ -16,7 +16,7 @@ source.include_patterns = dnd_app/**,main.py,packaging/android/icon.png
 source.exclude_dirs = .git,build,dist,deployment,.buildozer,packaging/windows,installer,mimic_app_reference
 source.exclude_patterns = *.whl,*.pyc,*.pyo,buildozer.spec,buildozer.spec.*,pysidedeploy.spec
 
-version = 0.2.0
+version = 0.2.2
 requirements = python3,shiboken6,PySide6
 
 orientation = portrait

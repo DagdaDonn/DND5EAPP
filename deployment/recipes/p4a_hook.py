@@ -14,6 +14,7 @@ python-for-android hook:
 import os
 import shutil
 from fnmatch import fnmatch
+import re
 import subprocess
 from pathlib import Path
 from pythonforandroid.logger import info, warning
@@ -315,6 +316,39 @@ def _patch_java_file(path):
     return False
 
 
+def _patch_libs_xml(dist):
+    """Fixes a real bug in p4a's own bootstraps/qt/build/templates/libs.tmpl.xml
+    (confirmed against p4a 2024.01.21's actual source and QtLoader.java's
+    real source in qtbase, both LGPL/public): its generated libs.xml's
+    load_local_libs array registers each Qt module's Python binding as
+    "<abi>;Qt<Module>.abi3.so" -- already ending in ".so". QtLoader's
+    getLibrariesFullPaths() only prepends "lib" to a name that does NOT
+    already end in ".so", so it looks up that literal, unprefixed name in
+    the app's real extracted native-library directory -- a name Android's
+    PackageManager never actually extracts there (it only extracts
+    lib*.so-pattern entries from an APK's lib/<abi>/ directory), causing
+    "QtLoader: Can't find '.../QtQuick.abi3.so'" and a hard app-launch
+    failure. The adjacent libshiboken6.abi3.so/libpyside6.abi3.so/
+    libpyside6qml.abi3.so entries in the same template are already
+    correctly prefixed and untouched by this.
+
+    _copy_all_runtime_libs() above renames the matching files on disk to
+    add the same "lib" prefix; this rewrites libs.xml so QtLoader's own
+    lookup name actually matches what's really on disk.
+    """
+    libs_xml = dist / "src" / "main" / "res" / "values" / "libs.xml"
+    if not libs_xml.exists():
+        warning(f"p4a_hook: libs.xml not found at {libs_xml}, skipping")
+        return False
+    src = libs_xml.read_text()
+    orig = src
+    src = re.sub(r";(Qt\w+\.abi3\.so)\b", r";lib\1", src)
+    if src != orig:
+        libs_xml.write_text(src)
+        return True
+    return False
+
+
 def _dist_dir(toolchain):
     try:
         dist = getattr(toolchain, "_dist", None)
@@ -368,11 +402,11 @@ def _copy_all_runtime_libs(dist):
         "_python_bundle/site-packages/shiboken6",
     ]
 
-    def _copy_one(so: Path):
+    def _copy_one(so: Path, rename_to: str = None):
         nonlocal copied
         if not so.is_file() or so.is_symlink():
             return
-        name = so.name
+        name = rename_to or so.name
         if is_pruned(name):
             return
         if name in seen:
@@ -407,9 +441,29 @@ def _copy_all_runtime_libs(dist):
         # during QtActivity.onCreate. Despite the ".abi3" suffix (which
         # normally indicates a Python extension), Qt treats these as
         # native libraries it must find in libs/arm64-v8a/. Copy them.
-        info(f"p4a_hook: scanning (Qt*.abi3.so) {src_dir}")
+        #
+        # Renamed with a "lib" prefix on the way in (QtQuick.abi3.so ->
+        # libQtQuick.abi3.so) -- confirmed against QtLoader.java's real
+        # source (org.qtproject.qt.android.QtLoader, part of qtbase,
+        # LGPL) and p4a's own qt bootstrap template
+        # (bootstraps/qt/build/templates/libs.tmpl.xml): Android's
+        # PackageManager only ever extracts lib*.so entries from an
+        # APK's lib/<abi>/ directory into the app's real native
+        # library dir at install time -- an unprefixed name never gets
+        # extracted there at all, regardless of extractNativeLibs.
+        # QtLoader's own getLibrariesFullPaths() only adds a "lib"
+        # prefix to a name that does NOT already end in ".so"; p4a's
+        # libs.tmpl.xml registers these particular entries as
+        # "Qt<module>.abi3.so" (already ending in ".so", unlike the
+        # correctly-prefixed libshiboken6.abi3.so/libpyside6.abi3.so
+        # entries right next to them in the same template) -- so
+        # QtLoader looks up that literal, never-extracted, unprefixed
+        # name and fails with "Can't find '.../QtQuick.abi3.so'".
+        # _patch_libs_xml() below rewrites those specific entries in
+        # the generated libs.xml to match this renamed file.
+        info(f"p4a_hook: scanning (Qt*.abi3.so, renamed with lib prefix) {src_dir}")
         for so in src_dir.glob("Qt*.abi3.so"):
-            _copy_one(so)
+            _copy_one(so, rename_to="lib" + so.name)
 
     info(f"p4a_hook: copied {copied} native .so files into {dest}")
 
@@ -439,16 +493,17 @@ def _copy_all_runtime_libs(dist):
     for so in dest.glob("*.so"):
         if so.name in SKIP_STRIP:
             continue
-        # Also skip every Qt*.abi3.so shim (QtCore.abi3.so, QtQuick.abi3.so,
-        # etc.) -- despite the ".abi3" suffix looking like a plain Python
-        # extension module, the top_level_lib_only loop above copies these
-        # into libs/arm64-v8a/ precisely because Qt 6.11's Android
-        # bootstrap calls System.loadLibrary() on them by name during
-        # onCreate, same as any other native library. Stripping one has
-        # produced "fail loading Qt*.abi3.so" at runtime -- same risk
-        # class as the shiboken/pyside files above, just not caught by
-        # the original SKIP_STRIP set.
-        if fnmatch(so.name, "Qt*.abi3.so"):
+        # Also skip every libQt*.abi3.so shim (libQtCore.abi3.so,
+        # libQtQuick.abi3.so, etc. -- renamed with a "lib" prefix by
+        # _copy_all_runtime_libs() above so Android's PackageManager
+        # actually extracts them) -- despite the ".abi3" suffix looking
+        # like a plain Python extension module, Qt 6.11's Android
+        # bootstrap calls System.loadLibrary()/reads them as real native
+        # libraries during onCreate. Stripping one has produced "fail
+        # loading Qt*.abi3.so" at runtime -- same risk class as the
+        # shiboken/pyside files above, just not caught by the original
+        # SKIP_STRIP set.
+        if fnmatch(so.name, "libQt*.abi3.so"):
             continue
         try:
             subprocess.run(
@@ -522,6 +577,16 @@ def before_apk_assemble(toolchain, *args, **kwargs):
             info(f"p4a_hook: removed {len(pruned)} pruned .so files from libs/")
         else:
             info("p4a_hook: no pruned .so files to remove from libs/")
+
+    # See _patch_libs_xml()'s docstring: p4a's own libs.tmpl.xml registers
+    # each Qt module's Python binding under an unprefixed name QtLoader
+    # can never actually find on disk. Patched here, as late as possible
+    # (right before Gradle reads resources), same reasoning as patching
+    # PythonActivity.java at this same hook point rather than earlier.
+    if _patch_libs_xml(dist):
+        info("p4a_hook: PATCHED libs.xml (added missing lib prefix to Qt module abi3.so entries)")
+    else:
+        info("p4a_hook: no change needed in libs.xml")
 
     target = dist / "src/main/java/org/kivy/android/PythonActivity.java"
     if not target.exists():
