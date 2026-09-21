@@ -176,7 +176,33 @@ STALE_REFLECTION_BLOCK = '''        android.util.Log.v("PythonActivity", "->> Re
 '''
 
 
-PRELOAD_QT_LIBS = ''
+PRELOAD_QT_LIBS = '''        // Qt 6.11 preload: System.loadLibrary("Qt6Core_arm64-v8a") only.
+        //
+        // Qt6Core_arm64-v8a.so exports the JNI_OnLoad that caches the
+        // JavaVM pointer in QJniEnvironmentPrivate::javaVM. Every other
+        // Qt library's JNI_OnLoad depends on that pointer being non-null.
+        // System.load() only invokes JNI_OnLoad for the named library,
+        // not for its DT_NEEDED dependencies -- so if QtLoader gets to
+        // libQt6Quick before anything has explicitly loaded Qt6Core,
+        // Qt6Quick's JNI_OnLoad dereferences a null javaVM and segfaults.
+        // Preloading Qt6Core here makes that pointer valid first.
+        //
+        // Loading it exactly once (not in a loop over 19 libs) is what
+        // avoids re-entering Qt6Core's JNI_OnLoad, which is not idempotent
+        // and returns JNI_ERR on the second invocation.
+        String[] qtPreloadLibs = {
+            "Qt6Core_arm64-v8a",
+        };
+        for (String qtLib : qtPreloadLibs) {
+            try {
+                System.loadLibrary(qtLib);
+                android.util.Log.v("PythonActivity", "->> preloaded " + qtLib);
+            } catch (Throwable t) {
+                android.util.Log.e("PythonActivity", "Failed to preload " + qtLib + ": " + t);
+            }
+        }
+
+'''
 
 
 
@@ -606,7 +632,8 @@ def before_apk_assemble(toolchain, *args, **kwargs):
         info(f"p4a_hook: no change needed {target}")
 
     _src = target.read_text()
-    for needle in ("invoking QtNative.startApplication",
+    for needle in ("Qt6Core_arm64-v8a",
+                   "invoking QtNative.startApplication",
                    "QtNative.startApplication returned"):
         if needle not in _src:
             raise SystemExit(
