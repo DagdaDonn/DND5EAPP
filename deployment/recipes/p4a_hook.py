@@ -176,44 +176,7 @@ STALE_REFLECTION_BLOCK = '''        android.util.Log.v("PythonActivity", "->> Re
 '''
 
 
-PRELOAD_QT_LIBS = '''        // Qt 6.11 preload: System.loadLibrary("Qt6Core_arm64-v8a") only.
-        //
-        // Qt6Core_arm64-v8a.so is the sole Qt library in this APK that
-        // exports JNI_OnLoad (confirmed with readelf -sW: it has
-        // JNI_OnLoad@@Qt_6; QuickTemplates2 / QuickControls2 /
-        // QuickControls2Impl / etc. have no JNI_OnLoad symbol at all).
-        //
-        // Android's JNI machinery calls JNI_OnLoad for *every* library
-        // in a System.loadLibrary call's DT_NEEDED closure, even when
-        // the target library and its deps are already loaded. Since
-        // every Qt library here transitively NEEDEDs libQt6Core, each
-        // loadLibrary() call re-enters Qt6Core's JNI_OnLoad, which is
-        // not idempotent and returns JNI_ERR on the second and
-        // subsequent invocations. Android then reports the failure
-        // against whichever library was the subject of the loadLibrary
-        // call -- hence "JNI_ERR returned from JNI_OnLoad in
-        // libQt6QuickTemplates2_arm64-v8a.so" even though that library
-        // has no JNI_OnLoad. That error caused the QML runtime to be
-        // half-initialized and QtNative.startApplication() to never
-        // reach the point where the p4a bootstrap runs, so Python
-        // never logged its "Initializing Python for Android" line.
-        //
-        // All other Qt libraries resolve via DT_NEEDED when
-        // QtNative.startApplication() / the platform plugin
-        // (libplugins_platforms_qtforandroid_arm64-v8a.so) loads them.
-        String[] qtPreloadLibs = {
-            "Qt6Core_arm64-v8a",
-        };
-        for (String qtLib : qtPreloadLibs) {
-            try {
-                System.loadLibrary(qtLib);
-                android.util.Log.v("PythonActivity", "->> preloaded " + qtLib);
-            } catch (Throwable t) {
-                android.util.Log.e("PythonActivity", "Failed to preload " + qtLib + ": " + t);
-            }
-        }
-
-'''
+PRELOAD_QT_LIBS = ''
 
 
 
@@ -258,6 +221,20 @@ def _patch_java_file(path):
         return False
     src = p.read_text()
     orig = src
+
+    # Remove any previously-injected preload block. The preload approach
+    # re-enters Qt6Core's JNI_OnLoad, which QtLoader also triggers,
+    # producing "JNI_ERR returned from JNI_OnLoad" on whichever Qt
+    # library QtLoader happens to be loading when the re-entry trips.
+    # QtLoader handles the load order correctly on its own; we let it.
+    if "// Qt 6.11 preload:" in src:
+        src = re.sub(
+            r"\n[ \t]*// Qt 6\.11 preload:.*?\n[ \t]*\}\n",
+            "\n",
+            src,
+            count=1,
+            flags=re.DOTALL,
+        )
 
     # Remove the old 19-library preload block if a prior run of this
     # hook injected it. Keyed on the string only the old block has.
@@ -629,8 +606,7 @@ def before_apk_assemble(toolchain, *args, **kwargs):
         info(f"p4a_hook: no change needed {target}")
 
     _src = target.read_text()
-    for needle in ("Qt6Core_arm64-v8a",
-                   "invoking QtNative.startApplication",
+    for needle in ("invoking QtNative.startApplication",
                    "QtNative.startApplication returned"):
         if needle not in _src:
             raise SystemExit(
