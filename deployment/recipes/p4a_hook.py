@@ -626,7 +626,8 @@ def before_apk_assemble(toolchain, *args, **kwargs):
         info(f"p4a_hook: no change needed {target}")
 
     _src = target.read_text()
-    for needle in ("invoking QtNative.startApplication",
+    for needle in ("Qt6Core_arm64-v8a",
+                   "invoking QtNative.startApplication",
                    "QtNative.startApplication returned"):
         if needle not in _src:
             raise SystemExit(
