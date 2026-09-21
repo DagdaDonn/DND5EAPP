@@ -82,7 +82,17 @@ p4a.hook = /mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/recipe
 # org.qtproject.qt.android.bindings.QtActivity and Java compile fails
 # with "package does not exist". Do not list a jar here twice --
 # duplicates break Gradle classpath resolution.
-android.add_jars = /mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/jar/PySide6/jar/Qt6Android.jar,/mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/jar/PySide6/jar/Qt6AndroidBindings.jar
+#
+# Qt6AndroidQuick.jar (org.qtproject.qt.android.QtQuickView and friends,
+# from qtdeclarative's src/quick/platform/android/jar/) was missing
+# here. libQt6Quick_arm64-v8a.so's own JNI_OnLoad (qandroidquickviewembedding.cpp,
+# confirmed against real Qt 6.11.2 source) unconditionally calls
+# QtAndroidQuickViewEmbedding::registerNatives(), which registers native
+# methods against org.qtproject.qt.android.QtQuickView -- if that class
+# isn't on the classpath, registerNatives() fails, JNI_OnLoad returns
+# JNI_ERR, and QtLoader aborts its whole load sequence (see BUILD_APK.md's
+# troubleshooting table). Added below.
+android.add_jars = /mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/jar/PySide6/jar/Qt6Android.jar,/mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/jar/PySide6/jar/Qt6AndroidBindings.jar,/mnt/c/Users/OBRIET/Dev/Projects/Extra/DND/DND5EAPP/deployment/jar/PySide6/jar/Qt6AndroidQuick.jar
 
 # Extra args to p4a — matches what pysidedeploy.spec passes.
 # --private=/tmp/mimic-app-staging: a real, populated staging directory

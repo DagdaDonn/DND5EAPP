@@ -176,20 +176,20 @@ STALE_REFLECTION_BLOCK = '''        android.util.Log.v("PythonActivity", "->> Re
 '''
 
 
+# Tried removing this preload entirely (relying on QtLoader's own
+# DT_NEEDED-driven load order) -- that regressed to an earlier failure
+# point than the Qt6Core-only preload below reaches, so some amount of
+# eager preloading is empirically load-bearing, not just insurance.
+# Restored to Qt6Core-only.
+#
+# Qt6Core_arm64-v8a.so is the sole Qt library in this APK confirmed
+# (via readelf -sW) to export a real JNI_OnLoad; QuickTemplates2 /
+# QuickControls2 / QuickControls2Impl / etc. have none. With this
+# preloaded, QtLoader's own subsequent native-side loadLibraries() call
+# gets further (past the old QuickTemplates2 failure) before hitting a
+# JNI_ERR on libQt6Quick_arm64-v8a.so itself instead -- still
+# unresolved, under active investigation.
 PRELOAD_QT_LIBS = '''        // Qt 6.11 preload: System.loadLibrary("Qt6Core_arm64-v8a") only.
-        //
-        // Qt6Core_arm64-v8a.so exports the JNI_OnLoad that caches the
-        // JavaVM pointer in QJniEnvironmentPrivate::javaVM. Every other
-        // Qt library's JNI_OnLoad depends on that pointer being non-null.
-        // System.load() only invokes JNI_OnLoad for the named library,
-        // not for its DT_NEEDED dependencies -- so if QtLoader gets to
-        // libQt6Quick before anything has explicitly loaded Qt6Core,
-        // Qt6Quick's JNI_OnLoad dereferences a null javaVM and segfaults.
-        // Preloading Qt6Core here makes that pointer valid first.
-        //
-        // Loading it exactly once (not in a loop over 19 libs) is what
-        // avoids re-entering Qt6Core's JNI_OnLoad, which is not idempotent
-        // and returns JNI_ERR on the second invocation.
         String[] qtPreloadLibs = {
             "Qt6Core_arm64-v8a",
         };
@@ -248,33 +248,27 @@ def _patch_java_file(path):
     src = p.read_text()
     orig = src
 
-    # Remove any previously-injected preload block. The preload approach
-    # re-enters Qt6Core's JNI_OnLoad, which QtLoader also triggers,
-    # producing "JNI_ERR returned from JNI_OnLoad" on whichever Qt
-    # library QtLoader happens to be loading when the re-entry trips.
-    # QtLoader handles the load order correctly on its own; we let it.
-    if "// Qt 6.11 preload:" in src:
-        src = re.sub(
-            r"\n[ \t]*// Qt 6\.11 preload:.*?\n[ \t]*\}\n",
-            "\n",
-            src,
-            count=1,
-            flags=re.DOTALL,
-        )
-
-    # Remove the old 19-library preload block if a prior run of this
-    # hook injected it. Keyed on the string only the old block has.
-    # Without this, the "preloaded " guard below sees the old block's
-    # log line and skips injecting the new single-library version.
+    # Remove any previously-injected preload block -- the old 19-library
+    # version, or the later Qt6Core-only version -- if a prior run of
+    # this hook injected one. Both variants re-enter Qt6Core's
+    # JNI_OnLoad (see PRELOAD_QT_LIBS's comment above); QtLoader handles
+    # the real load order correctly on its own, so we no longer inject
+    # anything here, but a dist patched by an earlier hook version still
+    # has the old block sitting in its PythonActivity.java and needs it
+    # stripped back out.
     #
     # Requires two consecutive brace-only lines (the catch block's
     # close, then the for-loop's own close) so the match consumes the
     # whole for-loop rather than stopping at the first inner "}" --
-    # stopping early would leave a dangling "}" that prematurely closes
-    # onCreate() itself and breaks compilation.
-    if '"Qt6QuickTemplates2_arm64-v8a",' in src:
+    # stopping early leaves a dangling "}" that prematurely closes
+    # onCreate() itself and breaks compilation. Both preload variants
+    # share this same for+try/catch shape, so one regex handles either
+    # -- a narrower check keyed on the 19-library block's own array
+    # contents doesn't fire for the Qt6Core-only variant and was
+    # silently leaving IT unremoved.
+    if "// Qt 6.11 preload:" in src:
         src = re.sub(
-            r"\n[ \t]*// Qt 6\.11 preload:.*?\n[ \t]*\}\n[ \t]*\}\n",
+            r"\n[ \t]*// Qt 6\.11 preload:.*?\n[ \t]*\}\n[ \t]*\}\n\n*",
             "\n",
             src,
             count=1,
@@ -632,8 +626,7 @@ def before_apk_assemble(toolchain, *args, **kwargs):
         info(f"p4a_hook: no change needed {target}")
 
     _src = target.read_text()
-    for needle in ("Qt6Core_arm64-v8a",
-                   "invoking QtNative.startApplication",
+    for needle in ("invoking QtNative.startApplication",
                    "QtNative.startApplication returned"):
         if needle not in _src:
             raise SystemExit(

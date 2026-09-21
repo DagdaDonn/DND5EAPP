@@ -99,9 +99,15 @@ Fields worth knowing about if you ever need to adjust it by hand
   (without it, `QJniEnvironment::getJniEnv()` can segfault on a null
   `JavaVM*` — see the same section, this fix is still being verified).
 - **`android.add_jars`** — the Qt Android platform plugin's jars
-  (`Qt6Android.jar`, `Qt6AndroidBindings.jar`). Missing or wrong: the
-  Java compile fails with "package ... does not exist". Listed twice:
-  Gradle's classpath resolution breaks.
+  (`Qt6Android.jar`, `Qt6AndroidBindings.jar`, `Qt6AndroidQuick.jar`).
+  Missing or wrong: the Java compile fails with "package ... does not
+  exist" for the first two, or (for `Qt6AndroidQuick.jar`) a
+  runtime-only failure -- `libQt6Quick_arm64-v8a.so`'s own `JNI_OnLoad`
+  registers native methods against `org.qtproject.qt.android.QtQuickView`,
+  which lives in that jar; without it, `JNI_OnLoad` returns `JNI_ERR`
+  and QtLoader aborts its whole load sequence, well after the compile
+  step already succeeded. Listed twice: Gradle's classpath resolution
+  breaks.
 - **`android.apptheme`** — must NOT be quoted
   (`android.apptheme = @android:style/Theme.NoTitleBar`). Wrapping the
   value in quotes produces `android:theme=""@android:style/...""` in

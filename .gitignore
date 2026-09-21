@@ -32,9 +32,15 @@ deployment/recipes/*
 
 # Android build artifacts / tooling state
 *.apk
+*.apk.idsig
 *.aab
 *.ap_
 .gradle/
+
+# Stray backup files various build scripts drop next to what they patch
+# (e.g. an icon-stripping step's *.pre-strip.bak). Same class of issue
+# as buildozer.spec.bak.* below -- transient, not source.
+*.pre-strip.bak
 
 # dnd_app/ui_android/buildozer.spec is hand-edited and IS committed
 # (see installer/android/build_apk.sh/.bat) -- only a stray copy at the
