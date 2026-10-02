@@ -101,6 +101,19 @@ for future builds unless you move the repo or reinstall the SDK/NDK.
 cache) — both exist right now; treat `build_android.bat`/`.sh` at the
 repo root as the current one if the two ever give different results.
 
+**Clean release build:** `clean_build_android.bat` (double-click it on
+Windows) / `clean_build_android.sh` (WSL) does a from-a-clean-slate
+`buildozer android release`. It kills leftover buildozer/p4a/Gradle/aapt2
+processes, clears the dist's Gradle outputs, old `bin/*.aab`/`*.apk` and
+`/tmp/mimic-app-staging`, and resets the dist's `PythonActivity.java` to
+p4a's template so `p4a_hook.py` re-patches it from scratch. It then
+dry-runs the hook's Java patch, stages the repo-root `main.py` plus
+`dnd_app/`, builds (log in `/tmp/mimic-build-*.log`) and, if bundletool
+is at `/tmp/bt/bundletool.jar`, writes
+`dist/MIMIC-<version>-arm64-v8a-release.apk`. It keeps
+`libs/arm64-v8a`, `_python_bundle*` and `other_builds`, so it is not a
+full 30-45 minute rebuild.
+
 **The first build is slow** — buildozer downloads and compiles a full
 Python-for-Android distribution (CPython, OpenSSL, sqlite, libffi, the
 Qt bootstrap) from source; 20-40 minutes isn't unusual. Later builds
