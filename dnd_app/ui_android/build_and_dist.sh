@@ -32,8 +32,9 @@ if [ -z "$APK_PATH" ]; then
     exit 1
 fi
 
+APP_VERSION="$(sed -nE 's/^version[[:space:]]*=[[:space:]]*//p' "$SCRIPT_DIR/buildozer.spec" | head -1)"
 mkdir -p "$PROJECT_ROOT/dist"
-DEST="$PROJECT_ROOT/dist/MIMIC-0.1-arm64-v8a-debug.apk"
+DEST="$PROJECT_ROOT/dist/MIMIC-${APP_VERSION:-unknown}-arm64-v8a-debug.apk"
 cp "$APK_PATH" "$DEST"
 
 echo

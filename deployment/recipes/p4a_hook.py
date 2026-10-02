@@ -241,6 +241,16 @@ DARK_SYSTEM_BARS_JAVA = '''        // Force dark system bars (status + navigatio
 '''
 
 
+# Resolves mainLib for QtNative.startApplication(). The absolute path
+# only exists when Android extracts native libs (true today: minapi 21);
+# with minSdk >= 23 bundletool stops extracting, so fall back to the
+# soname -- dlopen() matches the already-loaded library by name.
+MAIN_LIB_JAVA = (
+    '            String __mainLib = getApplicationInfo().nativeLibraryDir + "/libmain_arm64-v8a.so";\n'
+    '            if (!new java.io.File(__mainLib).exists()) __mainLib = "libmain_arm64-v8a.so";\n'
+)
+
+
 def _patch_java_file(path):
     p = Path(path)
     if not p.exists():
@@ -278,6 +288,21 @@ def _patch_java_file(path):
     if STALE_REFLECTION_BLOCK in src:
         src = src.replace(STALE_REFLECTION_BLOCK, "")
 
+    # The dist is reused across builds, so a PythonActivity.java patched
+    # by an earlier hook version still has the swapped-argument call (see
+    # the startApplication comment below). Its "invoking
+    # QtNative.startApplication" log line would make the injection guard
+    # skip it, so migrate the call in place.
+    src = src.replace(
+        '            __m.invoke(null, "org.kivy.android.PythonActivity", "");\n',
+        MAIN_LIB_JAVA + '            __m.invoke(null, "", __mainLib);\n',
+    )
+    # ...and one patched by the version that fixed the arguments but had
+    # no soname fallback yet (MAIN_LIB_JAVA's first line on its own).
+    _main_lib_line = MAIN_LIB_JAVA.splitlines(keepends=True)[0]
+    if _main_lib_line in src and "new java.io.File(__mainLib)" not in src:
+        src = src.replace(_main_lib_line, MAIN_LIB_JAVA, 1)
+
     # Ensure QtNative import is present
     if "import org.qtproject.qt.android.QtNative;" not in src:
         if "import android.os.Bundle;\n" in src:
@@ -308,6 +333,22 @@ def _patch_java_file(path):
     # fails on some OEM ROMs (it looks for QtQuick.abi3.so at a path
     # that Android may not populate). The reflection call bypasses Qt's
     # own loader and invokes the JNI start entry directly.
+    #
+    # Real signature (confirmed against qtbase 6.11.2's actual
+    # QtNative.java): static void startApplication(String params,
+    # String mainLib) -- params FIRST, mainLib SECOND. This was
+    # previously called as m.invoke(null, "org.kivy.android.PythonActivity", "")
+    # -- an Activity class name in the params slot and an empty mainLib.
+    # Internally it builds qtParams = mainLib + " " + params, which
+    # native code parses to find the library to dlopen -- with mainLib
+    # empty, it resolved to "org.kivy.android.PythonActivity" and threw
+    # "dlopen failed: library \"org.kivy.android.PythonActivity\" not
+    # found" on a background thread, silently (caught internally, no
+    # crash) preventing the actual native entry point from ever running
+    # -- window drawn, process alive, Python never invoked: exactly the
+    # black-screen-no-crash symptom. mainLib must be the main library's
+    # real absolute path, matching QtLoader.loadMainLibrary()'s own
+    # resolution (getApkNativeLibrariesDir() + "lib" + name + ".so").
     # Guard keys off the reflection log line, not the dark-bars line,
     # so a partial prior injection doesn't cause this to be skipped.
     if "invoking QtNative.startApplication" not in src:
@@ -318,10 +359,11 @@ def _patch_java_file(path):
                 "        android.util.Log.v(\"PythonActivity\", "
                 "\"->> Returned from super.onCreate(), invoking QtNative.startApplication\");\n"
                 "        try {\n"
+                + MAIN_LIB_JAVA +
                 "            java.lang.reflect.Method __m = Class.forName(\"org.qtproject.qt.android.QtNative\")\n"
                 "                .getDeclaredMethod(\"startApplication\", String.class, String.class);\n"
                 "            __m.setAccessible(true);\n"
-                "            __m.invoke(null, \"org.kivy.android.PythonActivity\", \"\");\n"
+                "            __m.invoke(null, \"\", __mainLib);\n"
                 "        } catch (Throwable __t) {\n"
                 "            android.util.Log.e(\"PythonActivity\", \"Failed to call QtNative.startApplication: \" + __t);\n"
                 "        }\n"
@@ -628,9 +670,15 @@ def before_apk_assemble(toolchain, *args, **kwargs):
     _src = target.read_text()
     for needle in ("Qt6Core_arm64-v8a",
                    "invoking QtNative.startApplication",
+                   '__m.invoke(null, "", __mainLib)',
                    "QtNative.startApplication returned"):
         if needle not in _src:
             raise SystemExit(
                 f"FATAL: p4a_hook patch missing from compiled PythonActivity.java: {needle!r}"
             )
+    if 'invoke(null, "org.kivy.android.PythonActivity"' in _src:
+        raise SystemExit(
+            "FATAL: PythonActivity.java still has the swapped-argument "
+            "QtNative.startApplication call (black screen at runtime)"
+        )
     info("p4a_hook: PythonActivity.java contains all expected patches")

@@ -55,8 +55,12 @@ class EquipmentWizardBridge(QObject):
             self._selected_option = {}
             self._picks = {}
             self._last_class = cls_name
+        # Re-derived from the dict for the same New Character reason as
+        # ClassWizardBridge.refresh().
+        self._confirmed_once = bool(self.char.get("character_created"))
         self.groupsChanged.emit()
         self.backgroundGearChanged.emit()
+        self.equipmentConfirmed.emit()
 
     @Property(str, notify=groupsChanged)
     def className(self):
@@ -140,6 +144,11 @@ class EquipmentWizardBridge(QObject):
     # ── Commit into the character dict (mirrors Step5Equipment.collect()) ──
     @Slot(result=bool)
     def confirmEquipment(self) -> bool:
+        # Last line of defense against marking a character finished with
+        # earlier steps never confirmed (see ClassWizardBridge.refresh()).
+        if not (self.char.get("race") and self.char.get("classes")
+                and self.char.get("name")):
+            return False
         chosen_items = []
         for gi, group in enumerate(self._groups):
             options = group["options"]

@@ -88,10 +88,16 @@ class ClassWizardBridge(QObject):
         self._background_feat = (self.char.get("_choices") or {}).get("background_feat", "")
         classes = self.char.get("classes") or []
         self._class_name = classes[0]["class"] if classes else ""
+        # Re-derived from the dict (only confirmClass() writes "classes"),
+        # same as raceConfirmedOnce -- otherwise it stays True from the
+        # previous character after New Character, leaving the drawer's
+        # Equipment step unlocked on a blank character.
+        self._confirmed_once = bool(classes)
         self.nameChanged.emit()
         self.alignmentChanged.emit()
         self.backgroundChanged.emit()
         self.classChanged.emit()
+        self.classConfirmed.emit()
 
     # ── Static lists ───────────────────────────────────────────────
     @Property(QObject, constant=True)

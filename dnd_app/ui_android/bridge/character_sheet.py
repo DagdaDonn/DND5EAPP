@@ -1510,9 +1510,16 @@ class CharacterSheetBridge(QObject):
                 continue
             out.append({
                 "bucket": label,
+                # Indexed rather than unpacked: spell entries (racial
+                # innate spells -- Firbolg, Aasimar, Tiefling, ...) come
+                # back as 4-tuples with the spell dict appended, and a
+                # strict 3-way unpack blanked the Actions and Abilities
+                # tabs for any such character.
                 "items": [
-                    {"name": name, "desc": desc, "source": source}
-                    for (name, desc, source) in items
+                    {"name": entry[0],
+                     "desc": entry[1] if len(entry) > 1 else "",
+                     "source": entry[2] if len(entry) > 2 else ""}
+                    for entry in items
                 ],
             })
         return out
