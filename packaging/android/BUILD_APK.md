@@ -62,7 +62,7 @@ a sign you did something wrong.
    ```
    packaging\android\setup_buildozer_spec.bat
    ```
-   It searches common install locations, downloads the wheels for you
+   (or `packaging/android/setup_buildozer_spec.sh` from WSL). It searches common install locations, downloads the wheels for you
    if step 6 was skipped, extracts the Qt Android jars from those
    wheels, and rewrites `buildozer.spec`'s `source.dir`,
    `android.sdk_path`, `android.ndk_path`, `p4a.local_recipes`,
@@ -88,28 +88,20 @@ for future builds unless you move the repo or reinstall the SDK/NDK.
 
 ## Every time you want a new build
 
-`build_android.bat` (Windows, at the repo root) / `build_android.sh`
-(macOS/Linux/WSL) run the build and copy the resulting APK to
-`dist/MIMIC-0.1-arm64-v8a-debug.apk`. They wrap
-`dnd_app/ui_android/build_and_dist.sh`, which runs
-`python3.11 -m buildozer android debug` and locates the newest APK
-(from `dnd_app/ui_android/bin/`, or `.buildozer/` as a fallback).
+All the build scripts live in `installer/android/`. Double-click the
+`.bat` on Windows; each one opens WSL and runs the `.sh` beside it in an
+interactive bash, so `~/.bashrc`'s pyenv setup applies, and the window
+stays open at the end.
 
-`installer/android/build_apk.bat`/`.sh` do the same underlying
-`buildozer android debug` call with slightly different path handling
-(hardcoded project paths, a `.buildozer` symlink into the shared
-cache) — both exist right now; treat `build_android.bat`/`.sh` at the
-repo root as the current one if the two ever give different results.
-
-**Clean release build:** `clean_build_android.bat` (double-click it on
-Windows) / `clean_build_android.sh` (WSL) does a from-a-clean-slate
-`buildozer android release`. It kills leftover buildozer/p4a/Gradle/aapt2
-processes, clears the dist's Gradle outputs, old `bin/*.aab`/`*.apk` and
+**`clean_build_android.bat`** (WSL: `clean_build_android.sh`) is the
+build. It kills leftover buildozer/p4a/Gradle/aapt2 processes, clears
+the dist's Gradle outputs, old `bin/*.aab`/`*.apk` and
 `/tmp/mimic-app-staging`, and resets the dist's `PythonActivity.java` to
 p4a's template so `p4a_hook.py` re-patches it from scratch. It then
 dry-runs the hook's Java patch, stages the repo-root `main.py` plus
-`dnd_app/`, builds (log in `/tmp/mimic-build-*.log`) and, if bundletool
-is at `/tmp/bt/bundletool.jar`, writes
+`dnd_app/`, runs `buildozer android release` (log in
+`/tmp/mimic-build-*.log`) and, if bundletool is at
+`/tmp/bt/bundletool.jar`, writes
 `dist/MIMIC-<version>-arm64-v8a-release.apk`. It keeps
 `libs/arm64-v8a`, `_python_bundle*` and `other_builds`, so it is not a
 full 30-45 minute rebuild.
@@ -124,8 +116,7 @@ cache doesn't know those changed).
 
 When it finishes, **copy the APK to your phone** (USB cable, email it
 to yourself, a cloud drive — any way you'd normally move a file over)
-and tap it there to install, or run `install_android.bat`/`.sh` (also
-at the repo root) if `adb` and a connected/authorized device are
+and tap it there to install, or run `installer/android/install_android.bat`/`.sh` if `adb` and a connected/authorized device are
 available — it uninstalls any previous copy and installs the fresh
 one (`adb install -r` alone is also fine if the icon/package didn't
 change). Your phone will warn about installing from an unknown source

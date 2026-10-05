@@ -22,7 +22,7 @@
 #      bundletool, see deployment/make-android-apk.sh)
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 UI="$ROOT/dnd_app/ui_android"
 SPEC="$UI/buildozer.spec"
 HOOK="$ROOT/deployment/recipes/p4a_hook.py"
@@ -32,7 +32,21 @@ JAVA_REL="src/main/java/org/kivy/android/PythonActivity.java"
 TEMPLATE="$P4A/pythonforandroid/bootstraps/qt/build/$JAVA_REL"
 STAGE="/tmp/mimic-app-staging"
 LOG="/tmp/mimic-build-$(date +%Y%m%d-%H%M%S).log"
-PY="${PYTHON:-python3.11}"
+# python3.11 is a pyenv install on the build machine; pyenv's PATH setup
+# usually lives in ~/.bashrc, which non-interactive shells (wsl.exe
+# bash -lc ...) skip. Fall back to pyenv's own paths so this works either way.
+find_python311() {
+    if [ -n "${PYTHON:-}" ]; then echo "$PYTHON"; return; fi
+    local root="${PYENV_ROOT:-$HOME/.pyenv}" c
+    # Each candidate is test-run: a pyenv shim can exist yet fail
+    # ("pyenv: python3.11: command not found") if 3.11 isn't selected.
+    for c in "$(command -v python3.11 2>/dev/null)" "$root"/versions/3.11*/bin/python3.11 \
+             "$root/shims/python3.11" /usr/local/bin/python3.11 /usr/bin/python3.11; do
+        [ -n "$c" ] && [ -x "$c" ] && "$c" -c 'import sys' >/dev/null 2>&1 \
+            && { echo "$c"; return; }
+    done
+    return 1
+}
 
 step() { echo; echo "=== $* ==="; }
 die()  { echo "ERROR: $*" >&2; exit 1; }
@@ -40,9 +54,10 @@ die()  { echo "ERROR: $*" >&2; exit 1; }
 # buildozer.spec hardcodes this tree's absolute path (source.dir, hook,
 # recipes, jars, icon). Building from any other checkout would silently
 # compile *that* path's code instead of this one's.
-SPEC_SRC="$(sed -nE 's/^source\.dir[[:space:]]*=[[:space:]]*//p' "$SPEC" | head -1)"
+SPEC_SRC="$(sed -nE 's/^source\.dir[[:space:]]*=[[:space:]]*//p' "$SPEC" | head -1 | tr -d '\r' | sed 's/[[:space:]]*$//')"
 [ "$SPEC_SRC" = "$ROOT" ] || die "buildozer.spec source.dir is '$SPEC_SRC' but this script lives in '$ROOT'"
-command -v "$PY" >/dev/null || die "$PY not found"
+PY="$(find_python311)" || die "python3.11 not found on PATH or under ${PYENV_ROOT:-$HOME/.pyenv}"
+echo "Python: $PY"
 command -v rsync >/dev/null || die "rsync not found (sudo apt install rsync)"
 
 step "1/6 Stopping leftover build processes"
