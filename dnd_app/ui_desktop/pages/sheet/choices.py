@@ -440,6 +440,7 @@ class ChoicesMixin:
         """Called when choices are made in the LevelUpPanel."""
         self.ctrl.refresh()
         self._mark_dirty()
+        self._auto_save()
 
     def _install_choices_pulse(self):
         """Pulsing dot (the theme's own accent color) on the Choices tab while level-up choices are

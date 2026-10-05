@@ -254,17 +254,116 @@ Flickable {
         onOpened: deleteFolderField.text = ""
     }
 
+    // ── Status: "All changes saved" / "Unsaved changes" ───────────────
+    // hasUnsavedChanges() compares a JSON snapshot, so there's no change
+    // signal to bind to -- re-checked on a short timer while this is open.
+    property bool dirty: false
+    function updateDirty() { root.dirty = slBridge.hasUnsavedChanges() }
+    Timer { interval: 1200; repeat: true; running: root.visible; triggeredOnStart: true; onTriggered: root.updateDirty() }
+    Connections {
+        target: slBridge
+        function onCharacterSaved() { root.updateDirty() }
+        function onCharacterLoaded() { root.updateDirty() }
+    }
+
+    // Export: the system "save as" picker, so the shareable copy goes
+    // wherever the player wants (Downloads, Drive, ...).
+    FileDialog {
+        id: exportFileDialog
+        title: "Export Character File"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "json"
+        currentFolder: "file://" + slBridge.downloadsDir
+        selectedFile: "file://" + slBridge.downloadsDir + "/" + slBridge.exportFileName
+        nameFilters: ["Character files (*.json)"]
+        onAccepted: slBridge.exportJsonToUrl(selectedFile.toString())
+    }
+
+    // Deleting a saved character asks first -- it used to go on one tap.
+    property string pendingDeletePath: ""
+    property string pendingDeleteName: ""
+    Dialog {
+        id: deleteCharacterDialog
+        objectName: "deleteCharacterDialog"
+        modal: true
+        width: Math.min(root.width, 360)
+        anchors.centerIn: parent
+        background: Rectangle { color: Theme.surf; radius: 12; border.color: Theme.border }
+        Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.8) }
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+            Label {
+                text: "Delete " + root.pendingDeleteName + "?"
+                color: Theme.crimson2
+                font.pixelSize: Theme.fsBody
+                font.bold: true
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            Label {
+                text: "Their save file is removed from this phone. Exported copies aren't affected. This can't be undone."
+                color: Theme.text2
+                font.pixelSize: Theme.fsSmall
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                MButton { text: "Cancel"; primary: false; Layout.fillWidth: true; onClicked: deleteCharacterDialog.close() }
+                MButton {
+                    objectName: "deleteCharacterConfirmButton"
+                    text: "Delete"
+                    Layout.fillWidth: true
+                    onClicked: { slBridge.deleteCharacterAt(root.pendingDeletePath); deleteCharacterDialog.close() }
+                }
+            }
+        }
+    }
+
+    // A big tap target for one export format: icon, name, one-line hint.
+    component ExportTile: Rectangle {
+        id: tile
+        property string iconName: ""
+        property string title: ""
+        property string hint: ""
+        signal tapped()
+        Layout.fillWidth: true
+        Layout.preferredHeight: 104
+        radius: 10
+        color: tileArea.pressed ? Theme.surf3 : Theme.surf2
+        border.color: Theme.border
+        ColumnLayout {
+            anchors.centerIn: parent
+            width: parent.width - 12
+            spacing: 4
+            MIcon { name: tile.iconName; size: 28; Layout.alignment: Qt.AlignHCenter }
+            Label {
+                text: tile.title
+                color: Theme.text
+                font.pixelSize: Theme.fsSmall
+                font.bold: true
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            Label {
+                text: tile.hint
+                color: Theme.text3
+                font.pixelSize: Theme.fsSmall - 2
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+        }
+        MouseArea { id: tileArea; anchors.fill: parent; onClicked: tile.tapped() }
+    }
+
     ColumnLayout {
         id: content
         width: parent.width
-        spacing: 18
-
-        Label {
-            text: Window.window.classBridge.name.length > 0 ? Window.window.classBridge.name : "(unnamed character)"
-            color: Theme.teal2
-            font.pixelSize: Theme.fsBody
-            font.bold: true
-        }
+        spacing: 14
 
         Label {
             visible: slBridge.errorMessage.length > 0
@@ -275,100 +374,131 @@ Flickable {
             Layout.fillWidth: true
         }
 
-        // ── Save & Export ───────────────────────────────────────────────
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 8
+        // ── 1. This character: save it ──────────────────────────────────
+        MCard {
+            title: "This character"
+            iconName: "identity"
 
-            Label { text: "Save & Export"; color: Theme.gold; font.pixelSize: Theme.fsSmall; font.bold: true }
-
-            Rectangle {
+            RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: saveCard.height + 20
-                radius: 10
-                color: Theme.surf
-                border.color: Theme.border
-
-                ColumnLayout {
-                    id: saveCard
-                    x: 12; y: 10
-                    width: parent.width - 24
-                    spacing: 10
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 2
-                        Label { text: "Saves & exports go to:"; color: Theme.text2; font.pixelSize: Theme.fsSmall }
-                        Label {
-                            objectName: "destinationDirLabel"
-                            text: slBridge.documentsDir
-                            color: Theme.text
-                            font.pixelSize: Theme.fsSmall
-                            font.bold: true
-                            wrapMode: Text.WrapAnywhere
-                            Layout.fillWidth: true
-                        }
-                    }
-
-                    MButton {
-                        objectName: "saveCharacterButton"
-                        Layout.fillWidth: true
-                        text: "Save / Export Character (.json)"
-                        onClicked: slBridge.saveCharacter()
-                    }
-                    MButton {
-                        objectName: "browseLoadButton"
-                        Layout.fillWidth: true
-                        primary: false
-                        text: "Load from Downloads / Browse…"
-                        onClicked: loadFileDialog.open()
-                    }
-
-                    Rectangle { Layout.fillWidth: true; height: 1; color: Theme.border }
-
-                    Label { text: "Other export formats"; color: Theme.text2; font.pixelSize: Theme.fsSmall }
-                    Flow {
-                        Layout.fillWidth: true
-                        spacing: 8
-                        MButton {
-                            objectName: "exportTextButton"
-                            width: 150
-                            primary: false
-                            text: "Plain Text (.txt)"
-                            onClicked: slBridge.exportText()
-                        }
-                        MButton {
-                            objectName: "exportPdfButton"
-                            width: 150
-                            primary: false
-                            text: "Full Sheet (PDF)"
-                            onClicked: slBridge.exportPdf()
-                        }
-                    }
-
+                spacing: 10
+                Label {
+                    text: Window.window.classBridge.name.length > 0 ? Window.window.classBridge.name : "Unnamed character"
+                    color: Theme.text
+                    font.pixelSize: Theme.fsBody + 2
+                    font.bold: true
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+                Rectangle {
+                    objectName: "saveStatusPill"
+                    radius: height / 2
+                    color: "transparent"
+                    border.color: root.dirty ? Theme.gold : Theme.teal2
+                    implicitHeight: statusText.implicitHeight + 8
+                    implicitWidth: statusText.implicitWidth + 18
                     Label {
-                        text: "Same JSON format as the desktop app -- files are interchangeable between them, and this is what you'd share with someone else."
-                        color: Theme.text3
+                        id: statusText
+                        anchors.centerIn: parent
+                        text: root.dirty ? "Unsaved changes" : "All changes saved"
+                        color: root.dirty ? Theme.gold : Theme.teal2
                         font.pixelSize: Theme.fsSmall
-                        wrapMode: Text.WordWrap
-                        Layout.fillWidth: true
                     }
                 }
             }
+            MButton {
+                objectName: "saveCharacterButton"
+                Layout.fillWidth: true
+                iconName: "save"
+                text: "Save"
+                onClicked: { slBridge.saveCharacter(); root.updateDirty() }
+            }
+            Label {
+                text: "Saves to your character list on this phone. MIMIC also saves automatically when you create a character, level up or down, or confirm your choices."
+                color: Theme.text3
+                font.pixelSize: Theme.fsSmall
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
         }
 
-        // ── Saved Characters ────────────────────────────────────────────
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 8
+        // ── 2. Export a copy ─────────────────────────────────────────────
+        MCard {
+            title: "Export a copy"
+            iconName: "file"
 
-            Label { text: "Saved Characters"; color: Theme.gold; font.pixelSize: Theme.fsSmall; font.bold: true }
+            Label {
+                text: "Make a copy to share, back up, or open in MIMIC on a computer."
+                color: Theme.text2
+                font.pixelSize: Theme.fsSmall
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                ExportTile {
+                    objectName: "exportJsonButton"
+                    iconName: "identity"
+                    title: "Character file"
+                    hint: ".json, opens in MIMIC"
+                    onTapped: exportFileDialog.open()
+                }
+                ExportTile {
+                    objectName: "exportTextButton"
+                    iconName: "notes"
+                    title: "Text"
+                    hint: ".txt summary"
+                    onTapped: slBridge.exportText()
+                }
+                ExportTile {
+                    objectName: "exportPdfButton"
+                    iconName: "file"
+                    title: "PDF sheet"
+                    hint: "official sheet"
+                    onTapped: slBridge.exportPdf()
+                }
+            }
+            Label {
+                text: "You choose where the character file goes. Text and PDF copies go to:"
+                color: Theme.text3
+                font.pixelSize: Theme.fsSmall
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            Label {
+                objectName: "destinationDirLabel"
+                text: slBridge.documentsDir
+                color: Theme.text2
+                font.pixelSize: Theme.fsSmall
+                wrapMode: Text.WrapAnywhere
+                Layout.fillWidth: true
+                Layout.topMargin: -6
+            }
+        }
+
+        // ── 3. Your characters ──────────────────────────────────────────
+        MCard {
+            title: "Your characters"
+            iconName: "folder"
+            headerRight: [
+                MButton {
+                    objectName: "browseLoadButton"
+                    primary: false
+                    height: 32
+                    implicitWidth: 104
+                    text: "Import…"
+                    onClicked: loadFileDialog.open()
+                }
+            ]
 
             Label {
                 visible: slBridge.savedCharacters.length === 0
-                text: "No saved characters yet."
+                text: "No saved characters yet. Tap Import… to open a character file from your phone."
                 color: Theme.text3
                 font.pixelSize: Theme.fsSmall
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
             }
 
             // Grouped by campaign/folder -- named folders sorted
@@ -398,12 +528,11 @@ Flickable {
                                     name: root.collapsedFolders[section.modelData.folder] ? "chevron_right" : "chevron_down"
                                     size: 16
                                 }
-                                MIcon { name: "folder"; size: 20 }
                                 Label {
                                     text: (section.modelData.folder.length > 0 ? section.modelData.folder : "Uncategorized")
                                           + "  (" + section.modelData.characters.length + ")"
                                     color: Theme.gold2
-                                    font.pixelSize: Theme.fsBody
+                                    font.pixelSize: Theme.fsSmall
                                     font.bold: true
                                     Layout.fillWidth: true
                                 }
@@ -421,7 +550,7 @@ Flickable {
                             primary: false
                             implicitWidth: 40
                             height: 32
-                            text: "✎"
+                            iconName: "pencil"
                             onClicked: {
                                 root.pendingRenameFolder = section.modelData.folder
                                 renameFolderField.text = section.modelData.folder
@@ -451,16 +580,16 @@ Flickable {
                             required property var modelData
                             visible: !root.collapsedFolders[section.modelData.folder]
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 66
+                            Layout.preferredHeight: 62
                             radius: 10
-                            color: Theme.surf
+                            color: Theme.surf2
                             border.color: Theme.border
                             clip: true
 
                             RowLayout {
                                 anchors.fill: parent
                                 anchors.margins: 10
-                                spacing: 8
+                                spacing: 6
 
                                 ColumnLayout {
                                     Layout.fillWidth: true
@@ -483,9 +612,16 @@ Flickable {
                                     }
                                 }
                                 MButton {
+                                    objectName: "loadButton_" + card.modelData.name
+                                    implicitWidth: 72
+                                    height: 36
+                                    text: "Open"
+                                    onClicked: slBridge.loadCharacterFrom(card.modelData.filepath)
+                                }
+                                MButton {
                                     objectName: "moveButton_" + card.modelData.name
                                     primary: false
-                                    implicitWidth: 44
+                                    implicitWidth: 40
                                     height: 36
                                     iconName: "folder"
                                     onClicked: {
@@ -494,20 +630,16 @@ Flickable {
                                     }
                                 }
                                 MButton {
-                                    objectName: "loadButton_" + card.modelData.name
-                                    primary: false
-                                    implicitWidth: 68
-                                    height: 36
-                                    text: "Load"
-                                    onClicked: slBridge.loadCharacterFrom(card.modelData.filepath)
-                                }
-                                MButton {
                                     objectName: "deleteButton_" + card.modelData.name
                                     primary: false
-                                    implicitWidth: 68
+                                    implicitWidth: 40
                                     height: 36
-                                    text: "Delete"
-                                    onClicked: slBridge.deleteCharacterAt(card.modelData.filepath)
+                                    iconName: "trash"
+                                    onClicked: {
+                                        root.pendingDeletePath = card.modelData.filepath
+                                        root.pendingDeleteName = card.modelData.name
+                                        deleteCharacterDialog.open()
+                                    }
                                 }
                             }
                         }

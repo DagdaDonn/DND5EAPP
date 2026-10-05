@@ -257,6 +257,7 @@ ApplicationWindow {
             Theme.applyFontScale(sheetBridge.fontScale)
             characterActive = true
             stackView.replace(sheetComp)
+            saveLoadBridge.autoSave()      // a new character is saved straight away
             return true
         }
         return false
@@ -278,7 +279,7 @@ ApplicationWindow {
     readonly property var utilityNavItems: [
         { label: "Dice Roller", icon: "dice", enabled: true, onOpen: function() { diceRollerDialog.open() } },
         { label: "Settings", icon: "settings", enabled: true, onOpen: function() { settingsDialog.open() } },
-        { label: "Save / Load", icon: "save", enabled: true, onOpen: function() { saveLoadDialog.open(); window.saveLoadBridge.refresh() } },
+        { label: "Save & Export", icon: "save", enabled: true, onOpen: function() { saveLoadDialog.open(); window.saveLoadBridge.refresh() } },
         { label: "Credits", icon: "credits", enabled: true, onOpen: function() { creditsDialog.open() } },
     ]
 
@@ -354,7 +355,7 @@ ApplicationWindow {
     MFullPageDialog {
         id: saveLoadDialog
         objectName: "saveLoadDialog"
-        dialogTitle: "Save / Load"
+        dialogTitle: "Save & Export"
         SaveLoadScreen {}
     }
     MFullPageDialog {
@@ -494,6 +495,8 @@ ApplicationWindow {
         target: window.sheetBridge
         function onRestToastRequested(message) { window.showToast(message) }
         function onToastRequested(message) { window.showToast(message) }
+        // level up/down and confirmed choices save the character quietly
+        function onAutosaveRequested() { window.saveLoadBridge.autoSave() }
     }
     Connections {
         target: window.saveLoadBridge

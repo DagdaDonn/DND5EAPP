@@ -1,8 +1,8 @@
-# ui_android (v3 scaffold — not yet implemented)
+# ui_android — MIMIC's touch-first Android UI
 
-This package is reserved for MIMIC's touch-first Android UI. Nothing
-here runs yet; this file exists so the folder split doesn't look like
-an accident once real work starts.
+MIMIC's Android app: a Qt Quick/QML UI over the same `core/` and
+`data/` the desktop app uses, packaged into an APK with buildozer and
+python-for-android (see `packaging/android/` and `installer/android/`).
 
 ## Plan
 
@@ -29,5 +29,23 @@ an accident once real work starts.
 
 ## Status
 
-Empty scaffold only. See `packaging/android/` and `installer/android/`
-for the matching build-tooling placeholders.
+Working and shipping. What's here:
+
+- `main.py` — app entry point; `bridge/` — one QObject bridge per area
+  (race/ability/class/equipment wizards, the character sheet, save/load,
+  dice roller, settings, credits, easter eggs), each a thin layer over
+  `core/`.
+- `qml/` — the screens: Start Menu, the creation wizard, every sheet
+  tab (abilities, proficiencies, combat, actions, spells, equipment,
+  features, companions, infusions, choices/level-up, notes), the dice
+  roller, Save & Export, settings and credits.
+- `qml/imports/Mimic/` — the theme (all 26 desktop themes), shared
+  components (`MButton`, `MCard`, `MIcon`, …) and `IconData.js`, which
+  is GENERATED from `ui_desktop/icon_data.py` so both apps draw the
+  same icons. Regenerate with `python3 -m dnd_app.ui_desktop.icon_data`
+  (the Android clean build does this automatically).
+
+Saving: the in-app list lives in the app's private Documents folder;
+characters auto-save on creation, level up/down and confirmed choices;
+Export writes a copy anywhere through the system save picker, plus
+plain-text and PDF exports. The file format is the desktop's.

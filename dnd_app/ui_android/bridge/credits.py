@@ -28,6 +28,12 @@ def _find_readme_text() -> str:
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__)))))
     candidates.append(os.path.join(repo_root, "README.md"))
+    # On the phone the app runs from its unpacked private directory --
+    # the staging root the build copies README.md into, next to main.py.
+    main_mod = sys.modules.get("__main__")
+    if getattr(main_mod, "__file__", None):
+        candidates.append(os.path.join(os.path.dirname(os.path.abspath(main_mod.__file__)), "README.md"))
+    candidates.append(os.path.join(os.getcwd(), "README.md"))
     for path in candidates:
         if path and os.path.isfile(path):
             try:

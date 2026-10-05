@@ -166,26 +166,24 @@ only lists `INTERNET`/`ACCESS_NETWORK_STATE` (unused today, harmless to
 keep) and `WRITE_EXTERNAL_STORAGE` (legacy, has no effect on the
 API levels this app targets).
 
-**Not yet implemented:** making saves visible/pickable from the
-shared system Documents folder, so a file manager or another app can
-see them directly. That would need the Storage Access Framework
-(`ACTION_OPEN_DOCUMENT`/`ACTION_CREATE_DOCUMENT` intents), which
-requires Java/JNI code Qt doesn't wrap directly — a real, separate
-feature, not a build-config checkbox. "Load from Downloads / Browse"
-already reads external files this way (via a `Qt.labs.platform.FileDialog`
-picker); only writing back to an arbitrary external location is
-unimplemented.
+Sharing a character outside the app works through the system pickers,
+with no storage permission needed: **Import…** reads a character file
+from anywhere (Downloads, Drive, …), and **Export a copy → Character
+file** writes one wherever the player chooses (Android's "save as"
+dialog; Qt writes the returned `content://` URI directly).
 
 ## Icon
 
-Android wants a full adaptive-icon set (`mipmap-mdpi` through
-`mipmap-xxxhdpi`, plus a foreground/background layer pair for the
-adaptive format), not the single `.ico` the Windows build uses.
-`icon.png` in this folder is the single source image `buildozer.spec`
-points `icon.filename` at; buildozer/p4a generates the density set from
-it. The adaptive foreground/background split still needs to be
-prepared by hand if you want a true adaptive icon rather than a plain
-square one.
+`icon.png` is the launcher icon for pre-Android-8 launchers: the amber
+d20 on the app's dark background, full-bleed so nothing is padded white.
+Android 8+ uses an **adaptive icon** instead, made of two 432 px layers
+in this folder: `icon_background.png` (the dark backdrop) and
+`icon_foreground.png` (the die, kept inside the 66 dp safe zone so every
+launcher mask shows all of it). `deployment/recipes/p4a_hook.py` copies
+both into the build and writes `res/mipmap-anydpi-v26/icon.xml`
+(p4a's own `--icon-fg/--icon-bg` would target that folder too, but the
+Qt bootstrap doesn't have it). Without the adaptive icon, Android
+shrinks `icon.png` and pads it with white.
 
 ## Building
 

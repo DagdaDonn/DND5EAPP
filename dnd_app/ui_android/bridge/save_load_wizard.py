@@ -50,7 +50,7 @@ from dnd_app.core.character import new_character
 from dnd_app.core.save_load import (
     save_character, load_character, list_saved_characters,
     delete_character, validate_character, migrate_character,
-    export_character_text, list_character_folders, set_character_folder,
+    export_character_text, list_character_folders, set_character_folder, character_json,
     rename_character_folder, delete_character_folder,
 )
 from dnd_app.core.pdf_export import export_official_pdf, TEMPLATE_PATH
@@ -197,9 +197,21 @@ class SaveLoadBridge(QObject):
     # ── Save ───────────────────────────────────────────────────────────
     @Slot(result=bool)
     def saveCharacter(self) -> bool:
+        return self._save(quiet=False)
+
+    @Slot(result=bool)
+    def autoSave(self) -> bool:
+        """Save without being asked: on character creation, level up/down
+        and confirmed choices. A character that can't be saved yet (still
+        missing something validation needs) is skipped silently rather
+        than flashing an error the player didn't cause."""
+        return self._save(quiet=True)
+
+    def _save(self, quiet: bool) -> bool:
         ok, errors = validate_character(self.char)
         if not ok:
-            self._set_error("Can't save yet: " + "; ".join(errors))
+            if not quiet:
+                self._set_error("Can't save yet: " + "; ".join(errors))
             return False
         directory = _documents_dir()
         # Overwrite the exact file this character was loaded from, as
@@ -226,7 +238,11 @@ class SaveLoadBridge(QObject):
         self._clean_snapshot = self._serialize()
         self.characterSaved.emit()
         self.savedListChanged.emit()
-        self.toastRequested.emit(f"Saved to {os.path.basename(filepath)}")
+        # Auto-saves stay silent: they follow a level-up/choice whose own
+        # toast ("...go to Choices") shouldn't be replaced, and the Save
+        # screen's "All changes saved" status already shows it happened.
+        if not quiet:
+            self.toastRequested.emit(f"Saved to {os.path.basename(filepath)}")
         return True
 
     # ── Load ───────────────────────────────────────────────────────────
@@ -314,6 +330,40 @@ class SaveLoadBridge(QObject):
         if ok:
             self.savedListChanged.emit()
         return ok
+
+    # ── Character file export ─────────────────────────────────────────
+    @Slot(str, result=bool)
+    def exportJsonToUrl(self, url: str) -> bool:
+        """Export: write a copy of the character file wherever the user
+        picked in the system "save as" dialog (a "file://" path, or on
+        Android usually a "content://" URI) -- for sharing it or opening
+        it in the desktop app. Unlike saveCharacter() this doesn't touch
+        the in-app character list or which file Save writes to."""
+        ok, errors = validate_character(self.char)
+        if not ok:
+            self._set_error("Can't export yet: " + "; ".join(errors))
+            return False
+        data = character_json(self.char).encode("utf-8")
+        qurl = QUrl(url)
+        target = qurl.toLocalFile() if qurl.isLocalFile() else qurl.toString()
+        qfile = QFile(target)
+        if not qfile.open(QIODevice.OpenModeFlag.WriteOnly | QIODevice.OpenModeFlag.Truncate):
+            self._set_error(f"Couldn't export: {qfile.errorString()}")
+            return False
+        try:
+            written = qfile.write(data)
+        finally:
+            qfile.close()
+        if written != len(data):
+            self._set_error("Couldn't export: the file was only partly written")
+            return False
+        self._set_error("")
+        self.toastRequested.emit("Character file exported")
+        return True
+
+    @Property(str, notify=characterSaved)
+    def exportFileName(self):
+        return _safe_filename(self.char.get("name", "")) + ".json"
 
     # ── Plain-text export ──────────────────────────────────────────────
     @Slot(result=bool)

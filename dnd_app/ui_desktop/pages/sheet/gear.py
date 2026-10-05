@@ -786,8 +786,9 @@ class GearMixin:
             self._magic_items_tree.addTopLevelItem(item)
 
             # Items that grant resistance to a damage type fixed at creation
-            # (Ring/Armor of Resistance, Absorbing Tattoo, Orb of Shielding)
-            # need the player to pick which type their copy is. Shown as an
+            # (Ring/Armor of Resistance, Absorbing Tattoo, Orb of Shielding) or
+            # re-chosen each long rest (Wyrmreaver Gauntlets) need the player
+            # to pick the type. Shown as an
             # extra combo row directly beneath the item when applicable.
             _eff = _gie(name)
             if isinstance(_eff, dict) and _eff.get("type") == "resistance_choice":

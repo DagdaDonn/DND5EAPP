@@ -274,6 +274,19 @@ _SMALL_FLAME = ("M 11 9.4 C 12 10.8 14.4 12.4 14.4 14.4 C 14.4 15.9 13.3 16.9 12
                 "C 10.7 16.9 9.6 15.9 9.6 14.6 C 9.6 13.5 10.3 12.8 10.7 12.1 C 11.1 11.4 11.2 10.6 11 9.4 Z")
 
 
+_HEART = ("M 12 20.4 C 5 15.4 2.8 11.6 2.8 8.4 C 2.8 5.6 5 3.6 7.6 3.6 C 9.6 3.6 11.1 4.8 12 6.6 "
+          "C 12.9 4.8 14.4 3.6 16.4 3.6 C 19 3.6 21.2 5.6 21.2 8.4 C 21.2 11.6 19 15.4 12 20.4 Z")
+
+
+def heart(cx, cy, scale, tilt=0):
+    """_HEART shrunk by `scale` about its middle, moved to (cx, cy), tilted."""
+    a = math.radians(tilt)
+    def xf(m):
+        x, y = (float(m.group(1)) - 12) * scale, (float(m.group(2)) - 12) * scale
+        return f"{_n(cx + x * math.cos(a) - y * math.sin(a))} {_n(cy + x * math.sin(a) + y * math.cos(a))}"
+    return re.sub(r"(-?\d*\.?\d+) (-?\d*\.?\d+)", xf, _HEART)
+
+
 def _join(*parts):
     return " ".join(parts)
 
@@ -383,11 +396,7 @@ ICON_PATHS = {
 
     # ── Conditions ──────────────────────────────────────────────────────
     "cond_blinded": _join("M 2.6 12 Q 12 3.8 21.4 12 Q 12 20.2 2.6 12 Z", line(4.2, 19.8, 19.8, 4.2)),
-    # Charmed: a rose -- a spiralled bloom in its cupped petals, on a
-    # stem with a leaf and a thorn
-    "cond_charmed": _join("M 6.6 5.4 Q 6.4 13.4 12 13.6 Q 17.6 13.4 17.4 5.4 Q 14.8 7.4 12 4.6 Q 9.2 7.4 6.6 5.4 Z",
-                          spiral(12, 8.6, 2.6, turns=1.2, start=-150),
-                          "M 12 13.6 Q 12.6 17.6 11.4 21.8"),
+    "cond_charmed": "",
     "cond_deafened": _join("M 9.2 20.2 C 9.2 17.4 7.6 16.2 7.1 14.2 C 6.6 12.2 6.6 9.4 7.6 7.6 "
                            "C 8.8 5.2 11 4 13.3 4 C 16.6 4 19 6.6 19 9.9 C 19 12.4 17.6 13.6 16.4 14.6 "
                            "C 15.2 15.6 14.6 16.8 14.6 18 Q 14.6 20.6 11.9 20.6",
@@ -655,8 +664,8 @@ _SPARKLE_SMALL = sparkle(18, 5.5, 2.6, 2.8)
 ICON_FILLS = {
     "star_solid": star(12, 12.6, 10.1, 4.6),
     "cond_blinded": circle(12, 12, 2.9),
-    "cond_charmed": _join("M 12.2 18.2 Q 13.6 14.8 17.6 15.4 Q 16 19.2 12.2 18.2 Z",
-                          poly((11.9, 15.6), (9.9, 15), (11.6, 17))),
+    # Charmed: hearts floating up, big to small
+    "cond_charmed": _join(heart(8.66, 15.05, 0.693, -12), heart(17.83, 7.44, 0.425, 14), heart(19.84, 18.63, 0.246, 20)),
     # Frightened: someone clutching their head and screaming -- outline
     # hand-drawn over a photo, the gaps between arms and head kept open
     "cond_frightened": _FRIGHT,

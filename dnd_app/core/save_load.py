@@ -88,14 +88,20 @@ def save_character(char: dict, filepath: str = None) -> str:
     char["version"] = CURRENT_VERSION
     if filepath is None:
         filepath = character_filename(char)
-    # Strip runtime state (_grants, etc.) and convert sets before serialising
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(character_json(char))
+    return filepath
+
+
+def character_json(char: dict) -> str:
+    """The character as save files store it: runtime state (_grants etc.)
+    stripped and sets converted. Shared by save_character() and Android's
+    Export, which writes the same format somewhere the user picks."""
     to_save = _make_serialisable(char)
     # But _choices is user data — keep it even though it starts with _
     if "_choices" in char:
         to_save["_choices"] = _make_serialisable(char["_choices"])
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(to_save, f, indent=2, ensure_ascii=False)
-    return filepath
+    return json.dumps(to_save, indent=2, ensure_ascii=False)
 
 
 def load_character(filepath: str) -> dict:

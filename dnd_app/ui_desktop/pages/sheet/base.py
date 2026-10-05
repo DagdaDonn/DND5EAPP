@@ -769,6 +769,24 @@ class BaseSheetMixin:
         self._update_title()
         self._toast(f"Saved to {os.path.basename(path)}")
 
+    def _auto_save(self):
+        """Save quietly after character creation, level up/down and
+        confirmed choices -- the same file Save writes, no toast. Skipped
+        (no error) if the character can't be saved yet."""
+        from dnd_app.core.save_load import save_character, character_filename
+        if hasattr(self, "_collect"):
+            self._collect()
+        if not validate_character(self.char)[0]:
+            return
+        path = self._save_path or character_filename(self.char)
+        try:
+            save_character(self.char, path)
+        except (OSError, ValueError):
+            return
+        self._save_path = path
+        self._dirty = False
+        self._update_title()
+
     def _load_dialog(self):
         """Open a saved character via file dialog."""
         from PySide6.QtWidgets import QFileDialog
@@ -1295,6 +1313,7 @@ class BaseSheetMixin:
         self.char["_last_leveled_class"] = cls_name
         self.ctrl.refresh()
         self._mark_dirty()
+        self._auto_save()
 
     def _open_level_up(self):
         """Add one level to an existing class (prompt if multi-class)."""
@@ -1321,6 +1340,7 @@ class BaseSheetMixin:
         # rebuild twice in immediate succession, momentarily constructing
         # and tearing down duplicate chooser widgets.
         self._mark_dirty()
+        self._auto_save()
 
     def _open_level_down(self):
         """Remove one level from an existing class."""
@@ -1356,6 +1376,7 @@ class BaseSheetMixin:
         # _open_level_up for the full explanation) — no need to call
         # them again here.
         self._mark_dirty()
+        self._auto_save()
 
     def _open_add_multiclass(self):
         """Add a new class for multiclassing."""
@@ -1418,6 +1439,7 @@ class BaseSheetMixin:
         # See _open_level_up — self.ctrl.refresh() already triggers both
         # calls via the observer chain.
         self._mark_dirty()
+        self._auto_save()
 
     def _open_remove_class(self):
         """Remove an entire class (multiclass only — keeps at least one)."""
@@ -1446,6 +1468,7 @@ class BaseSheetMixin:
         # See _open_level_up — self.ctrl.refresh() already triggers both
         # calls via the observer chain.
         self._mark_dirty()
+        self._auto_save()
 
     def _toast(self, text: str, duration_ms: int = 3200):
         """Show a transient notification banner at the top of the sheet.

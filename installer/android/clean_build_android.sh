@@ -15,7 +15,7 @@
 #      so p4a_hook.py patches it from scratch
 #   3. pre-flight p4a_hook.py: run its Java patch against that template
 #      and check every marker it asserts on at build time is present
-#   4. stage main.py + dnd_app/ into /tmp/mimic-app-staging (the
+#   4. stage main.py + README.md + dnd_app/ into /tmp/mimic-app-staging (the
 #      --private dir buildozer.spec's p4a.extra_args points p4a at)
 #   5. buildozer android release, logged to /tmp/mimic-build-*.log
 #   6. turn the .aab into an installable universal APK in dist/ via
@@ -174,12 +174,16 @@ mkdir -p "$STAGE"
 # doesn't exist -- engine.load() produces no root objects and the app
 # exits on launch.
 cp "$ROOT/main.py" "$STAGE/main.py"
+# The Credits screen shows the project README; ui_android/bridge/credits.py
+# looks for it at the app root, next to main.py.
+cp "$ROOT/README.md" "$STAGE/README.md"
 rsync -a --delete \
     --exclude='.buildozer' --exclude='bin' --exclude='build' --exclude='.gradle' \
     --exclude='__pycache__' --exclude='*.pyc' --exclude='*.pyo' \
     --exclude='buildozer.spec*' --exclude='*.sh' \
     "$ROOT/dnd_app/" "$STAGE/dnd_app/"
 [ -f "$STAGE/dnd_app/ui_android/qml/App.qml" ] || die "App.qml missing from staging"
+[ -f "$STAGE/README.md" ] || die "README.md missing from staging (Credits would show the fallback text)"
 echo "$(find "$STAGE" -type f | wc -l) files staged"
 STRAY="$(find "$STAGE" \( -name .buildozer -o -name bin -o -name build -o -name .gradle \
     -o -name __pycache__ -o -name '*.pyc' -o -name '*.whl' -o -name '*.apk' -o -name '*.aab' \) -print)"

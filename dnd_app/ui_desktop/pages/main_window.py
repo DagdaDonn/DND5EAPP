@@ -866,7 +866,7 @@ class CharacterCreatorApp(QMainWindow):
                 self._stack.removeWidget(self._wizard); self._wizard.deleteLater()
                 self._wizard = CharacterWizard(self)
                 self._wizard.char = old_char
-                self._wizard.done.connect(self._show_sheet)
+                self._wizard.done.connect(self._show_new_sheet)
                 self._stack.addWidget(self._wizard)
                 self._wizard._step = old_step
                 steps = [self._wizard._step1, self._wizard._step2, self._wizard._step3,
@@ -913,7 +913,7 @@ class CharacterCreatorApp(QMainWindow):
         if self._wizard:
             self._stack.removeWidget(self._wizard); self._wizard.deleteLater()
         self._wizard = CharacterWizard(self)
-        self._wizard.done.connect(self._show_sheet)
+        self._wizard.done.connect(self._show_new_sheet)
         self._stack.addWidget(self._wizard)
         self._stack.setCurrentWidget(self._wizard)
 
@@ -922,6 +922,13 @@ class CharacterCreatorApp(QMainWindow):
             char = load_character(path); self._show_sheet(char, save_path=path)
         except Exception as e:
             QMessageBox.warning(self, "Load Error", str(e))
+
+    def _show_new_sheet(self, char: dict):
+        """The wizard's finish: show the new character's sheet and save
+        it straight away, so a fresh character is never only in memory."""
+        self._show_sheet(char)
+        if self._sheet is not None:
+            self._sheet._auto_save()
 
     def _show_sheet(self, char: dict, save_path: str = None):
         from dnd_app.ui_desktop.style import theme

@@ -208,6 +208,9 @@ class CharacterSheetBridge(QObject):
     statsChanged = Signal()
     restToastRequested = Signal(str)
     toastRequested = Signal(str)
+    # Level up/down and confirmed choices: App.qml saves the character
+    # quietly on this (SaveLoadBridge.autoSave()).
+    autosaveRequested = Signal()
     # Emitted after casting a spell with a real active_effects hook
     # (Bless/Haste/etc.) whose range isn't self-only -- QML should ask
     # "cast on yourself, or on another creature?" and call
@@ -2765,6 +2768,7 @@ class CharacterSheetBridge(QObject):
         if feat_name not in feats:
             feats.append(feat_name)
         self.statsChanged.emit()
+        self.autosaveRequested.emit()
 
     # ── Class Manager: level down / remove class -- the inverse of
     # levelUpClass() above, mirroring ui_desktop's _open_level_down/
@@ -2781,6 +2785,7 @@ class CharacterSheetBridge(QObject):
         self.ctrl.refresh()
         self.toastRequested.emit(f"{class_name} is now level {entry['level']}")
         self.statsChanged.emit()
+        self.autosaveRequested.emit()
 
     @Property(bool, notify=statsChanged)
     def canRemoveClass(self):
@@ -2798,6 +2803,7 @@ class CharacterSheetBridge(QObject):
         self.ctrl.refresh()
         self.toastRequested.emit(f"{class_name} removed")
         self.statsChanged.emit()
+        self.autosaveRequested.emit()
 
     # ── Experience / leveling mode ──────────────────────────────────────
     @Property(bool, notify=statsChanged)
@@ -3604,6 +3610,7 @@ class CharacterSheetBridge(QObject):
             msg += " -- go to Choices to pick your new options"
         self.toastRequested.emit(msg)
         self.statsChanged.emit()
+        self.autosaveRequested.emit()
 
     @Property(bool, notify=statsChanged)
     def hasPendingChoices(self):
@@ -3788,6 +3795,7 @@ class CharacterSheetBridge(QObject):
                     if a.get("infusion") not in removed_names]
         apply_choice(char, choice_id, selected)
         self.statsChanged.emit()
+        self.autosaveRequested.emit()
 
     @Slot(str, str)
     def applySubclassLevelUpChoice(self, choice_id: str, subclass_name: str):
@@ -3797,12 +3805,14 @@ class CharacterSheetBridge(QObject):
         set_subclass(self.char, choice["source_name"], subclass_name)
         apply_choice(self.char, choice_id, [subclass_name])
         self.statsChanged.emit()
+        self.autosaveRequested.emit()
 
     @Slot(str, dict)
     def applyAsiLevelUpChoice(self, choice_id: str, allocations: dict):
         selected = [f"asi:{ability}:{amount}" for ability, amount in allocations.items() if amount > 0]
         apply_choice(self.char, choice_id, selected)
         self.statsChanged.emit()
+        self.autosaveRequested.emit()
 
     @Slot(str, str)
     def applyFeatLevelUpChoice(self, choice_id: str, feat_name: str):
@@ -3815,6 +3825,7 @@ class CharacterSheetBridge(QObject):
         add_feat(self.char, feat_name)
         apply_choice(self.char, choice_id, [f"feat:{feat_name}"])
         self.statsChanged.emit()
+        self.autosaveRequested.emit()
 
     @Slot(str, result=list)
     def searchFeatsForLevelUp(self, query: str):

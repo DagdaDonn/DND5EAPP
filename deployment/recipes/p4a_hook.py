@@ -206,7 +206,9 @@ PRELOAD_QT_LIBS = '''        // Qt 6.11 preload: System.loadLibrary("Qt6Core_arm
 
 
 
-DARK_SYSTEM_BARS_JAVA = '''        // Force dark system bars (status + navigation) to match the app's
+# The block an earlier version of this hook injected -- swapped for the
+# current one in a dist that was already patched with it.
+OLD_DARK_SYSTEM_BARS_JAVA = '''        // Force dark system bars (status + navigation) to match the app's
         // dark Material theme. Without this, Qt 6.11's default Android
         // appearance applies APPEARANCE_LIGHT_NAVIGATION_BARS and the
         // navigation bar renders white on Android 15+.
@@ -235,6 +237,66 @@ DARK_SYSTEM_BARS_JAVA = '''        // Force dark system bars (status + navigatio
                 __w.setStatusBarColor(android.graphics.Color.BLACK);
             }
             android.util.Log.v("PythonActivity", "->> dark system bars applied");
+        } catch (Throwable __t) {
+            android.util.Log.e("PythonActivity", "Failed to set dark system bars: " + __t);
+        }
+'''
+
+DARK_SYSTEM_BARS_JAVA = '''        // Dark system bars (status + navigation) to match the app's dark
+        // theme (Theme.qml's bg, #0d0f18). Three things, all needed:
+        //  - clear the LIGHT_* appearance flags: Qt 6.11 sets
+        //    APPEARANCE_LIGHT_NAVIGATION_BARS by default;
+        //  - paint the window/decor background dark: on Android 15+ apps
+        //    are edge-to-edge, so the navigation bar is transparent and
+        //    shows the window background -- white by default -- rather
+        //    than setNavigationBarColor();
+        //  - re-apply after start-up: Qt resets the bar appearance when
+        //    its own window comes up, after onCreate has run.
+        try {
+            final android.app.Activity __act = this;
+            final Runnable __darkBars = new Runnable() {
+                public void run() {
+                    try {
+                        android.view.Window __w = __act.getWindow();
+                        if (__w == null) return;
+                        int __bg = 0xFF0D0F18;
+                        __w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(__bg));
+                        android.view.View __decor = __w.getDecorView();
+                        if (__decor != null) {
+                            __decor.setBackgroundColor(__bg);
+                            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                                android.view.WindowInsetsController __ctrl =
+                                    __decor.getWindowInsetsController();
+                                if (__ctrl != null) {
+                                    __ctrl.setSystemBarsAppearance(
+                                        0,
+                                        android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                                            | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+                                    );
+                                }
+                            }
+                            int __flags = __decor.getSystemUiVisibility();
+                            __flags &= ~android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                            __flags &= ~android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                            __decor.setSystemUiVisibility(__flags);
+                        }
+                        __w.setNavigationBarColor(__bg);
+                        __w.setStatusBarColor(__bg);
+                        if (android.os.Build.VERSION.SDK_INT >= 29) {
+                            __w.setNavigationBarContrastEnforced(false);
+                            __w.setStatusBarContrastEnforced(false);
+                        }
+                    } catch (Throwable __t) {
+                        android.util.Log.e("PythonActivity", "Failed to set dark system bars: " + __t);
+                    }
+                }
+            };
+            __darkBars.run();
+            android.view.View __d0 = getWindow().getDecorView();
+            for (int __ms : new int[] {300, 1000, 2500, 5000}) {
+                __d0.postDelayed(__darkBars, __ms);
+            }
+            android.util.Log.v("PythonActivity", "->> dark system bars applied (and re-applied after start-up)");
         } catch (Throwable __t) {
             android.util.Log.e("PythonActivity", "Failed to set dark system bars: " + __t);
         }
@@ -372,6 +434,11 @@ def _patch_java_file(path):
                 + DARK_SYSTEM_BARS_JAVA
             )
             src = src.replace(log_marker, inject, 1)
+
+    # A dist patched by an earlier hook version has the old dark-bars
+    # block (no window background, no re-apply): swap in the current one.
+    if OLD_DARK_SYSTEM_BARS_JAVA in src:
+        src = src.replace(OLD_DARK_SYSTEM_BARS_JAVA, DARK_SYSTEM_BARS_JAVA, 1)
 
     if src != orig:
         p.write_text(src)
@@ -624,9 +691,42 @@ def before_apk_build(toolchain, *args, **kwargs):
     _patch_blacklist(qt_bl)
 
 
+ADAPTIVE_ICON_XML = """<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@mipmap/icon_background"/>
+    <foreground android:drawable="@mipmap/icon_foreground"/>
+</adaptive-icon>
+"""
+
+
+def _install_adaptive_icon(dist):
+    """Android 8+ shrinks a plain launcher icon and pads it with WHITE.
+    An adaptive icon (dark background layer + the die as foreground)
+    fills the launcher's own mask instead. p4a's --icon-fg/--icon-bg
+    would write this too, but into res/mipmap-anydpi-v26/, which the Qt
+    bootstrap doesn't have -- so it's added here, after p4a has copied
+    the plain icon.png in and before Gradle reads res/. icon.png stays
+    as the pre-Android-8 fallback."""
+    src = Path(__file__).resolve().parents[2] / "packaging" / "android"
+    fg, bg = src / "icon_foreground.png", src / "icon_background.png"
+    if not (fg.exists() and bg.exists()):
+        warning(f"p4a_hook: adaptive icon layers missing from {src} -- launcher icon will be padded white")
+        return False
+    res = dist / "src" / "main" / "res"
+    (res / "mipmap").mkdir(parents=True, exist_ok=True)
+    (res / "mipmap-anydpi-v26").mkdir(parents=True, exist_ok=True)
+    shutil.copy(fg, res / "mipmap" / "icon_foreground.png")
+    shutil.copy(bg, res / "mipmap" / "icon_background.png")
+    (res / "mipmap-anydpi-v26" / "icon.xml").write_text(ADAPTIVE_ICON_XML)
+    return True
+
+
 def before_apk_assemble(toolchain, *args, **kwargs):
     info("p4a_hook: before_apk_assemble — patching PythonActivity.java")
     dist = _dist_dir(toolchain)
+
+    if _install_adaptive_icon(dist):
+        info("p4a_hook: installed the adaptive launcher icon (res/mipmap-anydpi-v26/icon.xml)")
 
     # p4a's own "Copying libs" step (which runs after our before_apk_build)
     # copies every .so from libs_collections/ into libs/arm64-v8a/, ignoring
@@ -671,7 +771,8 @@ def before_apk_assemble(toolchain, *args, **kwargs):
     for needle in ("Qt6Core_arm64-v8a",
                    "invoking QtNative.startApplication",
                    '__m.invoke(null, "", __mainLib)',
-                   "QtNative.startApplication returned"):
+                   "QtNative.startApplication returned",
+                   "setNavigationBarContrastEnforced"):
         if needle not in _src:
             raise SystemExit(
                 f"FATAL: p4a_hook patch missing from compiled PythonActivity.java: {needle!r}"
