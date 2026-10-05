@@ -161,44 +161,43 @@ Make sure you're on current source — the heavy startup import runs on a backgr
 
 ```
 dnd_app/
-  data/                    # Static game-rules data (shared by every platform)
-    phb2014/               #   Races + classes, 2014 PHB edition
-    phb2024/                #   Species + classes, 2024 PHB edition
-    phbCommon/              #   Everything edition-shared: feats, items,
-                             #   magic items, spells, backgrounds, etc.
-    5E_CharacterSheet_Fillable.pdf   # Official fillable PDF template
-    KNOWN_IMPLEMENTATION_GAPS.md     # Running changelog/known-gaps doc
-  core/                    # Character model, calculator, builder, save/load
-                            #   (non-UI application logic, shared by every platform)
-  ui_desktop/               # PySide6 QtWidgets UI (Windows/macOS/Linux)
-    style/                  #   Theme/QSS engine + cosmetic text helpers
-    pages/                  #   Top-level app screens
-      main_window.py         #     Start menu / main window
-      wizard.py               #     Character creation wizard
-      sheet/                   #     Character sheet, split by tab/concern
-    dialogs/                 #   Popup dialogs + the level-up choices panel
-    splash/                  #   Startup splash screen + its image/GIF assets
-    shared.py                #   Cross-file widget/style factories
-    action_abilities.py      #   Action economy classification logic
-    widgets.py                #   FlowLayout/FlowContainer
-    icon.ico                  #   App icon
-  ui_android/               # v3 scaffold: touch-first Qt Quick/QML UI
-                             #   (not yet implemented -- see its own README)
-run_dnd_creator.py     # Desktop entry point
-installer/
-  windows/                #   Windows build tooling
-    build_exe.bat / build_exe.sh #   One-command build scripts
-  android/                #   Android build tooling
-    clean_build_android.bat / .sh #  Clean release build (the build)
-    install_android.bat / .sh #  adb install the newest dist/ APK
-packaging/
-  windows/                #   Windows build-target manifest
-    DnD5eCharacterCreator.spec #  PyInstaller build spec
-    requirements.txt
-    BUILD_EXE.md          #   Full build guide
-  android/                #   Android build-target manifest + one-time setup
-    BUILD_APK.md          #   Full build guide
-    setup_buildozer_spec.bat #  One-time buildozer.spec path setup (Windows)
+  data/                               # Static game-rules data (shared by every platform)
+    phb2014/                          #   Races + classes, 2014 PHB edition
+    phb2024/                          #   Species + classes, 2024 PHB edition
+    phbCommon/                        #   Everything edition-shared: feats, items,
+                                      #   magic items, spells, backgrounds, etc.
+    5E_CharacterSheet_Fillable.pdf    # Official fillable PDF template
+    KNOWN_IMPLEMENTATION_GAPS.md      # Running changelog/known-gaps doc
+  core/                               # Character model, calculator, builder, save/load
+                                      #   (non-UI application logic, shared by every platform)
+  ui_desktop/                         # PySide6 QtWidgets UI (Windows/macOS/Linux)
+    style/                            #   Theme/QSS engine + cosmetic text helpers
+    pages/                            #   Top-level app screens
+      main_window.py                  #     Start menu / main window
+      wizard.py                       #     Character creation wizard
+      sheet/                          #     Character sheet, split by tab/concern
+    dialogs/                          #   Popup dialogs + the level-up choices panel
+    splash/                           #   Startup splash screen + its image/GIF assets
+    shared.py                         #   Cross-file widget/style factories
+    action_abilities.py               #   Action economy classification logic
+    widgets.py                        #   FlowLayout/FlowContainer
+    icon.ico                          #   App icon
+  ui_android/                         # v3 scaffold: touch-first Qt Quick/QML UI
+                                      #   (not yet implemented -- see its own README)
+run_dnd_creator.py                    # Desktop entry point
+installer/  
+  windows/                            #   Windows build tooling
+    build_exe.bat / build_exe.sh      #   One-command build scripts
+  android/                            #   Android build tooling
+    clean_build_android.bat / .sh     #  Clean release build (the build)
+packaging/  
+  windows/                            #   Windows build-target manifest
+    DnD5eCharacterCreator.spec        #  PyInstaller build spec
+    requirements.txt  
+    BUILD_EXE.md                      #   Full build guide
+  android/                            #   Android build-target manifest + one-time setup
+    BUILD_APK.md                      #   Full build guide
+    setup_buildozer_spec.bat          #  One-time buildozer.spec path setup (Windows)
 ```
 
 ---

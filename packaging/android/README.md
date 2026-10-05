@@ -18,9 +18,8 @@ before your first build.
 This folder also holds `setup_buildozer_spec.bat`: one-time,
 Windows/WSL setup that locates your Android SDK/NDK/wheels/jars and
 writes their paths into `dnd_app/ui_android/buildozer.spec`. The
-actual build-runner scripts (`clean_build_android.bat`/`.sh` and
-`install_android.bat`/`.sh`, run every time you want a new build) live
-in `installer/android/`, matching how
+actual build script (`clean_build_android.bat`/`.sh`, run every time
+you want a new build) lives in `installer/android/`, matching how
 `installer/windows/` holds the Windows EXE's build script.
 
 **Nothing in this folder has been build-tested in this sandbox** —

@@ -18,8 +18,10 @@
 #   4. stage main.py + dnd_app/ into /tmp/mimic-app-staging (the
 #      --private dir buildozer.spec's p4a.extra_args points p4a at)
 #   5. buildozer android release, logged to /tmp/mimic-build-*.log
-#   6. turn the .aab into an installable universal APK in dist/ (needs
-#      bundletool, see deployment/make-android-apk.sh)
+#   6. turn the .aab into an installable universal APK in dist/ via
+#      deployment/make-android-apk.sh (bundletool is downloaded to
+#      ~/.cache/mimic/ on first use; the debug keystore is created if
+#      missing). No APK at the end counts as a failed build.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -190,6 +192,29 @@ echo "AAB: $AAB"
 
 step "6/6 Converting to universal APK"
 APP_VERSION="$(sed -nE 's/^version[[:space:]]*=[[:space:]]*//p' "$SPEC" | head -1)"
+# /tmp/bt is wiped whenever WSL restarts; keep a copy that survives.
+BT_URL="https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar"
+if [ ! -f "${BT_JAR:-/tmp/bt/bundletool.jar}" ]; then
+    BT_JAR="$HOME/.cache/mimic/bundletool-all-1.18.3.jar"
+    if [ ! -f "$BT_JAR" ]; then
+        echo "downloading bundletool to $BT_JAR"
+        mkdir -p "$(dirname "$BT_JAR")"
+        curl -fL --retry 3 -o "$BT_JAR.part" "$BT_URL" && mv "$BT_JAR.part" "$BT_JAR" \
+            || echo "WARNING: bundletool download failed"
+    fi
+fi
+export BT_JAR="${BT_JAR:-/tmp/bt/bundletool.jar}"
+# make-android-apk.sh signs with the debug keystore. Keep using the same
+# one between builds: a phone refuses to update an app signed with a
+# different key ("App not installed").
+KS="$HOME/.android/debug.keystore"
+if [ ! -f "$KS" ] && command -v keytool >/dev/null; then
+    echo "creating debug keystore at $KS"
+    mkdir -p "$HOME/.android"
+    keytool -genkeypair -keystore "$KS" -storepass android -alias androiddebugkey \
+        -keypass android -keyalg RSA -keysize 2048 -validity 10000 \
+        -dname "CN=Android Debug,O=Android,C=US" >/dev/null
+fi
 if bash "$ROOT/deployment/make-android-apk.sh"; then
     APK="$(ls -t "$UI"/bin/*-universal.apk | head -1)"
     mkdir -p "$ROOT/dist"
@@ -198,11 +223,9 @@ if bash "$ROOT/deployment/make-android-apk.sh"; then
     echo
     echo "=== BUILD COMPLETE ==="
     echo "APK: $DEST"
-    echo "Install with: adb install -r \"$DEST\""
+    echo "Copy it to the phone (e.g. Google Drive) and tap it to install."
 else
-    echo
-    echo "=== BUILD COMPLETE (AAB only) ==="
-    echo "AAB: $AAB"
-    echo "APK conversion skipped -- see the message above."
+    echo "Log: $LOG"
+    die "built $AAB but couldn't convert it to an installable APK -- see the message above"
 fi
 echo "Log: $LOG"

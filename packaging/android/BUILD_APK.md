@@ -100,9 +100,10 @@ the dist's Gradle outputs, old `bin/*.aab`/`*.apk` and
 p4a's template so `p4a_hook.py` re-patches it from scratch. It then
 dry-runs the hook's Java patch, stages the repo-root `main.py` plus
 `dnd_app/`, runs `buildozer android release` (log in
-`/tmp/mimic-build-*.log`) and, if bundletool is at
-`/tmp/bt/bundletool.jar`, writes
-`dist/MIMIC-<version>-arm64-v8a-release.apk`. It keeps
+`/tmp/mimic-build-*.log`) and converts the AAB into
+`dist/MIMIC-<version>-arm64-v8a-release.apk` with bundletool
+(downloaded once to `~/.cache/mimic/`, since `/tmp` is wiped on WSL
+restart) and the debug keystore. It keeps
 `libs/arm64-v8a`, `_python_bundle*` and `other_builds`, so it is not a
 full 30-45 minute rebuild.
 
@@ -114,12 +115,11 @@ it) and finish in under 2 minutes when only `.py`/`.qml` files changed.
 A build after touching `p4a_hook.py` or any recipe is slow again (the
 cache doesn't know those changed).
 
-When it finishes, **copy the APK to your phone** (USB cable, email it
-to yourself, a cloud drive — any way you'd normally move a file over)
-and tap it there to install, or run `installer/android/install_android.bat`/`.sh` if `adb` and a connected/authorized device are
-available — it uninstalls any previous copy and installs the fresh
-one (`adb install -r` alone is also fine if the icon/package didn't
-change). Your phone will warn about installing from an unknown source
+When it finishes, **copy the APK from `dist\` to your phone** (upload
+it to Google Drive, email it to yourself, USB cable — any way you'd
+normally move a file over) and tap it there to install. If `adb` and a
+connected/authorized device are available, `adb install -r <apk>` also
+works. Your phone will warn about installing from an unknown source
 the first time — that's normal for any app not from the Play Store;
 allow it for this one file.
 
@@ -230,8 +230,8 @@ one of the failures above, and each surfaces only after the slow
   to force a fresh extract is usually enough — no need to nuke the
   whole cache.
 - Don't uninstall the app between iterations unless the icon or
-  package name changed — `adb install -r` (what `install_android.bat`/
-  `.sh` do) overwrites an existing install fine.
+  package name changed — installing the new APK over the old one
+  (or `adb install -r`) keeps the app's saved characters.
 - Don't add a jar already listed in `android.add_jars` a second time —
   duplicate entries break Gradle's classpath resolution.
 
