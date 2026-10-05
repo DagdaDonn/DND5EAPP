@@ -37,7 +37,7 @@ from dnd_app.ui_desktop.dialogs.rest import (
     RACE_SCOPED_CHOICE_IDS, BACKGROUND_SCOPED_CHOICE_IDS,
     RestOptionsDialog, RestPreviewDialog,
 )
-from dnd_app.ui_desktop.pages.sheet.base import RESOURCE_POOL_TOGGLES
+from dnd_app.ui_desktop.pages.sheet.base import RESOURCE_POOL_TOGGLES, WILDSHAPE_BLOCKED_FEATURES
 from dnd_app.core.calculator import (
     SKILL_ABILITY, get_ac, get_initiative, get_prof_bonus,
     get_passive_perception, get_skill_bonus, get_saving_throw_bonus,
@@ -60,7 +60,7 @@ from dnd_app.core.effects import has_extra_action
 from dnd_app.ui_desktop.style.theme import THEMES, FONT_SCALES
 from dnd_app.ui_desktop.style.immersive_spells import compute_display_spell_title
 from dnd_app.ui_desktop.action_abilities import build_action_abilities
-from dnd_app.data.phbCommon.items import WEAPON_DICT, ALL_WEAPONS, ARMOR
+from dnd_app.data.phbCommon.items import WEAPON_DICT, ALL_WEAPONS, ARMOR, gear_icon, is_scroll_name, is_thrown_consumable
 from dnd_app.data.phbCommon.spells import (
     get_spell, spells_for_class, spells_for_class_at_level, SPELL_DICT, SPELLS_BY_LEVEL,
     get_mark_expanded_spells,
@@ -280,11 +280,11 @@ class CharacterSheetBridge(QObject):
         total = d + bonus
         flair = ""
         if d == 20:
-            flair = "  \U0001f31f NAT 20!"
+            flair = "  NAT 20!"
         elif d == 1:
-            flair = "  \U0001f480 Nat 1..."
+            flair = "  Nat 1..."
         sign = f"{bonus:+d}"
-        self.toastRequested.emit(f"\U0001f3b2 {label}: [{d}] {sign} = {total}{flair}")
+        self.toastRequested.emit(f"{label}: [{d}] {sign} = {total}{flair}")
 
     # ── Inspiration ──────────────────────────────────────────────────
     @Property(bool, notify=statsChanged)
@@ -701,8 +701,60 @@ class CharacterSheetBridge(QObject):
                 "canPowerAttack": can_power_attack,
                 "powerAttackActive": power_attack_active,
                 "onHitBonusText": on_hit_text,
+                # for rollWeaponAttack() / rollWeaponDamage()
+                "attackBonus": attack_bonus,
+                "damageDice": damage,
+                "damageMod": dmg_total_mod,
+                "onHitDice": [f"{b['die']} {b['damage_type']}" for b in on_hit] if on_hit else [],
             })
         return out
+
+    # ── Weapon rolls (Combat screen's Attack / Damage buttons) ─────────
+    # Same maths as ui_desktop's per-weapon "Hit" button (d20 + attack
+    # bonus, nat 20 = crit, nat 1 = miss), plus advantage/disadvantage
+    # from conditions rolling two d20s. Damage doubles the weapon's dice
+    # on a crit and adds on-hit dice (Divine Strike, etc.).
+    def _weapon(self, name):
+        return next((w for w in self.weapons if w["name"] == name), None)
+
+    @Slot(str)
+    def rollWeaponAttack(self, name: str):
+        w = self._weapon(name)
+        if w is None:
+            return
+        rolls = [random.randint(1, 20)]
+        mode = ""
+        if w["advantage"] != w["disadvantage"]:
+            rolls.append(random.randint(1, 20))
+            mode = " (adv)" if w["advantage"] else " (disadv)"
+        d20 = max(rolls) if w["advantage"] else (min(rolls) if w["disadvantage"] else rolls[0])
+        total = d20 + w["attackBonus"]
+        shown = "/".join(str(r) for r in rolls)
+        tail = " -- CRIT!" if d20 == 20 else (" -- Miss" if d20 == 1 else "")
+        self.toastRequested.emit(f"{name} attack{mode}: [{shown}] {_mod_text(w['attackBonus'])} = {total}{tail}")
+
+    @Slot(str, bool)
+    def rollWeaponDamage(self, name: str, crit: bool):
+        w = self._weapon(name)
+        if w is None:
+            return
+        def roll(expr):
+            m = re.match(r"\s*(\d+)d(\d+)", str(expr))
+            if not m:
+                try:
+                    return [int(str(expr).strip())]
+                except ValueError:
+                    return []
+            n, sides = int(m.group(1)) * (2 if crit else 1), int(m.group(2))
+            return [random.randint(1, sides) for _ in range(n)]
+        dice = roll(w["damageDice"])
+        extra = []
+        for e in w["onHitDice"]:
+            extra += roll(e.split(" ")[0])
+        total = max(0, sum(dice) + sum(extra) + w["damageMod"])
+        parts = "+".join(str(d) for d in dice + extra) or "0"
+        self.toastRequested.emit(f"{name} damage{' (crit)' if crit else ''}: [{parts}] {_mod_text(w['damageMod'])} "
+                                 f"= {total} {w['damageType']}")
 
     @Slot(str)
     def toggleWeaponPowerAttack(self, wpn_name: str):
@@ -718,17 +770,79 @@ class CharacterSheetBridge(QObject):
         # isPotion/isScroll use the same name-substring detection as
         # ui_desktop's gear.py context menu (no dedicated data flag for
         # "is a potion/scroll" exists beyond a magic item's own "type").
+        # category/icon/detail/equip* drive the Equipment screen's
+        # grouped inventory (Weapons / Armor / Consumables / Gear), where
+        # a weapon is equipped and armor worn straight from its own row.
         out = []
+        equipped_weapons = set(self.char.get("equipped_weapons", []))
+        worn = self.char.get("armor_worn", "")
         for e in self.char.get("equipment", []):
             name = e.get("name", "")
             lname = name.lower()
+            is_potion = e.get("type") == "Potion" or "potion" in lname
+            is_scroll = is_scroll_name(name)
+            base_name, _ = parse_magic_suffix(name)
+            wdata = WEAPON_DICT.get(base_name)
+            adata = ARMOR_DICT.get(name)
+            if wdata:
+                category, icon, equip_kind = "Weapons", "combat", "weapon"
+                detail = f"{wdata.get('damage', '')} {wdata.get('dmg_type', '')}".strip()
+                equipped = name in equipped_weapons
+            elif adata and adata.get("type") == "shield":
+                category, icon, equip_kind = "Armor", "shield", "shield"
+                detail = f"+{adata.get('ac', 2)} AC"
+                equipped = bool(self.char.get("shield"))
+            elif adata and adata.get("type") != "none":
+                category, icon, equip_kind = "Armor", "shield", "armor"
+                detail = f"AC {adata.get('ac')} · {adata.get('type', '').title()}"
+                equipped = worn == name
+            elif is_potion or is_scroll:
+                category, icon, equip_kind = "Consumables", "potion" if is_potion else "file", ""
+                detail, equipped = "", False
+            else:
+                # kits, instruments, lights and thrown flasks get their own
+                # icon (gear_icon); flasks that are used up go with Consumables
+                category = "Consumables" if is_thrown_consumable(name) else "Tools & Gear"
+                icon, equip_kind = gear_icon(name) or "package", ""
+                detail, equipped = "", False
+            weight = e.get("weight", (wdata or adata or {}).get("weight", 0)) or 0
+            cost = e.get("cost", (wdata or adata or {}).get("cost", 0)) or 0
             out.append({
                 "name": name,
                 "qty": e.get("qty", 1),
-                "isPotion": e.get("type") == "Potion" or "potion" in lname,
-                "isScroll": "scroll" in lname,
+                "isPotion": is_potion,
+                "isScroll": is_scroll,
+                "category": category,
+                "icon": icon,
+                "detail": detail,
+                "weight": weight,
+                "cost": cost,
+                "equipKind": equip_kind,
+                "equipped": equipped,
             })
         return out
+
+    _INVENTORY_GROUPS = (("Weapons", "combat"), ("Armor", "shield"),
+                         ("Consumables", "potion"), ("Tools & Gear", "package"))
+
+    @Property(list, notify=statsChanged)
+    def inventoryGroups(self):
+        items = self.equipment
+        out = []
+        for group, icon in self._INVENTORY_GROUPS:
+            members = sorted((i for i in items if i["category"] == group),
+                             key=lambda i: (not i["equipped"], i["name"].lower()))
+            if members:
+                out.append({"group": group, "icon": icon, "items": members})
+        return out
+
+    @Property(dict, notify=statsChanged)
+    def carryLoad(self):
+        detail = get_carry_capacity_detail(self.char)
+        total = get_total_weight(self.char)
+        cap = detail["carry"] or 1
+        return {"weight": round(total, 1), "capacity": detail["carry"],
+                "fraction": min(1.0, total / cap)}
 
     @Slot(str)
     def usePotion(self, name: str):
@@ -768,18 +882,18 @@ class CharacterSheetBridge(QObject):
                 if removed:
                     msgs.append(f"cured {', '.join(removed)}")
             summary = "; ".join(msgs) if msgs else instant.get("cure_note", "used")
-            self.toastRequested.emit(f"\U0001f9ea {name} -- {summary}")
+            self.toastRequested.emit(f"{name} -- {summary}")
         else:
             info = EFFECT_TABLE.get(name, {})
             if info:
                 fx = self.char.setdefault("active_effects", [])
                 if name not in fx:
                     fx.append(name)
-                    self.toastRequested.emit(f"\U0001f9ea {name} -- active (see Actions tab)")
+                    self.toastRequested.emit(f"{name} -- active (see Actions tab)")
                 else:
-                    self.toastRequested.emit(f"\U0001f9ea {name} -- already active")
+                    self.toastRequested.emit(f"{name} -- already active")
             else:
-                self.toastRequested.emit(f"\U0001f9ea Drank {name}")
+                self.toastRequested.emit(f"Drank {name}")
         self.ctrl.refresh()
         self.statsChanged.emit()
 
@@ -797,11 +911,11 @@ class CharacterSheetBridge(QObject):
             fx = self.char.setdefault("active_effects", [])
             if name not in fx:
                 fx.append(name)
-                self.toastRequested.emit(f"\U0001f4dc {name} -- active (see Actions tab)")
+                self.toastRequested.emit(f"{name} -- active (see Actions tab)")
             else:
-                self.toastRequested.emit(f"\U0001f4dc {name} -- already active")
+                self.toastRequested.emit(f"{name} -- already active")
         else:
-            self.toastRequested.emit(f"\U0001f4dc Read {name}")
+            self.toastRequested.emit(f"Read {name}")
         self.ctrl.refresh()
         self.statsChanged.emit()
 
@@ -1128,7 +1242,7 @@ class CharacterSheetBridge(QObject):
         if not any((i.get("name") if isinstance(i, dict) else i) == enchanted_name for i in items):
             items.append({"name": enchanted_name, "attunement": False, "equipped": True, "notes": ""})
         self.ctrl.refresh()
-        self.toastRequested.emit(f"✨ {enchanted_name} equipped")
+        self.toastRequested.emit(f"{enchanted_name} equipped")
         self.statsChanged.emit()
 
     @Slot(int)
@@ -1141,7 +1255,7 @@ class CharacterSheetBridge(QObject):
         if not any((i.get("name") if isinstance(i, dict) else i) == item_name for i in items):
             items.append({"name": item_name, "attunement": False, "equipped": True, "notes": ""})
         self.ctrl.refresh()
-        self.toastRequested.emit(f"✨ {item_name} equipped")
+        self.toastRequested.emit(f"{item_name} equipped")
         self.statsChanged.emit()
 
     # Matches desktop's gear.py magic item browser's three QComboBoxes.
@@ -1515,14 +1629,33 @@ class CharacterSheetBridge(QObject):
                 # back as 4-tuples with the spell dict appended, and a
                 # strict 3-way unpack blanked the Actions and Abilities
                 # tabs for any such character.
-                "items": [
-                    {"name": entry[0],
-                     "desc": entry[1] if len(entry) > 1 else "",
-                     "source": entry[2] if len(entry) > 2 else ""}
-                    for entry in items
-                ],
+                "bucketKey": key,
+                "items": [self._action_item(entry, key) for entry in items],
             })
         return out
+
+    def _action_item(self, entry, bucket_key):
+        """One Actions-screen card. Spell entries (cantrips, pinned or
+        bonus-action/reaction spells, racial innate spells) carry the
+        spell's real name for castSpell(); everything else gets a Use
+        button that runs useAbility() -- desktop's action-tab Cast/Use."""
+        spell = entry[3] if len(entry) > 3 else None
+        # desktop marks pinned spells with a "★ " text prefix; here the
+        # card shows the star icon from the "pinned" flag instead
+        name = entry[0][2:] if spell is not None and entry[0].startswith("★ ") else entry[0]
+        item = {"name": name,
+                "desc": entry[1] if len(entry) > 1 else "",
+                "source": entry[2] if len(entry) > 2 else "",
+                "bucketKey": bucket_key,
+                "isSpell": spell is not None}
+        if spell is not None:
+            item.update({
+                "spellName": spell.get("name", entry[0]),
+                "spellLevel": spell.get("level", 0),
+                "concentration": bool(spell.get("concentration")),
+                "pinned": spell.get("name") in self.char.get("quick_spells", []),
+            })
+        return item
 
     @Property(list, notify=statsChanged)
     def resources(self):
@@ -1958,8 +2091,12 @@ class CharacterSheetBridge(QObject):
     @Property(list, notify=statsChanged)
     def knownSpells(self):
         prepared = set(self.char.get("spells_prepared", []))
+        quick = set(self.char.get("quick_spells", []))
         out = []
-        for name in sorted(self.char.get("spells_known", [])):
+        # cantrips first, then by spell level, then by name
+        names = sorted(self.char.get("spells_known", []),
+                       key=lambda n: ((get_spell(n) or {}).get("level", 0), n))
+        for name in names:
             sp = get_spell(name) or {}
             out.append({
                 "name": name,
@@ -1970,6 +2107,7 @@ class CharacterSheetBridge(QObject):
                 "prepared": name in prepared,
                 "concentration": bool(sp.get("concentration")),
                 "ritual": bool(sp.get("ritual")),
+                "pinned": name in quick,
             })
         return out
 
@@ -2097,7 +2235,7 @@ class CharacterSheetBridge(QObject):
         if not self._spell_homebrew:
             mark_spells = get_mark_expanded_spells(char)
             if my_classes and name not in mark_spells and not (set(sp.get("classes", [])) & my_classes):
-                self.toastRequested.emit(f"\U0001f512 {name} isn't on your class spell lists "
+                self.toastRequested.emit(f"{name} isn't on your class spell lists "
                                           f"-- enable Homebrew mode to learn it")
                 return
             sp_level = sp.get("level", 0)
@@ -2105,7 +2243,7 @@ class CharacterSheetBridge(QObject):
                 max_lvl = helper._max_castable_spell_level()
                 if sp_level > max_lvl:
                     self.toastRequested.emit(
-                        f"\U0001f512 {name} is a level {sp_level} spell -- you can only "
+                        f"{name} is a level {sp_level} spell -- you can only "
                         f"cast up to level {max_lvl} right now -- enable Homebrew mode to exceed it")
                     return
 
@@ -2133,7 +2271,7 @@ class CharacterSheetBridge(QObject):
                     used_shown = cap_shown - _room(best_cn) if cap_shown is not None else "?"
                     kind = "Cantrip" if is_cantrip else "Spells-known"
                     self.toastRequested.emit(
-                        f"\U0001f512 {kind} limit reached for {_real_name(best_cn)} "
+                        f"{kind} limit reached for {_real_name(best_cn)} "
                         f"({used_shown}/{cap_shown}) -- enable Homebrew mode to exceed it")
                     return
         known.append(name)
@@ -2192,7 +2330,7 @@ class CharacterSheetBridge(QObject):
                 cap = caps[target]
                 if current >= cap:
                     self.toastRequested.emit(
-                        f"\U0001f512 {target}'s prepared spell limit reached ({current}/{cap}) "
+                        f"{target}'s prepared spell limit reached ({current}/{cap}) "
                         f"-- unprepare another {target} spell first")
                     return
         prepped.append(name)
@@ -2236,8 +2374,133 @@ class CharacterSheetBridge(QObject):
             "action": self._turn_counts["Action"],
             "actionLimit": self._turn_limit("Action"),
             "bonusAction": self._turn_counts["Bonus Action"],
+            "bonusActionLimit": self._turn_limit("Bonus Action"),
             "reaction": self._turn_counts["Reaction"],
+            "reactionLimit": self._turn_limit("Reaction"),
         }
+
+    @Slot(str)
+    def toggleTurnSlot(self, bucket: str):
+        """Tap a turn chip to mark it spent / available again -- same as
+        clicking ui_desktop's turn chips (_toggle_turn_slot)."""
+        if bucket not in self._turn_counts:
+            return
+        limit = self._turn_limit(bucket)
+        self._turn_counts[bucket] = 0 if self._turn_counts[bucket] >= limit else limit
+        self.statsChanged.emit()
+
+    # ── Use button (Actions screen) ──────────────────────────────────
+    # Port of ui_desktop's action_tabs.py _use_ability(): special cases
+    # for features that need more than a resource tick, then "spend a
+    # matching tracked resource (and switch on its effect, for toggles
+    # like Rage)", else just consume the turn slot. Divine Smite spends
+    # the lowest available slot (desktop asks which; there's no dialog
+    # here).
+    @Slot(str, str, str)
+    def useAbility(self, bucket: str, display: str, desc: str):
+        char = self.char
+        key = display.split("(")[0].strip().lower()
+        if char.get("_wildshape_active") and any(b in key for b in WILDSHAPE_BLOCKED_FEATURES):
+            self.toastRequested.emit(f"Can't use {display} while Wild Shaped -- your beast form can't "
+                                     f"perform what it requires (a held item, speech, an unarmed strike, or casting)")
+            return
+        if key == "wild shape":
+            self.toastRequested.emit("Use the Wild Shape card on the Combat screen to pick a beast and transform")
+            return
+        fx = char.setdefault("active_effects", [])
+
+        def toggle_effect(name, on_text, cost_channel_divinity=False, requires=None):
+            if name in fx:
+                fx.remove(name)
+                self.toastRequested.emit(f"{name}: OFF")
+            else:
+                if requires and requires not in fx:
+                    self.toastRequested.emit(f"{name} requires an active {requires} first")
+                    return
+                if cost_channel_divinity:
+                    cd = next((r for r in char.get("resources", [])
+                               if "channel divinity" in str(r.get("name", "")).lower()), None)
+                    if cd and cd.get("current", 0) <= 0:
+                        self.toastRequested.emit(f"{name}: no Channel Divinity uses left (recharges on short/long rest)")
+                        return
+                    if cd:
+                        cd["current"] = cd.get("current", 0) - 1
+                fx.append(name)
+                self.toastRequested.emit(f"{name}: ON -- {on_text}")
+            self.ctrl.refresh()
+            self.statsChanged.emit()
+
+        if key == "reckless attack":
+            return toggle_effect("Reckless Attack", "advantage on your melee attacks, but attacks against you also have advantage")
+        if key == "sacred weapon":
+            return toggle_effect("Sacred Weapon", "add CHA mod to attacks with your weapon for 1 minute", True)
+        if key == "peerless athlete":
+            return toggle_effect("Peerless Athlete", "doubled carry capacity, advantage on Athletics/Acrobatics, for 10 minutes", True)
+        if "frenzi" in key:
+            return toggle_effect("Frenzy", "bonus action melee attack each turn for the rest of your rage; 1 exhaustion when it ends",
+                                 requires="Rage")
+        if key == "second wind":
+            res = next((r for r in char.get("resources", [])
+                        if "second wind" in str(r.get("name", "")).lower()), None)
+            if res is None or res.get("current", 0) <= 0:
+                self.toastRequested.emit("Second Wind: no uses left (recharges on short/long rest)")
+                return
+            fighter_lvl = class_levels(char).get("Fighter", 0)
+            roll = random.randint(1, 10)
+            heal = roll + fighter_lvl
+            res["current"] = res.get("current", 1) - 1
+            char["current_hp"] = min(char.get("max_hp", 0), char.get("current_hp", 0) + heal)
+            self._mark_turn_used(bucket)
+            self.toastRequested.emit(f"Second Wind: rolled {roll} + {fighter_lvl} (Fighter level) = {heal} HP healed "
+                                     f"({res['current']}/{res.get('current_max')} left)")
+            self.statsChanged.emit()
+            return
+        if key == "divine smite":
+            used = char.setdefault("spell_slots_used", [0] * 9)
+            maxes = char.get("spell_slots_max", [0] * 9)
+            lvl = next((l for l in range(1, 6) if maxes[l - 1] > used[l - 1]), None)
+            if lvl is None:
+                self.toastRequested.emit("Divine Smite: no available spell slots to expend")
+                return
+            used[lvl - 1] += 1
+            dice = min(5, 1 + lvl)
+            self.toastRequested.emit(f"Divine Smite: expended a level-{lvl} slot -- {dice}d8 radiant damage "
+                                     f"(+1d8 vs. undead or fiends)")
+            self.statsChanged.emit()
+            return
+        for res in char.get("resources", []):
+            rname = str(res.get("name", "")).lower()
+            if key and (key in rname or rname in key) and res.get("current_max", 0) > 0:
+                if display in RESOURCE_POOL_TOGGLES and display in fx:
+                    self.toastRequested.emit(f"{display} already active -- end it from its resource row")
+                    return
+                cur = res.get("current", 0)
+                if cur <= 0:
+                    self.toastRequested.emit(f"{display}: no uses left (recharges on {res.get('reset', 'rest')})")
+                    return
+                res["current"] = cur - 1
+                if display in RESOURCE_POOL_TOGGLES and display not in fx:
+                    fx.append(display)
+                    self.ctrl.refresh()
+                self._mark_turn_used(bucket)
+                self.toastRequested.emit(f"Used {display} ({res['current']}/{res.get('current_max')} left)")
+                self.statsChanged.emit()
+                return
+        self._mark_turn_used(bucket)
+        self.toastRequested.emit(f"{display}: {desc[:90]}")
+        self.statsChanged.emit()
+
+    @Slot(str)
+    def toggleQuickSpell(self, name: str):
+        """Pin/unpin a spell as a quick spell (desktop's ★): pinned leveled
+        action spells join the Actions and Combat screens' castable
+        spells, alongside cantrips and bonus-action/reaction spells."""
+        quick = self.char.setdefault("quick_spells", [])
+        if name in quick:
+            quick.remove(name)
+        else:
+            quick.append(name)
+        self.statsChanged.emit()
 
     @Slot()
     def newTurn(self):
@@ -2933,9 +3196,9 @@ class CharacterSheetBridge(QObject):
                 if not any((i.get("name") if isinstance(i, dict) else i) == item_name for i in items):
                     items.append({"name": item_name, "attunement": False,
                                   "equipped": True, "notes": f"Artificer infusion: {infusion_name}"})
-            self.toastRequested.emit(f"✨ {item_name} infused with {infusion_name}")
+            self.toastRequested.emit(f"{item_name} infused with {infusion_name}")
         else:
-            self.toastRequested.emit(f"✨ {infusion_name} activated and given to another character")
+            self.toastRequested.emit(f"{infusion_name} activated and given to another character")
         self.statsChanged.emit()
 
     @Slot(str, str)
@@ -3344,7 +3607,12 @@ class CharacterSheetBridge(QObject):
 
     @Property(bool, notify=statsChanged)
     def hasPendingChoices(self):
-        return bool(self._raw_choices_needed())
+        # "info" entries (Beast Master companion, Ascendant Dragon's
+        # Draconic Strike, ...) are notices pre-filled with "ack", not
+        # choices -- desktop's own unfinished-filter skips them too.
+        # Counting them kept this true forever for those subclasses,
+        # which would leave the Choices pulse running with nothing to do.
+        return any(c["type"] != "info" for c in self._raw_choices_needed())
 
     def _raw_choices_needed(self):
         # _get_subclass_choices is the single biggest source here despite
@@ -3368,7 +3636,25 @@ class CharacterSheetBridge(QObject):
         # picker here needs an actual pool up front, so fill in the same
         # candidate list desktop's widget would have used.
         for c in choices:
-            if c.get("pool") is not None:
+            # Class skill picks like Rogue's "Any 4 skills" arrive as
+            # pool=None and Bard's as the literal placeholder
+            # ["Any 3 skills"] -- desktop's _build_skill_chooser swaps
+            # both for the full skill list. Without this the Rogue card
+            # was hidden (no pool) and the Bard card offered one
+            # meaningless "Any 3 skills" option, so neither could ever be
+            # completed and hasPendingChoices stayed true for good.
+            # Skills already proficient from elsewhere are left out (a
+            # wasted pick; desktop greys them out instead), except this
+            # choice's own earlier picks.
+            pool = c.get("pool")
+            if c["type"] == "skill_prof" and (
+                    not pool or (len(pool) == 1 and "any" in str(pool[0]).lower())):
+                already = set(c.get("already_chosen") or [])
+                skills = self.char.get("skills", {})
+                c["pool"] = [s for s in _LEVELUP_ALL_SKILLS
+                             if s in already or skills.get(s, 0) < 2]
+                continue
+            if pool is not None:
                 continue
             if c["type"] == "tool_prof":
                 c["pool"] = list(ALL_TOOLS)
@@ -3993,7 +4279,7 @@ class CharacterSheetBridge(QObject):
                 active.append(key)
         sb = resolve_companion_statblock(instance_key, self.char)
         self.char.setdefault("summon_hp_tracking", {})[f"companion_{instance_key}"] = sb.get("hp", 1)
-        self.toastRequested.emit(f"\U0001f409 {tmpl['display_name']} summoned!")
+        self.toastRequested.emit(f"{tmpl['display_name']} summoned!")
         self.statsChanged.emit()
 
     @Slot(str)
@@ -4016,7 +4302,7 @@ class CharacterSheetBridge(QObject):
             tmpl = COMPANION_STATBLOCKS.get(companion_key.split("#", 1)[0], {})
             display_name = tmpl.get("display_name", companion_key)
             if tmpl.get("requires_summon_action"):
-                self.toastRequested.emit(f"\U0001f480 {display_name} has fallen -- re-summon it after a long rest.")
+                self.toastRequested.emit(f"{display_name} has fallen -- re-summon it after a long rest.")
                 self.dismissCompanion(companion_key)
                 return
             elif tmpl.get("requires_active_infusion"):
@@ -4024,14 +4310,14 @@ class CharacterSheetBridge(QObject):
                 self.char["active_infusions"] = [
                     a for a in self.char.get("active_infusions", []) if a.get("infusion") != req_name]
                 self.toastRequested.emit(
-                    f"\U0001f480 {display_name} has vanished, leaving its heart behind -- "
+                    f"{display_name} has vanished, leaving its heart behind -- "
                     f"re-infuse a gem to create a new one.")
             else:
                 pending = self.char.setdefault("companion_pending_replacement", [])
                 if companion_key not in pending:
                     pending.append(companion_key)
                 self.toastRequested.emit(
-                    f"\U0001f480 {display_name} has perished -- a new one can be made at your next long rest.")
+                    f"{display_name} has perished -- a new one can be made at your next long rest.")
         self.statsChanged.emit()
 
     @Property(bool, notify=statsChanged)

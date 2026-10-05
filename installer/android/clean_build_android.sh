@@ -163,6 +163,10 @@ for line in first.splitlines():
 EOF
 
 step "4/6 Staging app source into $STAGE"
+# Android's icons come from a QML library generated from the desktop's
+# icon definitions (dnd_app/ui_desktop/icon_data.py) -- regenerate it so
+# the APK always matches.
+(cd "$ROOT" && "$PY" -m dnd_app.ui_desktop.icon_data)
 mkdir -p "$STAGE"
 # The repo-root main.py wrapper, NOT dnd_app/ui_android/main.py: that
 # file finds its QML relative to its own location (qml/ next to it), so

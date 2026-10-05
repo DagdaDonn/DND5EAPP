@@ -44,55 +44,81 @@ Page {
 
             SheetHeader {}
 
-            Label { text: "Armor & Carrying Capacity"; color: Theme.gold; font.pixelSize: Theme.fsSmall; font.bold: true }
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: armorCol.height + 16
-                radius: 10
-                color: Theme.surf
-                border.color: Theme.border
+            // ── Armor & load ────────────────────────────────────────────
+            MCard {
+                title: "Armor & Load"
+                iconName: "shield"
 
-                Column {
-                    id: armorCol
-                    x: 10; y: 8
-                    width: parent.width - 20
-                    spacing: 6
-
-                    Label {
-                        text: sheetBridge.armorWorn + (sheetBridge.hasShield ? "  +  Shield" : "")
-                        color: Theme.text
-                        font.pixelSize: Theme.fsBody
-                        font.bold: true
-                        width: parent.width
-                        wrapMode: Text.WordWrap
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Label {
+                            text: sheetBridge.armorWorn + (sheetBridge.hasShield ? "  +  Shield" : "")
+                            color: Theme.text
+                            font.pixelSize: Theme.fsBody
+                            font.bold: true
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                        }
+                        Label {
+                            text: "AC " + sheetBridge.armorClass
+                            color: Theme.teal2
+                            font.pixelSize: Theme.fsSmall
+                            font.bold: true
+                        }
                     }
+                    MButton {
+                        primary: false
+                        implicitHeight: 36
+                        text: "Change"
+                        onClicked: armorDialog.open()
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    visible: sheetBridge.armorWorn !== "No Armor" || sheetBridge.ownsShield
+                    MCheckBox {
+                        visible: sheetBridge.ownsShield
+                        text: "Shield"
+                        checked: sheetBridge.hasShield
+                        onToggled: sheetBridge.toggleShieldWorn(checked)
+                    }
+                    Item { Layout.fillWidth: true }
+                    MButton {
+                        primary: false
+                        implicitHeight: 36
+                        visible: sheetBridge.armorWorn !== "No Armor"
+                        text: "Take Off Armor"
+                        onClicked: sheetBridge.toggleArmorWorn(sheetBridge.armorWorn, false)
+                    }
+                }
+
+                // carrying capacity
+                RowLayout {
+                    Layout.fillWidth: true
+                    Label { text: "Carrying"; color: Theme.text3; font.pixelSize: Theme.fsSmall; Layout.fillWidth: true }
                     Label {
-                        text: "Carrying: " + sheetBridge.carryText
-                        color: Theme.text3
+                        text: sheetBridge.carryLoad.weight + " / " + sheetBridge.carryLoad.capacity + " lb"
+                        color: sheetBridge.carryLoad.fraction >= 1 ? Theme.crimson2 : Theme.text2
                         font.pixelSize: Theme.fsSmall
+                        font.bold: true
                     }
-                    Flow {
-                        width: parent.width
-                        spacing: 8
-                        MButton {
-                            primary: false
-                            height: 32
-                            text: "Change Armor"
-                            onClicked: armorDialog.open()
-                        }
-                        MButton {
-                            primary: false
-                            height: 32
-                            visible: sheetBridge.armorWorn !== "No Armor"
-                            text: "Take Off Armor"
-                            onClicked: sheetBridge.toggleArmorWorn(sheetBridge.armorWorn, false)
-                        }
-                        MCheckBox {
-                            visible: sheetBridge.ownsShield
-                            text: "Shield equipped"
-                            checked: sheetBridge.hasShield
-                            onToggled: sheetBridge.toggleShieldWorn(checked)
-                        }
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 6
+                    radius: 3
+                    color: Theme.surf3
+                    Rectangle {
+                        width: parent.width * sheetBridge.carryLoad.fraction
+                        height: parent.height
+                        radius: 3
+                        color: sheetBridge.carryLoad.fraction >= 1 ? Theme.crimson
+                             : sheetBridge.carryLoad.fraction > 0.66 ? Theme.amber : Theme.teal2
                     }
                 }
             }
@@ -119,73 +145,34 @@ Page {
                 onPicked: (value) => sheetBridge.addMagicItemWithScrollSpell(root.pendingScrollName, value)
             }
 
-            Label { text: "Weapons"; color: Theme.gold; font.pixelSize: Theme.fsSmall; font.bold: true; Layout.topMargin: 6 }
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: Math.max(40, wpnCol.height + 16)
-                radius: 10
-                color: Theme.surf
-                border.color: Theme.border
 
-                Column {
-                    id: wpnCol
-                    x: 8; y: 8
-                    width: parent.width - 16
-                    spacing: 4
+            // ── Currency ────────────────────────────────────────────────
+            MCard {
+                title: "Currency"
+                iconName: "coins"
 
-                    Label {
-                        visible: sheetBridge.equippableWeapons.length === 0
-                        text: "No owned weapons."
-                        color: Theme.text3
-                        font.pixelSize: Theme.fsSmall
-                    }
-                    Repeater {
-                        model: sheetBridge.equippableWeapons
-                        delegate: RowLayout {
-                            width: wpnCol.width
-                            MCheckBox {
-                                text: modelData.name
-                                checked: modelData.equipped
-                                onToggled: sheetBridge.toggleWeaponEquipped(modelData.name, checked)
-                                Layout.fillWidth: true
-                            }
-                        }
-                    }
-                }
-            }
-
-            Label { text: "Currency"; color: Theme.gold; font.pixelSize: Theme.fsSmall; font.bold: true; Layout.topMargin: 6 }
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: currRow.height + 16
-                radius: 10
-                color: Theme.surf
-                border.color: Theme.border
-
-                Flow {
-                    id: currRow
-                    x: 8; y: 8
-                    width: parent.width - 16
-                    spacing: 10
-
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: 2
+                    columnSpacing: 10
+                    rowSpacing: 8
                     Repeater {
                         model: sheetBridge.currencyAll
-                        delegate: Column {
-                            spacing: 2
+                        delegate: RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
                             Label {
                                 text: modelData.denom
-                                color: Theme.text2
+                                color: Theme.gold2
                                 font.pixelSize: Theme.fsSmall
-                                anchors.horizontalCenter: parent.horizontalCenter
+                                font.bold: true
+                                Layout.preferredWidth: 26
                             }
                             MSpinBox {
-                                // MSpinBox's up/down indicators are 36px each
-                                // (72px total) -- anything narrower than
-                                // ~110px leaves too little room for the
-                                // number, visually mashing the "-" glyph
-                                // against the digits (established in
-                                // MStatblockCard.qml's HP spinner).
-                                implicitWidth: 130
+                                // the up/down indicators need ~110px+ to leave
+                                // room for the number (see MStatblockCard)
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 110
                                 from: 0
                                 to: 999999
                                 value: modelData.amount
@@ -196,57 +183,126 @@ Page {
                 }
             }
 
-            Label { id: invAnchor; text: "Inventory"; color: Theme.gold; font.pixelSize: Theme.fsSmall; font.bold: true; Layout.topMargin: 6 }
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: Math.max(40, invCol.height + 16)
-                radius: 10
-                color: Theme.surf
-                border.color: Theme.border
+            // ── Inventory ───────────────────────────────────────────────
+            // Grouped Weapons / Armor / Consumables / Tools & Gear, equipped
+            // items first. Weapons are equipped and armor worn straight from
+            // their row (this replaces the separate Weapons checklist).
+            MCard {
+                id: invAnchor
+                title: "Inventory"
+                iconName: "gear"
 
-                Column {
-                    id: invCol
-                    x: 8; y: 8
-                    width: parent.width - 16
-                    spacing: 4
+                Label {
+                    visible: sheetBridge.equipment.length === 0
+                    text: "No items yet -- add some below."
+                    color: Theme.text3
+                    font.pixelSize: Theme.fsSmall
+                }
 
-                    Label {
-                        visible: sheetBridge.equipment.length === 0
-                        text: "No items."
-                        color: Theme.text3
-                        font.pixelSize: Theme.fsSmall
-                    }
+                Repeater {
+                    model: sheetBridge.inventoryGroups
+                    delegate: ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
 
-                    Repeater {
-                        model: sheetBridge.equipment
-                        delegate: RowLayout {
-                            width: invCol.width
+                        RowLayout {
+                            spacing: 6
                             Label {
-                                text: (modelData.qty > 1 ? modelData.qty + "× " : "") + modelData.name
-                                color: Theme.text2
+                                text: modelData.group
+                                color: Theme.text3
                                 font.pixelSize: Theme.fsSmall
-                                wrapMode: Text.WordWrap
+                                font.bold: true
+                            }
+                            Label {
+                                text: modelData.items.length
+                                color: Theme.text3
+                                font.pixelSize: Theme.fsSmall
+                            }
+                        }
+
+                        Repeater {
+                            model: modelData.items
+                            delegate: Rectangle {
+                                objectName: "invRow_" + modelData.name
                                 Layout.fillWidth: true
-                            }
-                            MButton {
-                                primary: false
-                                height: 28
-                                visible: modelData.isPotion
-                                text: "Drink"
-                                onClicked: sheetBridge.usePotion(modelData.name)
-                            }
-                            MButton {
-                                primary: false
-                                height: 28
-                                visible: modelData.isScroll
-                                text: "Read"
-                                onClicked: sheetBridge.useScroll(modelData.name)
-                            }
-                            MButton {
-                                primary: false
-                                height: 28
-                                text: "Remove"
-                                onClicked: sheetBridge.removeEquipmentItem(modelData.name)
+                                implicitHeight: invRow.implicitHeight + 14
+                                radius: 8
+                                color: Theme.surf2
+                                border.color: modelData.equipped ? Theme.teal : Theme.border
+
+                                RowLayout {
+                                    id: invRow
+                                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 8 }
+                                    spacing: 8
+                                    MIcon {
+                                        name: modelData.icon
+                                        size: 20
+                                        color: modelData.equipped ? Theme.teal2 : Theme.indigo2
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: 0
+                                        spacing: 1
+                                        Label {
+                                            text: (modelData.qty > 1 ? modelData.qty + "× " : "") + modelData.name
+                                            color: Theme.text
+                                            font.pixelSize: Theme.fsBody
+                                            font.bold: modelData.equipped
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                        Label {
+                                            text: [modelData.detail,
+                                                   modelData.weight > 0 ? (modelData.weight * modelData.qty) + " lb" : "",
+                                                   modelData.cost > 0 ? (modelData.cost * modelData.qty) + " gp" : ""]
+                                                  .filter(function(x) { return x.length > 0 }).join("  ·  ")
+                                            visible: text.length > 0
+                                            color: Theme.text3
+                                            font.pixelSize: Theme.fsSmall
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                    }
+                                    // equip / wear / use, then remove -- same
+                                    // column on every row
+                                    MButton {
+                                        visible: modelData.equipKind !== ""
+                                        primary: false
+                                        implicitHeight: 34
+                                        text: modelData.equipKind === "weapon" ? (modelData.equipped ? "Unequip" : "Equip")
+                                              : (modelData.equipped ? "Take off" : (modelData.equipKind === "shield" ? "Equip" : "Wear"))
+                                        onClicked: {
+                                            if (modelData.equipKind === "weapon")
+                                                sheetBridge.toggleWeaponEquipped(modelData.name, !modelData.equipped)
+                                            else if (modelData.equipKind === "shield")
+                                                sheetBridge.toggleShieldWorn(!modelData.equipped)
+                                            else
+                                                sheetBridge.toggleArmorWorn(modelData.name, !modelData.equipped)
+                                        }
+                                    }
+                                    MButton {
+                                        visible: modelData.isPotion
+                                        primary: false
+                                        implicitHeight: 34
+                                        text: "Drink"
+                                        onClicked: sheetBridge.usePotion(modelData.name)
+                                    }
+                                    MButton {
+                                        visible: modelData.isScroll
+                                        primary: false
+                                        implicitHeight: 34
+                                        text: "Read"
+                                        onClicked: sheetBridge.useScroll(modelData.name)
+                                    }
+                                    MButton {
+                                        primary: false
+                                        implicitWidth: 38
+                                        implicitHeight: 34
+                                        iconName: "trash"
+                                        iconSize: 16
+                                        onClicked: sheetBridge.removeEquipmentItem(modelData.name)
+                                    }
+                                }
                             }
                         }
                     }
@@ -254,16 +310,20 @@ Page {
             }
 
             // ── Add Equipment ────────────────────────────────────────
-            Label { id: addEqAnchor; text: "Add Equipment"; color: Theme.gold; font.pixelSize: Theme.fsSmall; font.bold: true; Layout.topMargin: 6 }
+            MCard {
+            id: addEqAnchor
+            title: "Add Equipment"
+            iconName: "package"
+            MTextField {
+                id: eqSearch
+                Layout.fillWidth: true
+                placeholderText: "Search weapons, armor, gear, tools…"
+                onTextChanged: eqAddModel.refreshResults()
+            }
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
-                MTextField {
-                    id: eqSearch
-                    Layout.fillWidth: true
-                    placeholderText: "Search weapons, armor, gear, tools…"
-                    onTextChanged: eqAddModel.refreshResults()
-                }
+                Label { text: "Qty"; color: Theme.text3; font.pixelSize: Theme.fsSmall }
                 MSpinBox {
                     id: eqQty
                     // MSpinBox's up/down indicators are 36px each (72px
@@ -277,8 +337,9 @@ Page {
                     value: 1
                 }
                 MButton {
+                    Layout.fillWidth: true
                     primary: false
-                    height: 32
+                    height: 36
                     text: "+ Custom Item"
                     enabled: eqSearch.text.trim().length > 0
                     onClicked: {
@@ -366,8 +427,13 @@ Page {
                 }
             }
 
+            }
+
             // ── Magic Items ──────────────────────────────────────────
-            Label { id: magicAnchor; text: "Magic Items"; color: Theme.gold; font.pixelSize: Theme.fsSmall; font.bold: true; Layout.topMargin: 6 }
+            MCard {
+            id: magicAnchor
+            title: "Magic Items"
+            iconName: "magic"
             Label {
                 visible: sheetBridge.magicItems.length === 0
                 text: "No magic items yet -- search below to add some."
@@ -380,8 +446,8 @@ Page {
                 delegate: Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: miCol.height + 16
-                    radius: 10
-                    color: Theme.surf
+                    radius: 8
+                    color: Theme.surf2
                     border.color: modelData.attuned ? Theme.indigo2 : Theme.border
 
                     Column {
@@ -457,8 +523,10 @@ Page {
                             }
                             MButton {
                                 primary: false
-                                height: 32
-                                text: "Remove"
+                                implicitWidth: 38
+                                height: 34
+                                iconName: "trash"
+                                iconSize: 16
                                 onClicked: sheetBridge.removeMagicItem(modelData.name)
                             }
                         }
@@ -466,8 +534,13 @@ Page {
                 }
             }
 
+            }
+
             // ── Add a Magic Item ─────────────────────────────────────
-            Label { id: addMiAnchor; text: "Add a Magic Item"; color: Theme.gold; font.pixelSize: Theme.fsSmall; font.bold: true; Layout.topMargin: 6 }
+            MCard {
+            id: addMiAnchor
+            title: "Add a Magic Item"
+            iconName: "magic"
             MTextField {
                 id: miSearch
                 Layout.fillWidth: true
@@ -589,6 +662,7 @@ Page {
                         }
                     }
                 }
+            }
             }
         }
     }

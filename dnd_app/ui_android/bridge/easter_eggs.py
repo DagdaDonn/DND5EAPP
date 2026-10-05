@@ -7,7 +7,8 @@ regardless of which control currently has focus -- a text field, a
 spell search box, or nothing at all.
 """
 from PySide6.QtCore import QObject, Signal, QEvent
-from PySide6.QtGui import QWindow
+from PySide6.QtGui import QGuiApplication, QWindow
+from shiboken6 import getCppPointer
 
 
 class EasterEggBridge(QObject):
@@ -30,8 +31,24 @@ class EasterEggBridge(QObject):
                 return False
             text = event.text()
             if text:
-                self._buffer = (self._buffer + text.lower())[-6:]
-                if self._buffer == "cheese":
-                    self.cheeseTyped.emit()
-                    self._buffer = ""
+                self._feed(text, "")
+        elif event.type() == QEvent.InputMethod:
+            # Phone keyboards (Gboard, SwiftKey, ...) don't send key
+            # presses for letters at all: text arrives as input-method
+            # events, the word-in-progress as "preedit" text and finished
+            # text as a "commit". Without this the easter egg only ever
+            # fired with a hardware keyboard. Input-method events go
+            # straight to the focused item, so count each one once -- for
+            # the app's focus object only.
+            focus = QGuiApplication.focusObject()
+            if focus is None or getCppPointer(obj)[0] != getCppPointer(focus)[0]:
+                return False
+            self._feed(event.commitString(), event.preeditString())
         return False
+
+    def _feed(self, committed, preedit):
+        if committed:
+            self._buffer = (self._buffer + committed.lower())[-12:]
+        if (self._buffer + preedit.lower()).endswith("cheese"):
+            self.cheeseTyped.emit()
+            self._buffer = ""

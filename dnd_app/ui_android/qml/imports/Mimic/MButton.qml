@@ -12,18 +12,49 @@ import QtQuick.Controls
 Button {
     id: control
     property bool primary: true
+    // Optional line icon (see MIcon / IconData.js) shown before the text,
+    // or on its own when the button has no text. Same colour as the text
+    // on a gold primary button; the theme accent on a secondary one.
+    property string iconName: ""
+    property real iconSize: 18
 
-    contentItem: Text {
-        text: control.text
-        font.pixelSize: Theme.fsBody
-        font.bold: true
-        color: control.primary ? Theme.bg : Theme.text
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
+    // Material pads every Button with 6px top/bottom insets, so the
+    // painted button was 12px shorter than its height -- a "height: 32"
+    // button drew at 20px, which made buttons across the app look
+    // squashed. Zero insets: a button is drawn at the size it's given
+    // (its touch area is unchanged).
+    topInset: 0
+    bottomInset: 0
+
+    contentItem: Item {
+        implicitWidth: row.implicitWidth
+        implicitHeight: row.implicitHeight
+        Row {
+            id: row
+            anchors.centerIn: parent
+            spacing: 6
+            MIcon {
+                visible: control.iconName.length > 0
+                name: control.iconName
+                size: control.iconSize
+                color: control.primary ? Theme.bg : Theme.indigo2
+                anchors.verticalCenter: parent.verticalCenter
+            }
+            Text {
+                visible: control.text.length > 0
+                text: control.text
+                font.pixelSize: Theme.fsBody
+                font.bold: true
+                color: control.primary ? Theme.bg : Theme.text
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
     }
 
     background: Rectangle {
-        implicitHeight: 48
+        implicitHeight: 40
         // Same corner radius as MToggleButton's Active/Inactive button --
         // a blockier, less pill-like rounded-rect reads more consistent
         // across the app than the two shapes sitting side by side with

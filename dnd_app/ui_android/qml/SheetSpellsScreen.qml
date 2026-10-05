@@ -291,38 +291,57 @@ Page {
                             color: Theme.text3
                             font.pixelSize: Theme.fsSmall
                         }
-                        Flow {
+                        // One fixed layout for every card: toggles on the
+                        // left, actions on the right with Cast always last,
+                        // so the buttons line up from card to card.
+                        RowLayout {
                             width: parent.width
-                            spacing: 8
+                            spacing: 6
                             MCheckBox {
+                                visible: modelData.level > 0   // cantrips are never prepared
                                 text: "Prepared"
                                 checked: modelData.prepared
                                 onToggled: sheetBridge.setSpellPrepared(modelData.name, checked)
                             }
+                            // Quick spell (desktop's star): pinned spells show up
+                            // with Cast buttons on the Combat and Actions screens
                             MButton {
-                                height: 32
-                                text: "Cast"
-                                onClicked: sheetBridge.castSpell(modelData.name)
+                                objectName: "pinButton_" + modelData.name
+                                primary: false
+                                implicitWidth: 40
+                                implicitHeight: 34
+                                iconName: modelData.pinned ? "star_solid" : "star"
+                                iconSize: 18
+                                onClicked: sheetBridge.toggleQuickSpell(modelData.name)
+                            }
+                            Item { Layout.fillWidth: true }
+                            MButton {
+                                visible: modelData.concentration && sheetBridge.concentratingSpell !== modelData.name
+                                primary: false
+                                implicitHeight: 34
+                                text: "Conc."
+                                onClicked: sheetBridge.startConcentration(modelData.name)
                             }
                             MButton {
                                 visible: modelData.ritual
                                 primary: false
-                                height: 32
-                                text: "Cast as Ritual"
+                                implicitHeight: 34
+                                text: "Ritual"
                                 onClicked: sheetBridge.castSpellAsRitual(modelData.name)
                             }
                             MButton {
                                 primary: false
-                                height: 32
-                                text: "Remove"
+                                implicitWidth: 40
+                                implicitHeight: 34
+                                iconName: "trash"
+                                iconSize: 16
                                 onClicked: sheetBridge.removeKnownSpell(modelData.name)
                             }
                             MButton {
-                                visible: modelData.concentration && sheetBridge.concentratingSpell !== modelData.name
-                                primary: false
-                                height: 32
-                                text: "Concentrate"
-                                onClicked: sheetBridge.startConcentration(modelData.name)
+                                implicitWidth: 68
+                                implicitHeight: 34
+                                text: "Cast"
+                                onClicked: sheetBridge.castSpell(modelData.name)
                             }
                         }
                     }
@@ -428,14 +447,20 @@ Page {
                         RowLayout {
                             anchors.fill: parent
                             anchors.margins: 4
+                            spacing: 8
+                            // fills whatever the fixed-width buttons leave, and
+                            // never grows past it -- a long spell name elides
+                            // instead of pushing this row's buttons out of line
                             ColumnLayout {
                                 Layout.fillWidth: true
+                                Layout.preferredWidth: 0
                                 spacing: 1
                                 Label {
                                     text: modelData.name
                                     color: Theme.text
                                     font.pixelSize: Theme.fsBody
                                     elide: Text.ElideRight
+                                    Layout.fillWidth: true
                                 }
                                 Label {
                                     text: modelData.levelText + "  ·  " + modelData.school
@@ -443,11 +468,14 @@ Page {
                                           + (modelData.concentration ? "  ·  C" : "")
                                     color: Theme.text3
                                     font.pixelSize: Theme.fsSmall
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
                                 }
                             }
                             MButton {
                                 primary: false
-                                height: 32
+                                implicitWidth: 64
+                                height: 34
                                 text: "View"
                                 onClicked: {
                                     Window.window.pendingSpellDetail = sheetBridge.getSpellDetail(modelData.name)
@@ -455,7 +483,8 @@ Page {
                                 }
                             }
                             MButton {
-                                height: 32
+                                implicitWidth: 64
+                                height: 34
                                 text: "Add"
                                 // Not also calling addableModel.refreshResults()
                                 // here: the Connections block above already

@@ -53,6 +53,7 @@ from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON
 from dnd_app.data.phbCommon.conditions import CONDITIONS
 from .base import *
 from .base import _lbl, _sep, _card
+from dnd_app.ui_desktop import icons as _icons
 
 
 class CompanionsMixin:
@@ -229,7 +230,7 @@ class CompanionsMixin:
                 desc = g[3] if g else ""
                 row = _card(GOLD+"33")
                 rl = QHBoxLayout(row); rl.setContentsMargins(12,8,12,8); rl.setSpacing(10)
-                rl.addWidget(_lbl("🛒", GOLD2, FS_BODY, wrap=False))
+                rl.addWidget(_icons.icon_label("wagon", 20))
                 name_col = QVBoxLayout(); name_col.setSpacing(0)
                 name_col.addWidget(_lbl(vname, TEXT, FS_BODY, bold=True, wrap=False))
                 name_col.addWidget(_lbl(desc, TEXT3, FS_TINY))
@@ -310,7 +311,7 @@ class CompanionsMixin:
         self.char.setdefault("summon_hp_tracking", {})[f"companion_{instance_key}"] = sb.get("hp", 1)
         self._mark_dirty()
         self._refresh_companions_tab()
-        self._toast(f"\U0001f409 {tmpl['display_name']} summoned!")
+        self._toast(f"{tmpl['display_name']} summoned!")
 
     def _dismiss_companion(self, key: str):
         """Remove a requires_summon_action companion from the active
@@ -633,7 +634,7 @@ class CompanionsMixin:
                     # resolve_companion_statblock() does.
                     tmpl = COMPANION_STATBLOCKS.get(companion_key.split("#", 1)[0], {})
                     if tmpl.get("requires_summon_action"):
-                        self._toast(f"\U0001f480 {sb['display_name']} has fallen — re-summon it after a long rest.")
+                        self._toast(f"{sb['display_name']} has fallen — re-summon it after a long rest.")
                         self._dismiss_companion(companion_key)
                     elif tmpl.get("requires_active_infusion"):
                         # The real rule: "if you or the homunculus dies,
@@ -647,7 +648,7 @@ class CompanionsMixin:
                             a for a in self.char.get("active_infusions", [])
                             if a.get("infusion") != req_name]
                         self._mark_dirty()
-                        self._toast(f"\U0001f480 {sb['display_name']} has vanished, leaving its heart behind — "
+                        self._toast(f"{sb['display_name']} has vanished, leaving its heart behind — "
                                     f"re-infuse a gem to create a new one.")
                         self._refresh_companions_tab()
                     else:
@@ -661,7 +662,7 @@ class CompanionsMixin:
                         if companion_key not in pending:
                             pending.append(companion_key)
                         self._mark_dirty()
-                        self._toast(f"\U0001f480 {sb['display_name']} has perished — a new one can be made at your next long rest.")
+                        self._toast(f"{sb['display_name']} has perished — a new one can be made at your next long rest.")
                         self._refresh_companions_tab()
             hp_spin_header.valueChanged.connect(_on_hp_spin_changed)
         else:

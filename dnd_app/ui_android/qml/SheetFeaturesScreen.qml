@@ -230,11 +230,16 @@ Page {
                         RowLayout {
                             anchors.fill: parent
                             anchors.margins: 4
+                            MIcon {
+                                visible: modelData.itemType === "dm_reward"
+                                name: "orb"
+                                size: 18
+                            }
                             ColumnLayout {
                                 Layout.fillWidth: true
                                 spacing: 1
                                 Label {
-                                    text: (modelData.itemType === "dm_reward" ? "🔮 " : "") + modelData.name
+                                    text: modelData.name
                                     color: modelData.granted ? Theme.amber : Theme.text
                                     font.pixelSize: Theme.fsBody
                                     elide: Text.ElideRight

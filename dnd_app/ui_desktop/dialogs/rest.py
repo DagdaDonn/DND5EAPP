@@ -55,6 +55,7 @@ from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON
     ADVENTURING_GEAR, GEAR_NAMES, MOUNTS, ALL_TOOLS, SIMPLE_MELEE, SIMPLE_RANGED,
     MARTIAL_MELEE, MARTIAL_RANGED, ARTISAN_TOOLS, SPECIAL_ARMOR)
 from dnd_app.data.phbCommon.conditions import CONDITIONS
+from dnd_app.ui_desktop import icons as _icons
 
 
 class RestOptionsDialog(QDialog):
@@ -136,7 +137,7 @@ class RestOptionsDialog(QDialog):
         if is_armorer and char.get("_choices", {}).get("armorer_model_3"):
             opts.append({
                 "kind": "armorer_model",
-                "label": "Change Arcane Armor model (Guardian ↔ Infiltrator)",
+                "label": "Change Arcane Armor model (Guardian / Infiltrator)",
                 "detail": "Requires smith's tools in hand.",
             })
         # Arcane Recovery (Wizard 1+): short rest only (the rule triggers
@@ -251,12 +252,12 @@ class RestPreviewDialog(QDialog):
         self._options = options
         self._checks = {}
         label = "Short Rest" if rest_type == "short" else "Long Rest"
-        icon = "⏸" if rest_type == "short" else "🌙"
+        icon = "short_rest" if rest_type == "short" else "long_rest"
         self.setWindowTitle(label)
         self.setMinimumWidth(440)
         self.setStyleSheet(f"QDialog{{background:{BG};}}")
         root = QVBoxLayout(self); root.setContentsMargins(20,18,20,18); root.setSpacing(12)
-        root.addWidget(_lbl(f"{icon}  {label}", GOLD2, FS_HEAD, bold=True))
+        root.addWidget(_icons.icon_header(icon, _lbl(label, GOLD2, FS_HEAD, bold=True), size=20, spacing=8))
 
         card = _card(qa(TEAL,0x44)); cl = QVBoxLayout(card)
         cl.setContentsMargins(14,12,14,14); cl.setSpacing(4)

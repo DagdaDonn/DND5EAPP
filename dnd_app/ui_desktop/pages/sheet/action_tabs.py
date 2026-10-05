@@ -54,6 +54,7 @@ from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON
 from dnd_app.data.phbCommon.conditions import CONDITIONS
 from .base import *
 from .base import _lbl, _sep, _card
+from dnd_app.ui_desktop import icons as _icons
 
 
 class ActionTabsMixin:
@@ -125,7 +126,7 @@ class ActionTabsMixin:
                 # already cast via the regular Action that turn.
                 if _key == "earth_genasi_blade_ward":
                     if not self._check_bonus_action_spell_rule(True, "Bonus Action"):
-                        self._toast("✖ Can't cast Blade Ward via Bonus Action — you've already "
+                        self._toast("Can't cast Blade Ward via Bonus Action — you've already "
                                     "cast a non-cantrip spell via your Action this turn")
                         return
                     self._bonus_action_spell_is_cantrip = True
@@ -147,7 +148,7 @@ class ActionTabsMixin:
                 # system here rather than existing only as a spendable resource.
                 if _key == "action_surge":
                     self.char["_action_surge_used_this_turn"] = True
-                    self._toast("⚡ Action Surge: gained an extra action this turn")
+                    self._toast("Action Surge: gained an extra action this turn")
                     self._apply_turn_state()
             minus.clicked.connect(_on_minus_click)
             plus.clicked.connect(lambda: sp.setValue(min(maximum, sp.value()+1)))
@@ -304,8 +305,9 @@ class ActionTabsMixin:
                 hr = QHBoxLayout(hd_row); hr.setContentsMargins(8,4,8,4); hr.setSpacing(8)
                 hr.addWidget(_lbl(f"Hit Dice ({die_key})", TEXT, FS_TINY, bold=True, wrap=False), 1)
                 hr.addWidget(_lbl(f"{remaining}/{total}", bar_color, FS_TINY, bold=True, wrap=False))
-                spend = QPushButton(f"🎲 Spend")
-                spend.setFixedSize(64, 24)
+                spend = QPushButton("Spend")
+                _icons.set_button_icon(spend, "dice", 12)
+                spend.setFixedSize(74, 24)
                 spend.setEnabled(remaining > 0)
                 spend.setToolTip(f"Roll 1{die_key} + {con_mod} CON and heal that much")
                 spend.setStyleSheet(
@@ -445,7 +447,7 @@ class ActionTabsMixin:
                         # beast form and are deliberately NOT in this list.
                         if self.char.get("_wildshape_active") and any(
                                 b in key for b in WILDSHAPE_BLOCKED_FEATURES):
-                            self._toast(f"\U0001f43e Can't use {_display} while Wild Shaped — "
+                            self._toast(f"Can't use {_display} while Wild Shaped — "
                                         f"your beast form can't perform what it requires "
                                         f"(a held item, speech, an unarmed strike, or casting)")
                             return
@@ -462,7 +464,7 @@ class ActionTabsMixin:
                         # decrement" (a use WAS spent, just with nothing to
                         # show for it). Redirects instead of guessing a beast.
                         if key == "wild shape":
-                            self._toast("🐾 Use the Wild Shape card at the top of this tab to "
+                            self._toast("Use the Wild Shape card at the top of this tab to "
                                         "pick a beast and transform")
                             return
                         # Reckless Attack: a real toggle rather than a
@@ -474,10 +476,10 @@ class ActionTabsMixin:
                             fx = self.char.setdefault("active_effects", [])
                             if "Reckless Attack" in fx:
                                 fx.remove("Reckless Attack")
-                                self._toast("⚔ Reckless Attack: OFF")
+                                self._toast("Reckless Attack: OFF")
                             else:
                                 fx.append("Reckless Attack")
-                                msg = ("⚔ Reckless Attack: ON — advantage on your melee "
+                                msg = ("Reckless Attack: ON — advantage on your melee "
                                        "attacks, but attacks against you also have advantage")
                                 # Reckless Abandon (Battlerager, 2nd level):
                                 # gain temp HP equal to CON mod (min 1) when
@@ -493,7 +495,7 @@ class ActionTabsMixin:
                                     cur_temp = self.char.get("temp_hp", 0)
                                     if con_mod > cur_temp:
                                         self.char["temp_hp"] = con_mod
-                                    msg += f"\n🛡 Reckless Abandon: {con_mod} temporary HP"
+                                    msg += f"\nReckless Abandon: {con_mod} temporary HP"
                                 self._toast(msg)
                             self._mark_dirty()
                             self._refresh_combat_weapons()
@@ -523,7 +525,7 @@ class ActionTabsMixin:
                             sw_res = next((r for r in self.char.get("resources", [])
                                            if "second wind" in str(r.get("name","")).lower()), None)
                             if sw_res is None or sw_res.get("current", 0) <= 0:
-                                self._toast("✖ Second Wind: no uses left (recharges on short/long rest)")
+                                self._toast("Second Wind: no uses left (recharges on short/long rest)")
                                 return
                             import random
                             from dnd_app.core.character import class_levels as _class_levels_sw
@@ -535,7 +537,7 @@ class ActionTabsMixin:
                             self.char["current_hp"] = min(mx, cur + heal)
                             if hasattr(self, "_hp_current_hp"):
                                 self._hp_current_hp.setValue(self.char["current_hp"])
-                            self._toast(f"\U0001f4aa Second Wind: rolled {roll} + {fighter_lvl} "
+                            self._toast(f"Second Wind: rolled {roll} + {fighter_lvl} "
                                         f"(Fighter level) = {heal} HP healed "
                                         f"({sw_res['current']}/{sw_res.get('current_max')} left)")
                             self._mark_dirty()
@@ -546,7 +548,7 @@ class ActionTabsMixin:
                                            if (bar := self._slot_bars.get(l)) and bar._max > 0
                                            and bar.get_used() < bar._max]
                             if not avail_levels:
-                                self._toast("✖ Divine Smite: no available spell slots to expend")
+                                self._toast("Divine Smite: no available spell slots to expend")
                                 return
                             level, ok = QInputDialog.getItem(
                                 self, "Divine Smite", "Expend which spell slot level?",
@@ -573,7 +575,7 @@ class ActionTabsMixin:
                             dice = min(5, 1 + slot_lvl)
                             if is_undead_fiend:
                                 dice += 1
-                            self._toast(f"⚔ Divine Smite: expended a level-{slot_lvl} slot — "
+                            self._toast(f"Divine Smite: expended a level-{slot_lvl} slot — "
                                         f"{dice}d8 radiant damage"
                                         + (" (includes +1d8 vs. undead/fiend)" if is_undead_fiend else ""))
                             self._mark_dirty()
@@ -582,18 +584,18 @@ class ActionTabsMixin:
                             fx = self.char.setdefault("active_effects", [])
                             if "Sacred Weapon" in fx:
                                 fx.remove("Sacred Weapon")
-                                self._toast("⚔ Sacred Weapon: OFF")
+                                self._toast("Sacred Weapon: OFF")
                             else:
                                 cd_res = next((r for r in self.char.get("resources", [])
                                                if "channel divinity" in str(r.get("name","")).lower()), None)
                                 if cd_res and cd_res.get("current", 0) <= 0:
-                                    self._toast("✖ Sacred Weapon: no Channel Divinity uses left "
+                                    self._toast("Sacred Weapon: no Channel Divinity uses left "
                                                 "(recharges on short/long rest)")
                                     return
                                 if cd_res:
                                     cd_res["current"] = cd_res.get("current", 0) - 1
                                 fx.append("Sacred Weapon")
-                                self._toast("⚔ Sacred Weapon: ON — add CHA mod to attacks with "
+                                self._toast("Sacred Weapon: ON — add CHA mod to attacks with "
                                             "your weapon for 1 minute")
                             self._mark_dirty()
                             self._refresh_combat_weapons()
@@ -605,18 +607,18 @@ class ActionTabsMixin:
                             fx = self.char.setdefault("active_effects", [])
                             if "Peerless Athlete" in fx:
                                 fx.remove("Peerless Athlete")
-                                self._toast("🏃 Peerless Athlete: OFF")
+                                self._toast("Peerless Athlete: OFF")
                             else:
                                 cd_res = next((r for r in self.char.get("resources", [])
                                                if "channel divinity" in str(r.get("name","")).lower()), None)
                                 if cd_res and cd_res.get("current", 0) <= 0:
-                                    self._toast("✖ Peerless Athlete: no Channel Divinity uses left "
+                                    self._toast("Peerless Athlete: no Channel Divinity uses left "
                                                 "(recharges on short/long rest)")
                                     return
                                 if cd_res:
                                     cd_res["current"] = cd_res.get("current", 0) - 1
                                 fx.append("Peerless Athlete")
-                                self._toast("🏃 Peerless Athlete: ON — doubled carry capacity, "
+                                self._toast("Peerless Athlete: ON — doubled carry capacity, "
                                             "advantage on Athletics/Acrobatics, for 10 minutes")
                             self._mark_dirty()
                             self._refresh_combat_weapons()
@@ -624,15 +626,15 @@ class ActionTabsMixin:
                             return
                         if "frenzi" in key:
                             if "Rage" not in self.char.get("active_effects", []):
-                                self._toast("⚠ Frenzy requires an active Rage first")
+                                self._toast("Frenzy requires an active Rage first")
                                 return
                             fx = self.char.setdefault("active_effects", [])
                             if "Frenzy" in fx:
                                 fx.remove("Frenzy")
-                                self._toast("😤 Frenzy: OFF")
+                                self._toast("Frenzy: OFF")
                             else:
                                 fx.append("Frenzy")
-                                self._toast("😤 Frenzy: ON — bonus action melee attack each turn "
+                                self._toast("Frenzy: ON — bonus action melee attack each turn "
                                             "for the rest of your rage; 1 exhaustion when it ends")
                             self._mark_dirty()
                             self._refresh_effects_list()
@@ -656,16 +658,16 @@ class ActionTabsMixin:
                                 # entry, not just Rage, since each shares the
                                 # same fallback Use button.
                                 if _display in RESOURCE_POOL_TOGGLES and _display in self.char.get("active_effects", []):
-                                    self._toast(f"⚡ {_display} already active — use the \"Active\" "
+                                    self._toast(f"{_display} already active — use the \"Active\" "
                                                 f"checkbox on its resource row (Other tab) to end it")
                                     return
                                 cur = res.get("current", 0)
                                 if cur <= 0:
-                                    self._toast(f"✖ {_display}: no uses left "
+                                    self._toast(f"{_display}: no uses left "
                                                 f"(recharges on {res.get('reset','rest')})")
                                 else:
                                     res["current"] = cur - 1
-                                    self._toast(f"⚡ Used {_display} "
+                                    self._toast(f"Used {_display} "
                                                 f"({res['current']}/{res.get('current_max')} left)")
                                     # The resource spend alone wouldn't
                                     # otherwise turn the effect on — every
@@ -703,7 +705,7 @@ class ActionTabsMixin:
                                 return
                         # No tracked resource → consume the turn slot + summary
                         self._mark_turn_used(_b)
-                        self._toast(f"⚔ {_display}: {_desc[:90]}")
+                        self._toast(f"{_display}: {_desc[:90]}")
                     use_btn.clicked.connect(_use_ability)
                     # Row click → full rules text (button = do it)
                     card.mousePressEvent = (lambda e, _d=display, _s=source, _x=desc:
@@ -739,13 +741,11 @@ class ActionTabsMixin:
                 bl.insertWidget(bl.count()-1, empty)
 
         # ── Update tab labels with live counts ───────────────────────────────
-        _ICONS = {"Action":"⚔","Bonus Action":"✦","Reaction":"⚡","Passive":"◎"}
         _LABELS = {"Action":"Action","Bonus Action":"Bonus Action",
                    "Reaction":"Reaction","Passive":"Other"}
         for ti, bname in enumerate(["Action","Bonus Action","Reaction","Passive"]):
             n = len(buckets.get(bname, []))
-            self._action_tabs.setTabText(
-                ti, f"{_ICONS[bname]} {_LABELS[bname]}" + (f"  ({n})" if n else ""))
+            self._action_tabs.setTabText(ti, _LABELS[bname] + (f"  ({n})" if n else ""))
         self._refresh_effects_list()
         self._apply_turn_state()
 

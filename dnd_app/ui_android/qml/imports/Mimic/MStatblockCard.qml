@@ -74,7 +74,7 @@ Rectangle {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 10
-                    Label { text: root.expanded ? "▼" : "▶"; color: Theme.teal2; font.bold: true }
+                    MIcon { name: root.expanded ? "chevron_down" : "chevron_right"; size: 16 }
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 0

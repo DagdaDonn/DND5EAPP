@@ -53,6 +53,7 @@ from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON
 from dnd_app.data.phbCommon.conditions import CONDITIONS
 from .base import *
 from .base import _lbl, _sep, _card
+from dnd_app.ui_desktop import icons as _icons
 
 
 class InfusionsMixin:
@@ -78,7 +79,9 @@ class InfusionsMixin:
                     break
             if insert_at is None:
                 insert_at = self._tabs.count()
-            self._tabs.insertTab(insert_at, self._build_tab_infusions(), "\U0001f527  Infusions")
+            page = self._build_tab_infusions()
+            self._tabs.insertTab(insert_at, page, "Infusions")
+            _icons.set_tab_icon(self._tabs, page, "infusions")
         elif not eligible and current_index is not None:
             self._tabs.removeTab(current_index)
         elif eligible and current_index is not None:
@@ -154,7 +157,7 @@ class InfusionsMixin:
         if ok and choice:
             self._deactivate_infusion(choice)
             self.char["current_hp"] = 1
-            self._toast(f"💫 Soul of Artifice: ended {choice}, dropped to 1 HP instead of 0")
+            self._toast(f"Soul of Artifice: ended {choice}, dropped to 1 HP instead of 0")
             self.ctrl.refresh()
             self._mark_dirty()
 

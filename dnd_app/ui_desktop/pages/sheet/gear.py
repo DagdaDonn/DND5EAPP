@@ -49,10 +49,12 @@ from dnd_app.data.phbCommon.feats import get_feat
 from dnd_app.data.phbCommon.spells import get_spell, spells_for_class, ALL_SPELLS
 from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON_DICT,
     ADVENTURING_GEAR, GEAR_NAMES, MOUNTS, ALL_TOOLS, SIMPLE_MELEE, SIMPLE_RANGED,
-    MARTIAL_MELEE, MARTIAL_RANGED, FIREARMS, ARTISAN_TOOLS, SPECIAL_ARMOR)
+    MARTIAL_MELEE, MARTIAL_RANGED, FIREARMS, ARTISAN_TOOLS, SPECIAL_ARMOR,
+    gear_icon, is_scroll_name, is_thrown_consumable)
 from dnd_app.data.phbCommon.conditions import CONDITIONS
 from .base import *
 from .base import _lbl, _sep, _card
+from dnd_app.ui_desktop import icons as _icons
 
 
 class GearMixin:
@@ -70,7 +72,7 @@ class GearMixin:
         # ── Currency tracker ─────────────────────────────────────────────────
         money_card = _card(GOLD+"55")
         mcl = QHBoxLayout(money_card); mcl.setContentsMargins(14,10,14,10); mcl.setSpacing(16)
-        mcl.addWidget(_lbl("💰 CURRENCY", GOLD2, FS_SMALL, bold=True, wrap=False))
+        mcl.addWidget(_icons.icon_header("coins", _lbl("CURRENCY", GOLD2, FS_SMALL, bold=True, wrap=False)))
         self._currency_spins = {}
         for coin, color in [("PP","#b0a0e0"),("GP","#f5c518"),("EP","#a0c8a0"),
                              ("SP","#d0d0d0"),("CP","#c87941")]:
@@ -114,7 +116,7 @@ class GearMixin:
         # ── Carried Equipment: QTreeWidget list, matching the browser's style ──
         equip_w = QWidget(); egl = QVBoxLayout(equip_w)
         egl.setContentsMargins(0,0,0,0); egl.setSpacing(6)
-        egl.addWidget(_lbl("⚔  CARRIED EQUIPMENT", TEAL2, FS_SMALL, bold=True, wrap=False))
+        egl.addWidget(_icons.icon_header("gear", _lbl("CARRIED EQUIPMENT", TEAL2, FS_SMALL, bold=True, wrap=False)))
         self._gear_equip_tree = QTreeWidget()
         self._gear_equip_tree.setHeaderLabels(["Item", "Eq", "Qty", "Wt", "Value", ""])
         self._gear_equip_tree.setAlternatingRowColors(True)
@@ -145,9 +147,9 @@ class GearMixin:
             att_max_display = max(att_max_display, 4)
         mi_w = QWidget(); mgl = QVBoxLayout(mi_w)
         mgl.setContentsMargins(0,0,0,0); mgl.setSpacing(6)
-        self._mi_title_lbl = _lbl(f"✨  MAGIC ITEMS  (max {att_max_display} attuned)",
+        self._mi_title_lbl = _lbl(f"MAGIC ITEMS  (max {att_max_display} attuned)",
                                    PURP2, FS_SMALL, bold=True, wrap=False)
-        mgl.addWidget(self._mi_title_lbl)
+        mgl.addWidget(_icons.icon_header("magic", self._mi_title_lbl))
         self._magic_items_tree = QTreeWidget()
         self._magic_items_tree.setHeaderLabels(["Item", "Rarity", "Attuned", "Eq'd", ""])
         self._magic_items_tree.setAlternatingRowColors(True)
@@ -218,10 +220,12 @@ class GearMixin:
             f"font-size:{FS_SMALL}px;padding:6px;border:1px solid {BORDER};}}")
         self._md_list.itemDoubleClicked.connect(self._add_mundane_from_browser)
         mdt.addWidget(self._md_list,1)
-        add_selected = pill_btn("⬅  Add Selected to Inventory", TEAL)
+        add_selected = pill_btn("Add Selected to Inventory", TEAL)
+        _icons.set_button_icon(add_selected, "arrow_left", 16, color="white")
         add_selected.clicked.connect(lambda: self._add_mundane_from_browser(self._md_list.currentItem(),0))
         mdt.addWidget(add_selected)
-        right_tabs.addTab(mundane_tab, "⚔  Mundane Equipment")
+        right_tabs.addTab(mundane_tab, "Mundane Equipment")
+        _icons.set_tab_icon(right_tabs, mundane_tab, "package", 15)
 
         # ── MAGIC ITEM BROWSER ────────────────────────────────────────────────
         magic_tab = QWidget(); mgt = QVBoxLayout(magic_tab)
@@ -256,13 +260,16 @@ class GearMixin:
         self._mi_browser.itemDoubleClicked.connect(lambda item: self._add_magic_item_by_name(item.data(Qt.UserRole)))
         mgt.addWidget(self._mi_browser,1)
 
-        mi_add_btn = pill_btn("✨  Add Selected to Inventory", INDIGO)
+        mi_add_btn = pill_btn("Add Selected to Inventory", INDIGO)
+        _icons.set_button_icon(mi_add_btn, "arrow_left", 16, color="white")
         mi_add_btn.clicked.connect(self._add_magic_from_browser)
         mgt.addWidget(mi_add_btn)
-        right_tabs.addTab(magic_tab, "✨  Magic Items")
+        right_tabs.addTab(magic_tab, "Magic Items")
+        _icons.set_tab_icon(right_tabs, magic_tab, "magic", 15)
 
         companions_tab = self._build_companions_tab()
-        right_tabs.addTab(companions_tab, "🐉  Companions")
+        right_tabs.addTab(companions_tab, "Companions")
+        _icons.set_tab_icon(right_tabs, companions_tab, "paw", 15)
 
         splitter.addWidget(right_tabs)
         splitter.setSizes([380,500])
@@ -405,7 +412,7 @@ class GearMixin:
         from dnd_app.data.phbCommon.items import MOUNTS
         if any(row[0] == name for row in MOUNTS):
             self._add_mount(name)
-            self._toast(f"\U0001f40e {name} added — see its stat block in the Companions tab")
+            self._toast(f"{name} added — see its stat block in the Companions tab")
             return
         # Get weight and cost from item data
         from dnd_app.data.phbCommon.items import WEAPON_DICT, ARMOR_DICT, ADVENTURING_GEAR, ALL_WEAPONS
@@ -739,7 +746,7 @@ class GearMixin:
         if "Mystic Conflux" in self.char.get("feats", []):
             att_max_display = max(att_max_display, 4)
         if hasattr(self, "_mi_title_lbl"):
-            self._mi_title_lbl.setText(f"✨  MAGIC ITEMS  (max {att_max_display} attuned)")
+            self._mi_title_lbl.setText(f"MAGIC ITEMS  (max {att_max_display} attuned)")
         self._magic_items_tree.clear()
         self._magic_item_rows = []
         attuned = set(self.char.get("attuned_items", []))
@@ -762,10 +769,9 @@ class GearMixin:
             itype_local = catalog.get("type","Wondrous")
             desc = catalog.get("desc","")
 
-            name_txt = name
+            item = QTreeWidgetItem([name, rarity, "", "", ""])
             if has_item_effect(name):
-                name_txt = f"⚡ {name}"
-            item = QTreeWidgetItem([name_txt, rarity, "", "", ""])
+                item.setIcon(0, _icons.icon("bolt"))
             item.setForeground(0, QColor(TEXT))
             item.setForeground(1, QColor(rarity_color))
 
@@ -843,11 +849,11 @@ class GearMixin:
             _name, _entry, _tip = data
             from PySide6.QtWidgets import QMenu
             menu = QMenu(self._magic_items_tree)
-            act = menu.addAction(f"📖  Details: {_name[:36]}")
+            act = menu.addAction(_icons.icon("features"), f"Details: {_name[:36]}")
             act.triggered.connect(lambda: QMessageBox.information(self, _name, _tip))
             from dnd_app.core.magic_items import ABILITY_SCORE_MANUALS
             if _name in ABILITY_SCORE_MANUALS:
-                study_act = menu.addAction(f"✨  Study {_name[:36]} (48 hrs over 6 days)")
+                study_act = menu.addAction(_icons.icon("magic"), f"Study {_name[:36]} (48 hrs over 6 days)")
                 study_act.triggered.connect(lambda checked=False, n=_name: self._study_manual(n))
             rm_act = menu.addAction(f"✕  Remove {_name[:36]}")
             rm_act.triggered.connect(lambda: self._remove_magic_item(_name))
@@ -977,7 +983,7 @@ class GearMixin:
         abilities = self.char.setdefault("abilities", {})
         abilities[ability] = abilities.get(ability, 10) + 2
         self._remove_magic_item(name)
-        self._toast(f"✨ {name} — your {ability} score permanently increases by 2 (now {abilities[ability]})")
+        self._toast(f"{name} — your {ability} score permanently increases by 2 (now {abilities[ability]})")
         self.ctrl.refresh()
         self._mark_dirty()
 
@@ -1007,7 +1013,7 @@ class GearMixin:
         cap = str_score * 15
         push = cap * 2
         col = TEAL2 if total <= cap else (AMBER if total <= push else CRIM2)
-        self._weight_lbl.setText(f"⚖  Carry: {total:.1f} / {cap} lb  (push {push} lb)")
+        self._weight_lbl.setText(f"Carry: {total:.1f} / {cap} lb  (push {push} lb)")
         self._weight_lbl.setStyleSheet(f"color:{col};font-size:{FS_SMALL}px;")
 
     def _refresh_gear_equipment(self):
@@ -1046,7 +1052,49 @@ class GearMixin:
         GEAR_NOTES = {row[0]: (row[3] if len(row) > 3 else "") for row in _AG_notes}
 
         from dnd_app.data.phbCommon.items import WEAPON_DICT, ARMOR_DICT
+        # Grouped like the Android inventory: Weapons / Armor / Magic Items
+        # / Consumables / Tools & Gear, each under a header row with a
+        # count, equipped items first within each group.
+        _GROUPS = (("Weapons", "combat"), ("Armor", "shield"), ("Magic Items", "magic"),
+                   ("Consumables", "potion"), ("Tools & Gear", "package"))
+        _equipped_w = set(self.char.get("equipped_weapons", []))
+
+        def _group_of(eq):
+            n = eq.get("name", "")
+            t = str(eq.get("type", "")) if eq.get("magic") else ""
+            if n in WEAPON_DICT or any(w[0] == n for w in ALL_WEAPONS) or t == "Weapon":
+                return 0
+            if (n in ARMOR_DICT and n not in ("No Armor", "Mage Armor (spell)")) or t == "Armor":
+                return 1
+            if eq.get("magic"):
+                return 2
+            ln = n.lower()
+            return 3 if ("potion" in ln or is_scroll_name(n) or is_thrown_consumable(n)) else 4
+
+        def _is_equipped(eq):
+            n = eq.get("name", "")
+            if n in _equipped_w or self.char.get("armor_worn", "") == n:
+                return True
+            return ARMOR_DICT.get(n, {}).get("type") == "shield" and bool(self.char.get("shield"))
+
+        items.sort(key=lambda e: (_group_of(e), not _is_equipped(e), e.get("name", "").lower()))
+        _counts = {}
+        for e in items:
+            _counts[_group_of(e)] = _counts.get(_group_of(e), 0) + 1
+        _current_group, _header = None, None
+        _hdr_font = self._gear_equip_tree.font(); _hdr_font.setBold(True)
         for eq in items:
+            _g = _group_of(eq)
+            if _g != _current_group:
+                _current_group = _g
+                _header = QTreeWidgetItem([f"{_GROUPS[_g][0]}   ({_counts[_g]})", "", "", "", "", ""])
+                _header.setIcon(0, _icons.icon(_GROUPS[_g][1]))
+                _header.setForeground(0, QColor(GOLD2))
+                _header.setFont(0, _hdr_font)
+                _header.setFlags(Qt.ItemIsEnabled)
+                self._gear_equip_tree.addTopLevelItem(_header)
+                _header.setFirstColumnSpanned(True)
+                _header.setExpanded(True)
             name = eq.get("name","?")
             is_magic  = bool(eq.get("magic"))
             _mi_type  = str(eq.get("type","")) if is_magic else ""
@@ -1057,7 +1105,10 @@ class GearMixin:
             rarity_color = self._RARITY_COLORS.get(eq.get("rarity",""), TEXT2) if is_magic else None
             accent = rarity_color if rarity_color else (
                 TEAL2 if is_weapon else (GOLD2 if is_armor else TEXT2))
-            icon = ("⚔" if is_weapon else ("🛡" if is_armor else ("✨" if is_magic else "📦")))
+            _ln = name.lower()
+            icon = ("combat" if is_weapon else "shield" if is_armor else "magic" if is_magic
+                    else "potion" if "potion" in _ln else "file" if is_scroll_name(name)
+                    else gear_icon(name) or "package")
 
             wt = eq.get("weight",0)
             total_wt = wt * eq.get("qty",1)
@@ -1066,7 +1117,8 @@ class GearMixin:
             total_cost = cost * eq.get("qty",1)
             cost_str = f"{total_cost:g} gp" if total_cost else ("—" if not is_magic else "")
 
-            item = QTreeWidgetItem([f"{icon}  {name}", "", "", wt_str, cost_str, ""])
+            item = QTreeWidgetItem([name, "", "", wt_str, cost_str, ""])
+            item.setIcon(0, _icons.icon(icon))
             is_shield = name in ARMOR_DICT and ARMOR_DICT[name].get("type") == "shield"
             item.setForeground(0, QColor(accent))
             item.setForeground(3, QColor(TEXT3))
@@ -1103,7 +1155,7 @@ class GearMixin:
                     base += f"<br>{wt_str} lb \u2014 {cost_str}" if wt_str != "—" else f"<br>{cost_str}"
                 item.setToolTip(0, base)
 
-            self._gear_equip_tree.addTopLevelItem(item)
+            _header.addChild(item)
 
             # Equip toggle (col 1) — only for weapons/armor
             if is_weapon:
@@ -1143,7 +1195,8 @@ class GearMixin:
 
             # Remove / Info button (col 4)
             if eq.get("_mi_only"):
-                info_btn = QPushButton("ℹ"); info_btn.setFixedSize(20,20)
+                info_btn = QPushButton(); info_btn.setFixedSize(20,20)
+                _icons.set_button_icon(info_btn, "info", 14)
                 info_btn.setStyleSheet(
                     f"QPushButton{{background:transparent;border:none;color:{AMBE2};"
                     f"font-size:11px;border-radius:3px;}}"
@@ -1183,7 +1236,7 @@ class GearMixin:
             if _is_magic:
                 tip = (f"<b>{_name}</b><br><i>{_eq.get('rarity','')} "
                        f"{_eq.get('type','')}</i><br><br>{self._format_multi_para(_eq.get('desc',''))}")
-                act = menu.addAction(f"📖  Details: {_name[:36]}")
+                act = menu.addAction(_icons.icon("features"), f"Details: {_name[:36]}")
                 act.triggered.connect(lambda: QMessageBox.information(self, _name, tip))
             # "Infuse this item" — only for weapons/armor/shields, only
             # if the character actually knows an applicable Artificer
@@ -1193,7 +1246,7 @@ class GearMixin:
             if not _is_magic and (_is_weapon or _is_armor or _is_shield):
                 applicable = self._get_applicable_infusions(_is_weapon, _is_armor, _is_shield)
                 if applicable:
-                    infuse_menu = menu.addMenu(f"\u2728  Infuse {_name[:30]} with...")
+                    infuse_menu = menu.addMenu(_icons.icon("infusions"), f"Infuse {_name[:30]} with...")
                     from dnd_app.core.calculator import get_max_active_infusions
                     max_active = get_max_active_infusions(self.char)
                     active_count = len(self.char.get("active_infusions", []))
@@ -1207,10 +1260,10 @@ class GearMixin:
                             f"(At max active infusions: {active_count}/{max_active})")
                         full_act.setEnabled(False)
             if _eq.get("type") == "Potion" or "potion" in _name.lower():
-                drink_act = menu.addAction(f"🧪  Drink {_name[:36]}")
+                drink_act = menu.addAction(_icons.icon("potion"), f"Drink {_name[:36]}")
                 drink_act.triggered.connect(lambda checked=False, n=_name: self._use_potion(n))
-            if "scroll" in _name.lower():
-                read_act = menu.addAction(f"📜  Read {_name[:36]}")
+            if is_scroll_name(_name):
+                read_act = menu.addAction(_icons.icon("file"), f"Read {_name[:36]}")
                 read_act.triggered.connect(lambda checked=False, n=_name: self._use_scroll(n))
             rm_act = menu.addAction(f"✕  Remove {_name[:36]}")
             rm_act.triggered.connect(lambda: self._remove_equipment(_name))
@@ -1286,9 +1339,9 @@ class GearMixin:
                 if not any((i.get("name") if isinstance(i, dict) else i) == item_name for i in items):
                     items.append({"name": item_name, "attunement": False,
                                   "equipped": True, "notes": f"Artificer infusion: {infusion_name}"})
-            self._toast(f"\u2728 {item_name} infused with {infusion_name}")
+            self._toast(f"{item_name} infused with {infusion_name}")
         else:
-            self._toast(f"\u2728 {infusion_name} infused and given to another character "
+            self._toast(f"{infusion_name} infused and given to another character "
                         f"(counts against your active infusions, not in your own inventory)")
         self.ctrl.refresh()
         self._refresh_gear_equipment()
@@ -1353,18 +1406,18 @@ class GearMixin:
                 if removed:
                     msgs.append(f"cured {', '.join(removed)}")
             summary = "; ".join(msgs) if msgs else instant.get("cure_note", "used")
-            self._toast(f"🧪 {name} — {summary}")
+            self._toast(f"{name} — {summary}")
         else:
             info = EFFECT_TABLE.get(name, {})
             if info:
                 fx = self.char.setdefault("active_effects", [])
                 if name not in fx:
                     fx.append(name)
-                    self._toast(f"🧪 {name} — active (see Effects tab)")
+                    self._toast(f"{name} — active (see Effects tab)")
                 else:
-                    self._toast(f"🧪 {name} — already active")
+                    self._toast(f"{name} — already active")
             else:
-                self._toast(f"🧪 Drank {name}")
+                self._toast(f"Drank {name}")
 
         self.ctrl.refresh()
         self._refresh_gear_equipment()
@@ -1396,11 +1449,11 @@ class GearMixin:
             fx = self.char.setdefault("active_effects", [])
             if name not in fx:
                 fx.append(name)
-                self._toast(f"📜 {name} — active (see Effects tab)")
+                self._toast(f"{name} — active (see Effects tab)")
             else:
-                self._toast(f"📜 {name} — already active")
+                self._toast(f"{name} — already active")
         else:
-            self._toast(f"📜 Read {name}")
+            self._toast(f"Read {name}")
 
         self.ctrl.refresh()
         self._refresh_gear_equipment()

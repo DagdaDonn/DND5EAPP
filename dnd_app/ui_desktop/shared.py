@@ -4,9 +4,10 @@ Author: Ethan O'Brien
 Date: 2026-08-20
 """
 from PySide6.QtWidgets import *
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont, QColor
+from PySide6.QtCore import Qt, Signal, QVariantAnimation, QEasingCurve, QAbstractAnimation, QRectF
+from PySide6.QtGui import QFont, QColor, QPainter
 from dnd_app.ui_desktop.style.theme import *
+from dnd_app.ui_desktop import icons as _icons
 ABILITIES = ["STR","DEX","CON","INT","WIS","CHA"]
 AB_FULL = {"STR":"Strength","DEX":"Dexterity","CON":"Constitution",
            "INT":"Intelligence","WIS":"Wisdom","CHA":"Charisma"}
@@ -117,7 +118,7 @@ def _btn(label, color=None, *, variant="cta", height=28, width=None,
                        `color` is ignored.
     variant="ghost"    — transparent background, thin BORDER border,
                        tints toward `color` on hover. Small icon
-                       buttons (🎲 roll buttons). `color` required
+                       buttons (dice roll buttons). `color` required
                        (used only for the hover tint).
     variant="danger"   — same shape as "cta", defaults `color` to
                        CRIMSON when not given (destructive actions).
@@ -229,6 +230,61 @@ def badge(text, bg=INDIGO, size=FS_SMALL):
     lbl.setFixedHeight(size + 8)
     return lbl
 
+class PulseDot(QWidget):
+    """A small dot with a soft halo that breathes in and out while
+    active -- marks something that needs the player's attention (the
+    character sheet's Choices tab while level-up choices are pending).
+    Painted directly rather than styled, so tab-bar/theme stylesheets
+    can't override it; the animation only runs while it's active."""
+
+    def __init__(self, color, diameter=8, period_ms=1400, parent=None):
+        super().__init__(parent)
+        self._color = QColor(color)
+        self._d = diameter
+        self._t = 0.0
+        self.setFixedSize(diameter * 3, diameter * 3)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self._anim = QVariantAnimation(self)
+        self._anim.setStartValue(0.0)
+        self._anim.setEndValue(1.0)
+        self._anim.setDuration(period_ms)
+        self._anim.setLoopCount(-1)
+        self._anim.valueChanged.connect(self._on_tick)
+        self.hide()
+
+    def _on_tick(self, value):
+        self._t = float(value)
+        self.update()
+
+    def set_active(self, active: bool):
+        self.setVisible(active)
+        if active and self._anim.state() != QAbstractAnimation.Running:
+            self._anim.start()
+        elif not active:
+            self._anim.stop()
+
+    def paintEvent(self, _event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(Qt.NoPen)
+        cx, cy = self.width() / 2, self.height() / 2
+        out = QEasingCurve(QEasingCurve.OutCubic).valueForProgress(self._t)
+        # Halo: grows and fades out each cycle.
+        r = self._d / 2 * (1 + 1.4 * out)
+        halo = QColor(self._color)
+        halo.setAlphaF(0.55 * (1 - out))
+        p.setBrush(halo)
+        p.drawEllipse(QRectF(cx - r, cy - r, 2 * r, 2 * r))
+        # Core dot: dims and brightens in step with the halo.
+        breathe = QEasingCurve(QEasingCurve.InOutSine).valueForProgress(abs(1 - 2 * self._t))
+        dot = QColor(self._color)
+        dot.setAlphaF(0.45 + 0.55 * breathe)
+        p.setBrush(dot)
+        r = self._d / 2
+        p.drawEllipse(QRectF(cx - r, cy - r, 2 * r, 2 * r))
+        p.end()
+
+
 class BigStatBox(QFrame):
     """Large stat display box: big number + label below."""
     def __init__(self, label, value="—", color=None, parent=None):
@@ -313,14 +369,15 @@ class AbilityBlock(QFrame):
         self._mod_lbl = h(sign(mod), TEAL2 if mod >= 0 else CRIM2, FS_TITLE, bold=True, align=Qt.AlignCenter)
         lay.addWidget(self._mod_lbl)
 
-        # 🎲 roll button — raw ability check (d20 + mod, no proficiency).
+        # Dice roll button — raw ability check (d20 + mod, no proficiency).
         # Only on the sheet's read-only blocks (editable=False): the
         # wizard's blocks (editable=True) are mid-creation, still being
         # assigned, so there's nothing real yet to roll. Same button
         # style/role as the Skills/Saves rows' roll buttons.
         self._roll_btn = None
         if not editable:
-            self._roll_btn = QPushButton("🎲")
+            self._roll_btn = QPushButton()
+            _icons.set_button_icon(self._roll_btn, "dice", 14)
             self._roll_btn.setFixedHeight(22)
             self._roll_btn.setToolTip(f"Roll {ab} check ({sign(mod)})")
             self._roll_btn.setStyleSheet(
@@ -522,13 +579,13 @@ class SpellRow(QFrame):
         menu.setStyleSheet(f"QMenu{{background:{SURF2};border:2px solid {BORDER2};color:{TEXT};font-size:{FS_BODY}px;padding:4px;}}"
                            f"QMenu::item{{padding:8px 20px;border-radius:4px;}}"
                            f"QMenu::item:selected{{background:{INDIGO};color:white;}}")
-        detail_act = menu.addAction(f"📖  Show Details: {self.spell['name']}")
+        detail_act = menu.addAction(_icons.icon("features"), f"Show Details: {self.spell['name']}")
         menu.addSeparator()
-        cast_act  = menu.addAction(f"🎲  Cast {self.spell['name']}")
+        cast_act  = menu.addAction(_icons.icon("spells"), f"Cast {self.spell['name']}")
         ritual_act = None
         if self.spell.get("ritual") and getattr(self, "_can_ritual", False):
             ritual_act = menu.addAction(
-                f"📜  Cast {self.spell['name']} as Ritual (no slot, +10 min cast time)")
+                _icons.icon("features"), f"Cast {self.spell['name']} as Ritual (no slot, +10 min cast time)")
         prep_act  = menu.addAction("✓  Toggle Prepared")
         star_act  = menu.addAction("★  Pin to Quick Spells" if not self._pinned else "☆  Unpin from Quick Spells")
         menu.addSeparator()

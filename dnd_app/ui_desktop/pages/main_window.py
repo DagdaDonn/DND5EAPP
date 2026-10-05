@@ -9,7 +9,7 @@ Date: 2026-08-20
 import os, sys
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt, Signal, QEvent, QTimer
-from PySide6.QtGui import QFont, QAction
+from PySide6.QtGui import QFont, QAction, QWindow
 from dnd_app.ui_desktop.style.theme import *
 from ..shared import *
 # `import *` skips underscore-prefixed names when a module has no
@@ -26,6 +26,7 @@ from dnd_app.core.save_load import (
 
 # ── Recent files helpers ──────────────────────────────────────────────────────
 import json as _json_mod
+from dnd_app.ui_desktop import icons as _icons
 _RECENT_FILE = os.path.join(os.path.expanduser("~"), ".dnd5e_recent.json")
 
 def _load_recent() -> list:
@@ -61,16 +62,17 @@ class StartMenu(QWidget):
         hl = QVBoxLayout(hero); hl.setContentsMargins(60,60,60,40); hl.setSpacing(16)
         hl.setAlignment(Qt.AlignCenter)
 
-        title = QLabel("⚔  MIMIC")
+        title = QLabel("MIMIC")
         tf = QFont(); tf.setBold(True); tf.setPointSize(28)
         title.setFont(tf); title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet(f"color:{GOLD2};background:transparent;")
-        hl.addWidget(title)
+        hl.addWidget(_icons.icon_header("combat", title, size=40, spacing=14, center=True))
         hl.addWidget(_lbl("A D&D 5e Character Creator", GOLD, FS_BODY, bold=True, align=Qt.AlignCenter))
         hl.addWidget(_lbl("Build, track, and play your character from creation to legend.", TEXT2, FS_BODY+2, align=Qt.AlignCenter))
 
         btn_row = QHBoxLayout(); btn_row.setSpacing(20); btn_row.setAlignment(Qt.AlignCenter)
-        new_btn = pill_btn("⚔  Create New Character", INDIGO)
+        new_btn = pill_btn("Create New Character", INDIGO)
+        _icons.set_button_icon(new_btn, "combat", 20, color="white")
         new_btn.setFixedSize(280, 54)
         new_btn.clicked.connect(self.new_char)
         btn_row.addWidget(new_btn)
@@ -120,8 +122,8 @@ class StartMenu(QWidget):
         il = QVBoxLayout(inner); il.setSpacing(8)
         for folder in ordered_folders:
             collapsed = folder in self._collapsed_folders
-            chevron = "▶" if collapsed else "▼"
-            header_btn = QPushButton(f"{chevron}  📁  {folder or 'Uncategorized'}  ({len(groups[folder])})")
+            header_btn = QPushButton(f"  {folder or 'Uncategorized'}  ({len(groups[folder])})")
+            _icons.set_button_icon(header_btn, "folder", 18)
             header_btn.setFlat(True)
             header_btn.setCursor(Qt.PointingHandCursor)
             header_btn.setStyleSheet(
@@ -131,18 +133,22 @@ class StartMenu(QWidget):
             )
             header_btn.clicked.connect(lambda checked, f=folder: self._toggle_folder(f))
             header_row = QHBoxLayout(); header_row.setSpacing(4)
+            chevron = _icons.icon_label("chevron_right" if collapsed else "chevron_down", 14)
+            header_row.addWidget(chevron)
             header_row.addWidget(header_btn, 1)
             # "Uncategorized" (folder == "") isn't a real campaign -- just
             # the default bucket for characters with no folder set -- so
             # it can't be renamed or deleted the way a named folder can.
             if folder:
-                rename_btn = _btn("✎", SURF2, variant="ghost", width=28, height=24, radius=6,
+                rename_btn = _btn("", SURF2, variant="ghost", width=28, height=24, radius=6,
                                    border_alpha=0x55, text_color=TEXT3, font_size=12)
+                _icons.set_button_icon(rename_btn, "pencil", 14)
                 rename_btn.setToolTip("Rename folder…")
                 rename_btn.clicked.connect(lambda checked, f=folder: self._rename_folder(f))
                 header_row.addWidget(rename_btn)
-                delfolder_btn = _btn("🗑", CRIMSON, variant="ghost", width=28, height=24, radius=6,
+                delfolder_btn = _btn("", CRIMSON, variant="ghost", width=28, height=24, radius=6,
                                       border_alpha=0x55, text_color=TEXT3, font_size=12)
+                _icons.set_button_icon(delfolder_btn, "trash", 14)
                 delfolder_btn.setToolTip("Delete folder…")
                 delfolder_btn.clicked.connect(
                     lambda checked, f=folder, n=len(groups[folder]): self._delete_folder(f, n))
@@ -172,8 +178,9 @@ class StartMenu(QWidget):
                                  radius=8, text_color=IND2, hover_text="white", font_size=FS_SMALL)
                 load_btn.clicked.connect(lambda checked, p=path: self.load_char.emit(p))
                 rl.addWidget(load_btn)
-                move_btn = _btn("📁", SURF2, variant="ghost", width=38, height=38, radius=8,
+                move_btn = _btn("", SURF2, variant="ghost", width=38, height=38, radius=8,
                                  border_alpha=0x55, text_color=TEXT3, font_size=14)
+                _icons.set_button_icon(move_btn, "folder", 18)
                 move_btn.setToolTip("Move to folder…")
                 move_btn.clicked.connect(lambda checked, p=path, nf=named_folders: self._move_saved_row(p, nf))
                 rl.addWidget(move_btn)
@@ -707,7 +714,14 @@ class CharacterCreatorApp(QMainWindow):
             app.installEventFilter(self)
 
     def eventFilter(self, obj, event):
-        if event.type() == QEvent.KeyPress:
+        if event.type() == QEvent.KeyPress and isinstance(obj, QWindow) and not event.isAutoRepeat():
+            # One physical keypress reaches this app-wide filter several
+            # times: once for the top-level QWindow, again for the focused
+            # widget, and once more for each parent it propagates to when a
+            # widget ignores it -- so "cheese" arrived as "cchheeeessee" and
+            # only matched by luck. Every real keypress is delivered to its
+            # QWindow exactly once before any widget sees it, so count it
+            # there only (same rule as ui_android's EasterEggBridge).
             text = event.text()
             if text:
                 self._cheese_buffer = (self._cheese_buffer + text.lower())[-6:]
@@ -722,8 +736,9 @@ class CharacterCreatorApp(QMainWindow):
 
     def _show_cheese_easter_egg(self):
         if not hasattr(self, "_cheese_lbl"):
-            self._cheese_lbl = QLabel("\U0001f9c0", self)
-            self._cheese_lbl.setStyleSheet("font-size:32px;background:transparent;")
+            self._cheese_lbl = QLabel(self)
+            self._cheese_lbl.setPixmap(_icons.cheese_pixmap(3))
+            self._cheese_lbl.setStyleSheet("background:transparent;")
             self._cheese_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
             self._cheese_timer = QTimer(self)
             self._cheese_timer.setSingleShot(True)
@@ -766,14 +781,14 @@ class CharacterCreatorApp(QMainWindow):
         a = QAction("Quit", self);           a.setShortcut("Ctrl+Q"); a.triggered.connect(self.close); fm.addAction(a)
 
         tm = mb.addMenu("&Tools")
-        a = QAction("🎲  Dice Roller", self); a.setShortcut("Ctrl+D"); a.triggered.connect(self._open_dice_roller); tm.addAction(a)
-        a = QAction("⏸  Short Rest",  self); a.setShortcut("Ctrl+R"); a.triggered.connect(self._short_rest);       tm.addAction(a)
-        a = QAction("🌙  Long Rest",   self); a.setShortcut("Ctrl+Shift+R"); a.triggered.connect(self._long_rest); tm.addAction(a)
+        a = QAction("Dice Roller", self); _icons.set_action_icon(a, "dice"); a.setShortcut("Ctrl+D"); a.triggered.connect(self._open_dice_roller); tm.addAction(a)
+        a = QAction("Short Rest",  self); _icons.set_action_icon(a, "short_rest"); a.setShortcut("Ctrl+R"); a.triggered.connect(self._short_rest);       tm.addAction(a)
+        a = QAction("Long Rest",   self); _icons.set_action_icon(a, "long_rest"); a.setShortcut("Ctrl+Shift+R"); a.triggered.connect(self._long_rest); tm.addAction(a)
 
         # Settings/Credits are single actions, not menus with one item
         # inside them -- addAction() straight onto the menu bar makes
         # each a direct single-click, no dropdown to open first.
-        a = QAction("⚙  Settings…", self); a.setShortcut("Ctrl+,"); a.triggered.connect(self._open_settings); mb.addAction(a)
+        a = QAction("Settings…", self); a.setShortcut("Ctrl+,"); a.triggered.connect(self._open_settings); mb.addAction(a)
         a = QAction("Credits", self); a.triggered.connect(self._open_credits); mb.addAction(a)
 
     def _open_settings(self):
@@ -1048,7 +1063,7 @@ class CharacterCreatorApp(QMainWindow):
         else:
             for path in recent:
                 name = os.path.splitext(os.path.basename(path))[0].replace("_"," ").title()
-                act = self._recent_menu.addAction(f"\U0001f4c4  {name}")
+                act = self._recent_menu.addAction(_icons.icon("file"), name)
                 act.triggered.connect(lambda checked=False, p=path: self._go_sheet_from_path(p))
             self._recent_menu.addSeparator()
             self._recent_menu.addAction("Clear Recent").triggered.connect(self._clear_recent)

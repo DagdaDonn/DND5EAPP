@@ -14,6 +14,9 @@ Button {
 
     implicitWidth: 110
     implicitHeight: 36
+    // see MButton: no Material insets, so it draws at its full height
+    topInset: 0
+    bottomInset: 0
 
     contentItem: Text {
         text: control.active ? "Active" : "Inactive"

@@ -53,6 +53,7 @@ from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON
 from dnd_app.data.phbCommon.conditions import CONDITIONS
 from .base import *
 from .base import _lbl, _sep, _card
+from dnd_app.ui_desktop import icons as _icons
 
 
 class CombatMixin:
@@ -303,7 +304,8 @@ class CombatMixin:
                 slot_data = compute_all_spell_slots(_cl_wsc(self.char), _subclasses_wsc(self.char))
                 slots_max = slot_data.get("spell_slots") or [0]*9
                 has_slot = any(slots_max[i] - (slots_used[i] if i < len(slots_used) else 0) > 0 for i in range(9))
-                heal_btn = QPushButton("\U0001f52e Combat Wild Shape: Spend Slot to Heal")
+                heal_btn = QPushButton("Combat Wild Shape: Spend Slot to Heal")
+                _icons.set_button_icon(heal_btn, "magic", 16, color="white")
                 heal_btn.setEnabled(has_slot and cur_hp < beast["hp"])
                 heal_btn.setToolTip("Bonus action: expend a spell slot to regain 1d8 HP per level of the slot.")
                 heal_btn.setStyleSheet(pill_btn("", GOLD).styleSheet())
@@ -333,8 +335,9 @@ class CombatMixin:
                 cl.addWidget(_lbl("Combat Wild Shape: use as a bonus action instead of an action.",
                                    GOLD2, FS_TINY, wrap=True))
 
-            fire_btn = QPushButton("\U0001f43e Transform" if uses_left is None
-                                    else f"\U0001f43e Transform ({uses_left} left)")
+            fire_btn = QPushButton("Transform" if uses_left is None
+                                    else f"Transform ({uses_left} left)")
+            _icons.set_button_icon(fire_btn, "paw", 16, color="white")
             fire_btn.setEnabled((uses_left is None or uses_left > 0) and combo.count() > 0)
             fire_btn.setStyleSheet(pill_btn("", PURPLE).styleSheet())
             fire_btn.clicked.connect(lambda checked=False, cb=combo: self._wildshape_transform(cb.currentData()))
@@ -376,7 +379,7 @@ class CombatMixin:
         self.ctrl.refresh()
         self._refresh_combat()
         self._rebuild_wildshape_card()
-        self._toast(f"\U0001f43e Transformed into {beast_name}")
+        self._toast(f"Transformed into {beast_name}")
 
     def _wildshape_moon_heal(self):
         """Circle of the Moon's Combat Wild Shape: spend a spell slot as
@@ -413,7 +416,7 @@ class CombatMixin:
         self.ctrl.refresh()
         self._refresh_combat()
         self._rebuild_wildshape_card()
-        self._toast(f"\U0001f52e Expended a level {level} slot: healed {roll} HP ({new_hp}/{beast['hp']})")
+        self._toast(f"Expended a level {level} slot: healed {roll} HP ({new_hp}/{beast['hp']})")
 
     def _wildshape_revert(self):
         # Reverting early doesn't refund the use — matches the real rule
@@ -521,7 +524,7 @@ class CombatMixin:
         hpcl.addWidget(self._resist_frame, 1)
         # NOTE: climb/swim/fly used to get their own badge strip here too,
         # separate from the resistances strip above. Removed — the top
-        # stat-bar speed pill already shows climb/swim/fly (✈/🌊/↑ next to
+        # stat-bar speed pill already shows climb/swim/fly (fly/swim/climb next to
         # the walk speed) whenever any are non-zero, so this strip was
         # pure duplication of information already on screen, not just a
         # resistance-lookalike problem (which the caption/color fix above
@@ -565,7 +568,7 @@ class CombatMixin:
         dsl.setContentsMargins(12,10,12,10); dsl.setSpacing(6)
 
         ds_hdr = QHBoxLayout(); ds_hdr.setSpacing(8)
-        ds_hdr.addWidget(_lbl("\U0001f480  DEATH SAVING THROWS", CRIM2, FS_SMALL, bold=True, wrap=False))
+        ds_hdr.addWidget(_icons.icon_header("skull", _lbl("DEATH SAVING THROWS", CRIM2, FS_SMALL, bold=True, wrap=False)))
         ds_hdr.addStretch()
         self._death_status_lbl = _lbl("", TEXT2, FS_TINY, bold=True, wrap=False)
         ds_hdr.addWidget(self._death_status_lbl)
@@ -632,7 +635,8 @@ class CombatMixin:
             f"QLabel{{background:{SURF2};border:1px solid {BORDER};border-radius:6px;"
             f"padding:4px 10px;color:{TEXT3};font-size:{FS_SMALL}px;}}")
         acl2.addWidget(self._armor_display); acl2.addWidget(self._shield_display)
-        armor_jump = QPushButton("⚙ Equip armor & shield in Gear ▸")
+        armor_jump = QPushButton("Equip armor && shield in Gear ▸")
+        _icons.set_button_icon(armor_jump, "shield", 12)
         armor_jump.setFixedHeight(24)
         armor_jump.setStyleSheet(
             f"QPushButton{{background:transparent;border:none;color:{TEAL2};"
@@ -683,7 +687,8 @@ class CombatMixin:
         self._cond_checks = {}
         COND_NAMES = ["Blinded","Charmed","Deafened","Frightened","Gagged",
                       "Grappled","Incapacitated","Invisible","Paralyzed",
-                      "Petrified","Poisoned","Prone","Restrained","Stunned","Unconscious"]
+                      "Petrified","Poisoned","Prone","Restrained","Stunned","Surprised",
+                      "Unconscious"]
         cond_grid = QGridLayout(); cond_grid.setSpacing(3)
         for ci, cname in enumerate(COND_NAMES):
             cb = QCheckBox(cname); cb.setStyleSheet(
@@ -772,9 +777,9 @@ class CombatMixin:
         self._action_level_filter_rows = {}
         _TAB_DISPLAY_LABEL = {"Action":"Action","Bonus Action":"Bonus Action",
                                "Reaction":"Reaction","Passive":"Other"}
-        CAT_ICONS = {"All": "◆", "Common": "⚔", "Magic Item": "✨", "Race": "🧬", "Spell": "📖"}
-        for bucket_name, icon in [("Action","⚔"),("Bonus Action","✦"),
-                                   ("Reaction","⚡"),("Passive","◎")]:
+        CAT_ICONS = {"Common": "combat", "Magic Item": "magic", "Race": "identity", "Spell": "spells"}
+        for bucket_name, icon in [("Action","combat"),("Bonus Action","bonus"),
+                                   ("Reaction","bolt"),("Passive","passive")]:
             bw = QWidget(); bw.setStyleSheet("background:transparent;")
             bl = QVBoxLayout(bw); bl.setContentsMargins(8,8,8,8); bl.setSpacing(5)
 
@@ -795,7 +800,9 @@ class CombatMixin:
                     self._refresh_action_tabs()
                 return _click
             for cat in ["All", "Common", "Magic Item", "Race", "Spell"]:
-                btn = QPushButton(f"{CAT_ICONS[cat]} {cat}")
+                btn = QPushButton(cat)
+                if cat in CAT_ICONS:
+                    _icons.set_button_icon(btn, CAT_ICONS[cat], 13)
                 btn.setMinimumHeight(24)
                 btn.setStyleSheet(self._action_cat_btn_style(cat == "All"))
                 btn.clicked.connect(_make_cat_click(cat))
@@ -841,7 +848,8 @@ class CombatMixin:
             scroll.setWidget(bw)
             scroll.setStyleSheet("QScrollArea{background:transparent;border:none;}")
             label = _TAB_DISPLAY_LABEL.get(bucket_name, bucket_name)
-            self._action_tabs.addTab(scroll, f"{icon} {label}")
+            self._action_tabs.addTab(scroll, label)
+            _icons.set_tab_icon(self._action_tabs, scroll, icon, 15)
 
         # ── 5th tab: Active spell effects (Shield of Faith, Haste, …) ────────
         fx_tab = QWidget(); fx_tab.setStyleSheet("background:transparent;")
@@ -867,7 +875,8 @@ class CombatMixin:
         self._fx_lay.addStretch()
         fx_scroll.setWidget(fx_host)
         fxl.addWidget(fx_scroll, 1)
-        self._action_tabs.addTab(fx_tab, "☄ Effects")
+        self._action_tabs.addTab(fx_tab, "Effects")
+        _icons.set_tab_icon(self._action_tabs, fx_tab, "effects", 15)
 
         # ── Turn tracker bar (Action / Bonus / Reaction economy per turn) ────
         # Deliberately NOT part of the resizable splitter below — it's a
@@ -887,21 +896,23 @@ class CombatMixin:
         tb = QHBoxLayout(turn_bar); tb.setContentsMargins(10,6,10,6); tb.setSpacing(8)
         tb.addWidget(_lbl("TURN:", GOLD, FS_SMALL, bold=True, wrap=False))
         self._turn_chips = {}
-        for bname, icon in [("Action","⚔"),("Bonus Action","✦"),("Reaction","⚡")]:
-            chip = QPushButton(f"{icon} {bname}  ●")
+        for bname, icon in [("Action","combat"),("Bonus Action","bonus"),("Reaction","bolt")]:
+            chip = QPushButton(f"{bname}  ●")
+            _icons.set_button_icon(chip, icon, 14)
             chip.setCheckable(False); chip.setMinimumHeight(28)
             chip.setAccessibleName(f"{bname} availability — click to toggle used")
             chip.setToolTip(f"Click to manually toggle your {bname} as used/available")
             chip.clicked.connect(lambda checked=False, b=bname: self._toggle_turn_slot(b))
             tb.addWidget(chip)
             self._turn_chips[bname] = chip
-        self._haste_chip = _lbl("⚡ HASTE: +1 action", "#FFD34D", FS_SMALL, bold=True, wrap=False)
+        self._haste_chip = _lbl("HASTE: +1 action", "#FFD34D", FS_SMALL, bold=True, wrap=False)
         self._haste_chip.setStyleSheet(
             f"background:#22FFD34D;border:1px solid #FFD34D;border-radius:6px;"
             f"padding:4px 8px;color:#FFD34D;font-weight:700;")
         self._haste_chip.setVisible(False)
         tb.addWidget(self._haste_chip)
-        self._sneak_chip = QPushButton("🗡 Sneak Attack ●")
+        self._sneak_chip = QPushButton("Sneak Attack ●")
+        _icons.set_button_icon(self._sneak_chip, "dagger", 14)
         self._sneak_chip.setMinimumHeight(28)
         self._sneak_chip.setToolTip("Rogue: once per turn. Click to toggle used.")
         self._sneak_chip.setAccessibleName("Sneak Attack availability — click to toggle")
@@ -909,7 +920,8 @@ class CombatMixin:
         self._sneak_chip.setVisible(False)
         tb.addWidget(self._sneak_chip)
         tb.addStretch()
-        new_turn = QPushButton("🔄 New Turn")
+        new_turn = QPushButton("New Turn")
+        _icons.set_button_icon(new_turn, "refresh", 14)
         new_turn.setMinimumHeight(30)
         new_turn.setAccessibleName("Start a new turn — resets action, bonus action, reaction and sneak attack")
         new_turn.setStyleSheet(_btn("", GREEN, variant="cta", text_color=GREEN2,
@@ -987,7 +999,7 @@ class CombatMixin:
                 own_new = max(0, own_cur - excess)
                 self._hp_current_hp.setValue(own_new)
                 self.ctrl.update("current_hp", own_new, rebuild_char=False)
-                self._toast(f"🐾 Beast form dropped to 0 HP — reverted to normal form, "
+                self._toast(f"Beast form dropped to 0 HP — reverted to normal form, "
                             f"{excess} excess damage carried over")
                 if excess >= own_max * 2:
                     self._show_death_screen()
@@ -1019,7 +1031,7 @@ class CombatMixin:
 
         if is_zealot_14 and is_raging and would_drop_to_0 and overkill < max_hp:
             new_hp = 1
-            self._toast("🛡 Rage Beyond Death: damage would drop you to 0, but your rage "
+            self._toast("Rage Beyond Death: damage would drop you to 0, but your rage "
                         "keeps you standing at 1 HP")
         elif (barb_lvl >= 11 and is_raging and would_drop_to_0 and overkill < max_hp):
             # Relentless Rage: a CON save (not a guarantee like Rage Beyond
@@ -1035,20 +1047,20 @@ class CombatMixin:
             self._mark_dirty()
             if total >= dc:
                 new_hp = 1
-                self._toast(f"🎲 Relentless Rage: DC {dc} CON save — rolled {roll}{sign(con_mod)}"
+                self._toast(f"Relentless Rage: DC {dc} CON save — rolled {roll}{sign(con_mod)}"
                             f" = {total}, SUCCESS — you drop to 1 HP instead of 0")
             else:
                 new_hp = 0
-                self._toast(f"🎲 Relentless Rage: DC {dc} CON save — rolled {roll}{sign(con_mod)}"
+                self._toast(f"Relentless Rage: DC {dc} CON save — rolled {roll}{sign(con_mod)}"
                             f" = {total}, FAILED — you drop to 0 HP")
         else:
             new_hp = max(0, cur - amt)
         self._hp_current_hp.setValue(new_hp)
         self.ctrl.update("current_hp", new_hp, rebuild_char=False)
         if absorbed and amt == 0:
-            self._toast(f"🛡 Temp HP absorbed all {absorbed} damage")
+            self._toast(f"Temp HP absorbed all {absorbed} damage")
         elif absorbed:
-            self._toast(f"🛡 Temp HP absorbed {absorbed}, took {amt} damage")
+            self._toast(f"Temp HP absorbed {absorbed}, took {amt} damage")
 
         conc_spell = self.char.get("concentration", {}).get("spell")
         if conc_spell:
@@ -1103,7 +1115,7 @@ class CombatMixin:
             self.char["death_saves"] = {"successes": 0, "failures": 0}
             for cb in self._death_success + self._death_fail:
                 cb.setChecked(False)
-            self._toast(f"💚 Back on your feet! Death saves reset")
+            self._toast(f"Back on your feet! Death saves reset")
         self._hp_current_hp.setValue(new_hp)
         self.ctrl.update("current_hp", new_hp, rebuild_char=False)
 
@@ -1123,7 +1135,7 @@ class CombatMixin:
             return
         self._turn_counts[bucket] += 1
         if bucket == "Action" and limit == 2 and self._turn_counts[bucket] == 1:
-            self._toast("⚡ Haste: first action used — one more available")
+            self._toast("Haste: first action used — one more available")
         self._apply_turn_state()
 
     def _toggle_turn_slot(self, bucket: str):
@@ -1147,20 +1159,19 @@ class CombatMixin:
             fx.remove("Reckless Attack")
             self._refresh_combat_weapons()
         self._apply_turn_state()
-        self._toast("🔄 New turn — action, bonus & reaction ready")
+        self._toast("New turn — action, bonus & reaction ready")
 
     def _apply_turn_state(self):
         """Grey out Use/Cast buttons in spent buckets; refresh chips."""
         if not hasattr(self, "_turn_chips"):
             return
         from dnd_app.core.character import class_levels
-        ICONS = {"Action":"⚔","Bonus Action":"✦","Reaction":"⚡"}
         for bname, chip in self._turn_chips.items():
             limit = self._turn_limit(bname)
             used  = self._turn_counts.get(bname, 0)
             free  = used < limit
             marker = "●" * max(0, limit-used) + "○" * used
-            chip.setText(f"{ICONS[bname]} {bname}  {marker}")
+            chip.setText(f"{bname}  {marker}")
             col = GREEN2 if free else TEXT2
             chip.setStyleSheet(
                 f"QPushButton{{background:{qa(col,0x1e)};border:2px solid {col};"
@@ -1205,7 +1216,7 @@ class CombatMixin:
             dice = (rogue_lvl + 1) // 2
             used = getattr(self, "_sneak_used", False)
             self._sneak_chip.setVisible(True)
-            self._sneak_chip.setText(f"🗡 Sneak {dice}d6  {'○ used' if used else '● ready'}")
+            self._sneak_chip.setText(f"Sneak {dice}d6  {'○ used' if used else '● ready'}")
             col = TEXT3 if used else PURP2
             self._sneak_chip.setStyleSheet(
                 f"QPushButton{{background:{qa(col,0x1e)};border:2px solid {col};"
@@ -1240,14 +1251,14 @@ class CombatMixin:
                     name = key
                     break
         if name is None:
-            self._toast(f"⚠ \"{typed}\" isn't a recognized effect — pick one from the list")
+            self._toast(f"\"{typed}\" isn't a recognized effect — pick one from the list")
             return
         self.char.setdefault("active_effects", []).append(name)
         self.ctrl.refresh()          # AC pill etc. recompute
         self._refresh_effects_list()
         self._apply_turn_state()     # haste chip
         self._mark_dirty()
-        self._toast(f"☄ {name} applied")
+        self._toast(f"{name} applied")
 
     def _remove_active_effect(self, name: str):
         fx = self.char.get("active_effects", [])
@@ -1266,9 +1277,9 @@ class CombatMixin:
             self._apply_turn_state()
             self._mark_dirty()
             if frenzy_ended:
-                self._toast("😵 Rage removed — Frenzy ends with it, gain 1 level of exhaustion")
+                self._toast("Rage removed — Frenzy ends with it, gain 1 level of exhaustion")
             else:
-                self._toast(f"✖ {name} removed")
+                self._toast(f"{name} removed")
 
     def _refresh_effects_list(self):
         if not hasattr(self, "_fx_lay"): return
@@ -1316,7 +1327,7 @@ class CombatMixin:
            "Speed halved. Hit point maximum halved.",
         5: "Disadvantage on ability checks, attack rolls, and saving throws. "
            "Speed 0. Hit point maximum halved.",
-        6: "💀 Death.",
+        6: "Death.",
     }
 
     def _on_exhaustion_changed(self, v: int):
@@ -1326,10 +1337,10 @@ class CombatMixin:
         self.ctrl.refresh()   # recompute max HP / speed / apply death check
         self._mark_dirty()
         if v >= 6:
-            self._toast("💀 Exhaustion level 6 — the character has died")
+            self._toast("Exhaustion level 6 — the character has died")
             self._show_death_screen()
         elif v >= 4:
-            self._toast(f"⚠ Exhaustion {v}: hit point maximum halved")
+            self._toast(f"Exhaustion {v}: hit point maximum halved")
 
     def _refresh_exhaustion_label(self):
         if not hasattr(self, "_exh_effect_lbl"):
@@ -1449,7 +1460,7 @@ class CombatMixin:
         self.char["current_hp"] = min(mx, cur + heal)
         if hasattr(self, "_hp_current_hp"):
             self._hp_current_hp.setValue(self.char["current_hp"])
-        self._toast(f"🎲 Spent {die_key}: rolled {roll} {con:+d} CON → healed {heal} HP "
+        self._toast(f"Spent {die_key}: rolled {roll} {con:+d} CON → healed {heal} HP "
                     f"({hd['remaining']} dice left)")
         self._mark_dirty()
         self._refresh_action_tabs()
@@ -1694,7 +1705,7 @@ class CombatMixin:
                 get_weapon_attack_breakdown(self.char, _stat, _prof, _bonus), _atk, e.globalPos()))
         rl.addWidget(atk_lbl)
         if "Reckless Attack" in self.char.get("active_effects", []) and not is_ranged and stat == "STR":
-            reckless_badge = _lbl("⚔ Reckless (adv)", GOLD2, FS_TINY, bold=True, wrap=False)
+            reckless_badge = _lbl("Reckless (adv)", GOLD2, FS_TINY, bold=True, wrap=False)
             reckless_badge.setToolTip("Reckless Attack is active: advantage on this attack, "
                                        "but attack rolls against you also have advantage until your next turn.")
             rl.addWidget(reckless_badge)
@@ -1743,7 +1754,7 @@ class CombatMixin:
             magic_badge.setToolTip(f"Magical weapon: +{total_bonus} to attack and damage rolls\nSource: {tip_src}")
             rl.addWidget(magic_badge)
         if weapon_material:
-            material_badge = _lbl(f"\u26cf {weapon_material}", TEAL2, FS_TINY, bold=True, wrap=False)
+            material_badge = _lbl(f"{weapon_material}", TEAL2, FS_TINY, bold=True, wrap=False)
             if weapon_material == "Silvered":
                 material_badge.setToolTip(
                     "Silvered weapon: this weapon's damage counts as silvered for the purpose "
@@ -1779,7 +1790,8 @@ class CombatMixin:
         ammo_lbl = None
         if ammo_key:
             ammo_count = self.char.setdefault("ammo", {}).get(ammo_key, 0)
-            ammo_lbl = QPushButton(f"\U0001f3f9 {_AMMO_LABEL.get(ammo_key,'Ammo')}: {ammo_count}")
+            ammo_lbl = QPushButton(f"{_AMMO_LABEL.get(ammo_key,'Ammo')}: {ammo_count}")
+            _icons.set_button_icon(ammo_lbl, "ammo", 13)
             ammo_lbl.setStyleSheet(
                 _btn("", AMBER, variant="chip", radius=5, text_color=AMBE2,
                      border_alpha=0x55, hover_bg_alpha=0x33, font_size=FS_TINY,
@@ -1806,7 +1818,7 @@ class CombatMixin:
                         _ammo_cost = next((float(g[2] or 0) for g in _AG if g[0] == _label), 0.0)
                         self.char.setdefault("equipment",[]).append(
                             {"name":_label,"qty":total,"weight":0.02,"cost":_ammo_cost,"notes":""})
-                    _lbl.setText(f"\U0001f3f9 {_label}: {total}")
+                    _lbl.setText(f"{_label}: {total}")
                     self._mark_dirty()
             ammo_lbl.clicked.connect(_add_ammo)
             rl.addWidget(ammo_lbl)
@@ -1834,20 +1846,20 @@ class CombatMixin:
                         _eq["qty"] = max(0, new_qty); break
                 if _al:
                     _al.setText(
-                        f"\U0001f3f9 {_ammo_lbl_ref.get(_ak,'Ammo')}: {new_qty}")
+                        f"{_ammo_lbl_ref.get(_ak,'Ammo')}: {new_qty}")
                 self._mark_dirty()
             d20 = random.randint(1, 20)
             bonus = int(_atk.replace("+","").replace("\u2212","-")) if _atk else 0
             total = d20 + bonus
-            crit = (" \u2014 CRIT \u26a1" if d20==20
-                    else (" \u2014 Miss \U0001f480" if d20==1 else ""))
+            crit = (" \u2014 CRIT!" if d20==20
+                    else (" \u2014 Miss" if d20==1 else ""))
             QMessageBox.information(
                 None, "Roll To Hit",
-                f"\U0001f3b2 {_name}\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
+                f"{_name}\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
 
-        hit_btn = _btn("\U0001f3b2 Hit", TEAL, variant="danger", height=26, width=60,
+        hit_btn = _icons.with_icon(_btn("Hit", TEAL, variant="danger", height=26, width=66,
                         radius=5, border_width=1, text_color=TEAL2, hover_text="white",
-                        font_size=FS_TINY, padding="0px")
+                        font_size=FS_TINY, padding="0px"), "dice", 12)
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
@@ -1899,15 +1911,15 @@ class CombatMixin:
             d20 = random.randint(1, 20)
             bonus = int(_atk.replace("+","").replace("\u2212","-")) if _atk else 0
             total = d20 + bonus
-            crit = (" \u2014 CRIT \u26a1" if d20==20
-                    else (" \u2014 Miss \U0001f480" if d20==1 else ""))
+            crit = (" \u2014 CRIT!" if d20==20
+                    else (" \u2014 Miss" if d20==1 else ""))
             QMessageBox.information(
                 None, "Roll To Hit",
-                f"\U0001f3b2 Unarmed Strike\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
+                f"Unarmed Strike\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
 
-        hit_btn = _btn("\U0001f3b2 Hit", TEAL, variant="danger", height=26, width=60,
+        hit_btn = _icons.with_icon(_btn("Hit", TEAL, variant="danger", height=26, width=66,
                         radius=5, border_width=1, text_color=TEAL2, hover_text="white",
-                        font_size=FS_TINY, padding="0px")
+                        font_size=FS_TINY, padding="0px"), "dice", 12)
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
@@ -1999,15 +2011,15 @@ class CombatMixin:
             d20 = random.randint(1, 20)
             bonus = int(_atk.replace("+","").replace("\u2212","-")) if _atk else 0
             total = d20 + bonus
-            crit = (" \u2014 CRIT \u26a1" if d20==20
-                    else (" \u2014 Miss \U0001f480" if d20==1 else ""))
+            crit = (" \u2014 CRIT!" if d20==20
+                    else (" \u2014 Miss" if d20==1 else ""))
             QMessageBox.information(
                 None, "Roll To Hit",
-                f"\U0001f3b2 Unarmed Strike (Hybrid Form)\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
+                f"Unarmed Strike (Hybrid Form)\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
 
-        hit_btn = _btn("\U0001f3b2 Hit", CRIM2, variant="danger", height=26, width=60,
+        hit_btn = _icons.with_icon(_btn("Hit", CRIM2, variant="danger", height=26, width=66,
                         radius=5, border_width=1, hover_text="white",
-                        font_size=FS_TINY, padding="0px")
+                        font_size=FS_TINY, padding="0px"), "dice", 12)
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
@@ -2158,15 +2170,15 @@ class CombatMixin:
             d20 = random.randint(1, 20)
             bonus = int(_atk.replace("+","").replace("\u2212","-")) if _atk else 0
             total = d20 + bonus
-            crit = (" \u2014 CRIT \u26a1" if d20==20
-                    else (" \u2014 Miss \U0001f480" if d20==1 else ""))
+            crit = (" \u2014 CRIT!" if d20==20
+                    else (" \u2014 Miss" if d20==1 else ""))
             QMessageBox.information(
                 None, "Roll To Hit",
-                f"\U0001f3b2 {_name}\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
+                f"{_name}\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
 
-        hit_btn = _btn("\U0001f3b2 Hit", TEAL2, variant="danger", height=26, width=60,
+        hit_btn = _icons.with_icon(_btn("Hit", TEAL2, variant="danger", height=26, width=66,
                         radius=5, border_width=1, hover_text="white",
-                        font_size=FS_TINY, padding="0px")
+                        font_size=FS_TINY, padding="0px"), "dice", 12)
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
@@ -2231,15 +2243,15 @@ class CombatMixin:
             d20 = random.randint(1, 20)
             bonus = int(_atk.replace("+","").replace("\u2212","-")) if _atk else 0
             total = d20 + bonus
-            crit = (" \u2014 CRIT \u26a1" if d20==20
-                    else (" \u2014 Miss \U0001f480" if d20==1 else ""))
+            crit = (" \u2014 CRIT!" if d20==20
+                    else (" \u2014 Miss" if d20==1 else ""))
             QMessageBox.information(
                 None, "Roll To Hit",
-                f"\U0001f3b2 {_name} (Form of the Beast)\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
+                f"{_name} (Form of the Beast)\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
 
-        hit_btn = _btn("\U0001f3b2 Hit", CRIM2, variant="danger", height=26, width=60,
+        hit_btn = _icons.with_icon(_btn("Hit", CRIM2, variant="danger", height=26, width=66,
                         radius=5, border_width=1, hover_text="white",
-                        font_size=FS_TINY, padding="0px")
+                        font_size=FS_TINY, padding="0px"), "dice", 12)
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
@@ -2290,15 +2302,15 @@ class CombatMixin:
             d20 = random.randint(1, 20)
             bonus = int(_atk.replace("+","").replace("\u2212","-")) if _atk else 0
             total = d20 + bonus
-            crit = (" \u2014 CRIT \u26a1" if d20==20
-                    else (" \u2014 Miss \U0001f480" if d20==1 else ""))
+            crit = (" \u2014 CRIT!" if d20==20
+                    else (" \u2014 Miss" if d20==1 else ""))
             QMessageBox.information(
                 None, "Roll To Hit",
-                f"\U0001f3b2 Armor Spikes (Battlerager Armor)\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
+                f"Armor Spikes (Battlerager Armor)\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
 
-        hit_btn = _btn("\U0001f3b2 Hit", CRIM2, variant="danger", height=26, width=60,
+        hit_btn = _icons.with_icon(_btn("Hit", CRIM2, variant="danger", height=26, width=66,
                         radius=5, border_width=1, hover_text="white",
-                        font_size=FS_TINY, padding="0px")
+                        font_size=FS_TINY, padding="0px"), "dice", 12)
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
@@ -2362,15 +2374,15 @@ class CombatMixin:
             d20 = random.randint(1, 20)
             bonus = int(_atk.replace("+","").replace("\u2212","-")) if _atk else 0
             total = d20 + bonus
-            crit = (" \u2014 CRIT \u26a1" if d20==20
-                    else (" \u2014 Miss \U0001f480" if d20==1 else ""))
+            crit = (" \u2014 CRIT!" if d20==20
+                    else (" \u2014 Miss" if d20==1 else ""))
             QMessageBox.information(
                 None, "Roll To Hit",
-                f"\U0001f3b2 {_name} (Armor Model)\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
+                f"{_name} (Armor Model)\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
 
-        hit_btn = _btn("\U0001f3b2 Hit", PURPLE, variant="danger", height=26, width=60,
+        hit_btn = _icons.with_icon(_btn("Hit", PURPLE, variant="danger", height=26, width=66,
                         radius=5, border_width=1, text_color=PURP2, hover_text="white",
-                        font_size=FS_TINY, padding="0px")
+                        font_size=FS_TINY, padding="0px"), "dice", 12)
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
@@ -2421,15 +2433,15 @@ class CombatMixin:
             d20 = random.randint(1, 20)
             bonus = int(_atk.replace("+","").replace("\u2212","-")) if _atk else 0
             total = d20 + bonus
-            crit = (" \u2014 CRIT \u26a1" if d20==20
-                    else (" \u2014 Miss \U0001f480" if d20==1 else ""))
+            crit = (" \u2014 CRIT!" if d20==20
+                    else (" \u2014 Miss" if d20==1 else ""))
             QMessageBox.information(
                 None, "Roll To Hit",
-                f"\U0001f3b2 Fangs (Longtooth Shifter)\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
+                f"Fangs (Longtooth Shifter)\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
 
-        hit_btn = _btn("\U0001f3b2 Hit", CRIM2, variant="danger", height=26, width=60,
+        hit_btn = _icons.with_icon(_btn("Hit", CRIM2, variant="danger", height=26, width=66,
                         radius=5, border_width=1, hover_text="white",
-                        font_size=FS_TINY, padding="0px")
+                        font_size=FS_TINY, padding="0px"), "dice", 12)
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
@@ -2474,15 +2486,15 @@ class CombatMixin:
             d20 = random.randint(1, 20)
             bonus = int(_atk.replace("+","").replace("\u2212","-")) if _atk else 0
             total = d20 + bonus
-            crit = (" \u2014 CRIT \u26a1" if d20==20
-                    else (" \u2014 Miss \U0001f480" if d20==1 else ""))
+            crit = (" \u2014 CRIT!" if d20==20
+                    else (" \u2014 Miss" if d20==1 else ""))
             QMessageBox.information(
                 None, "Roll To Hit",
-                f"\U0001f3b2 Bloodthirst (Vampire)\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
+                f"Bloodthirst (Vampire)\n\nd20={d20}  {_atk}\nTotal: {total}{crit}")
 
-        hit_btn = _btn("\U0001f3b2 Hit", CRIM2, variant="danger", height=26, width=60,
+        hit_btn = _icons.with_icon(_btn("Hit", CRIM2, variant="danger", height=26, width=66,
                         radius=5, border_width=1, hover_text="white",
-                        font_size=FS_TINY, padding="0px")
+                        font_size=FS_TINY, padding="0px"), "dice", 12)
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
@@ -2560,7 +2572,7 @@ class CombatMixin:
             rl.addWidget(badge)
             if linked_trait:
                 trait_desc = next(td for tn, td in beast["traits"] if tn == linked_trait)
-                trait_badge = _lbl(f"\u26a1 {linked_trait}", GOLD2, FS_TINY, bold=True, wrap=False)
+                trait_badge = _lbl(f"{linked_trait}", GOLD2, FS_TINY, bold=True, wrap=False)
                 trait_badge.setToolTip(trait_desc)
                 rl.addWidget(trait_badge)
             if atk:
@@ -2575,14 +2587,14 @@ class CombatMixin:
                     d20 = random.randint(1, 20)
                     bonus = int(_atk)
                     total = d20 + bonus
-                    crit = (" \u2014 CRIT \u26a1" if d20==20
-                            else (" \u2014 Miss \U0001f480" if d20==1 else ""))
+                    crit = (" \u2014 CRIT!" if d20==20
+                            else (" \u2014 Miss" if d20==1 else ""))
                     QMessageBox.information(
                         None, "Roll To Hit",
-                        f"\U0001f3b2 {_name}\n\nd20={d20}  {'+' if bonus>=0 else ''}{bonus}\nTotal: {total}{crit}")
-                hit_btn = _btn("\U0001f3b2 Hit", PURPLE, variant="danger", height=26, width=60,
+                        f"{_name}\n\nd20={d20}  {'+' if bonus>=0 else ''}{bonus}\nTotal: {total}{crit}")
+                hit_btn = _icons.with_icon(_btn("Hit", PURPLE, variant="danger", height=26, width=66,
                                 radius=5, border_width=1, text_color=PURP2, hover_text="white",
-                                font_size=FS_TINY, padding="0px")
+                                font_size=FS_TINY, padding="0px"), "dice", 12)
                 hit_btn.clicked.connect(_roll_hit)
                 rl.addWidget(hit_btn)
 
@@ -2635,7 +2647,7 @@ class CombatMixin:
                 if self.char.get("_wildshape_active"):
                     if v <= 0:
                         self._wildshape_revert()
-                        self._toast("🐾 Beast form dropped to 0 HP — reverted to normal form")
+                        self._toast("Beast form dropped to 0 HP — reverted to normal form")
                     else:
                         self.char["_wildshape_hp"] = v
                         self._mark_dirty()

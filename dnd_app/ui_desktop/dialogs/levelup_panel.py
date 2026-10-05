@@ -21,6 +21,7 @@ from dnd_app.core.builder import (
     get_background_skills, get_race_skills, get_race_asi,
 )
 from dnd_app.core.calculator import resolve_stat_placeholders
+from dnd_app.ui_desktop import icons as _icons
 
 ABILITIES = ["STR","DEX","CON","INT","WIS","CHA"]
 ALL_SKILLS = [
@@ -1162,11 +1163,16 @@ def feat_prereq_met(char: dict, feat: dict) -> tuple[bool, str]:
 
 class LevelUpPanel(QWidget):
     choices_changed = Signal()
+    # Unfinished-choice count after each refresh (the same number the
+    # "PENDING CHOICES (N remaining)" header shows) -- drives the
+    # character sheet's pulsing Choices tab.
+    pending_count_changed = Signal(int)
 
     def __init__(self, char_ref, parent=None):
         super().__init__(parent)
         from dnd_app.ui_desktop.style.theme import sync_globals as _sg; _sg(globals())
         self.char = char_ref
+        self.pending_count = 0
         self._outer = QVBoxLayout(self)
         self._outer.setContentsMargins(0,0,0,0)
         self._outer.setSpacing(8)
@@ -1250,9 +1256,9 @@ class LevelUpPanel(QWidget):
                     badge = QLabel(f"L{lvl}"); badge.setFixedWidth(26)
                     badge.setStyleSheet(f"color:{qa(AMBE2,0x55)};font-size:{FS_TINY}px;font-weight:700;background:transparent;")
                     badge.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                    lbl = QLabel(f"⚙ {ch}"); lbl.setWordWrap(True)
+                    lbl = QLabel(ch); lbl.setWordWrap(True)
                     lbl.setStyleSheet(f"color:{AMBE2};font-size:{FS_SMALL}px;background:transparent;")
-                    row.addWidget(badge); row.addWidget(lbl, 1)
+                    row.addWidget(badge); row.addWidget(_icons.icon_label("choices", 12)); row.addWidget(lbl, 1)
                     w = QWidget(); w.setStyleSheet("background:transparent;"); w.setLayout(row)
                     self._features_lay.addWidget(w)
 
@@ -1296,6 +1302,9 @@ class LevelUpPanel(QWidget):
         self._pending_hdr.setVisible(bool(unfinished))
         if unfinished:
             self._pending_hdr.setText(f"PENDING CHOICES  ({len(unfinished)} remaining)")
+        if len(unfinished) != self.pending_count:
+            self.pending_count = len(unfinished)
+            self.pending_count_changed.emit(self.pending_count)
 
         min_h = max(120, min(480, 72 * len(pending) + 40))
         self._choices_scroll.setMinimumHeight(min_h)

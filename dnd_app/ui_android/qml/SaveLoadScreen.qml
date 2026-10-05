@@ -394,13 +394,13 @@ Flickable {
                             background: null
                             contentItem: RowLayout {
                                 spacing: 6
-                                Label {
-                                    text: root.collapsedFolders[section.modelData.folder] ? "▶" : "▼"
-                                    color: Theme.gold2
-                                    font.pixelSize: Theme.fsBody
+                                MIcon {
+                                    name: root.collapsedFolders[section.modelData.folder] ? "chevron_right" : "chevron_down"
+                                    size: 16
                                 }
+                                MIcon { name: "folder"; size: 20 }
                                 Label {
-                                    text: "📁  " + (section.modelData.folder.length > 0 ? section.modelData.folder : "Uncategorized")
+                                    text: (section.modelData.folder.length > 0 ? section.modelData.folder : "Uncategorized")
                                           + "  (" + section.modelData.characters.length + ")"
                                     color: Theme.gold2
                                     font.pixelSize: Theme.fsBody
@@ -434,7 +434,7 @@ Flickable {
                             primary: false
                             implicitWidth: 40
                             height: 32
-                            text: "🗑"
+                            iconName: "trash"
                             onClicked: {
                                 root.pendingDeleteFolder = section.modelData.folder
                                 root.pendingDeleteFolderCount = section.modelData.characters.length
@@ -487,7 +487,7 @@ Flickable {
                                     primary: false
                                     implicitWidth: 44
                                     height: 36
-                                    text: "📁"
+                                    iconName: "folder"
                                     onClicked: {
                                         root.pendingMovePath = card.modelData.filepath
                                         moveFolderPicker.open()

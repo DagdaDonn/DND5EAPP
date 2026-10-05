@@ -1033,7 +1033,7 @@ def build_action_abilities(char):
         ('Cleric','Improved Reaper'): ('Passive', 'Improved Reaper (passive)', "Reaper now also applies to necromancy spells that target only one creature — they can target two creatures within range instead."),
         ('Cleric','Turn Undead'):      ('Action',      'Turn Undead (Channel Divinity)','Undead within 30 ft must make WIS save or be turned for 1 minute. Destroys low-CR undead.'),
         ('Sorcerer','Metamagic'):      ('Passive',     'Metamagic (passive)','Spend Sorcery Points to apply metamagic options to spells as you cast them.'),
-        ('Sorcerer','Flexible Casting'):('Bonus Action','Flexible Casting','Convert spell slots ↔ Sorcery Points (1 SP per slot level to convert a slot to points; 2/3/5/6/7 SP to create a 1st/2nd/3rd/4th/5th-level slot).'),
+        ('Sorcerer','Flexible Casting'):('Bonus Action','Flexible Casting','Convert between spell slots and Sorcery Points (1 SP per slot level to convert a slot to points; 2/3/5/6/7 SP to create a 1st/2nd/3rd/4th/5th-level slot).'),
         ('Sorcerer','Dragon Ancestor'): ('Passive', 'Dragon Ancestor (passive)',
             "Choose a draconic ancestry (color), setting your damage type for later features. Learn "
             "Draconic. Your proficiency bonus is doubled on CHA checks interacting with dragons."),

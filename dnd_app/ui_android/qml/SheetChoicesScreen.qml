@@ -17,6 +17,8 @@ import Mimic
 Page {
     id: root
     readonly property string screenTitle: "Choices"
+    // Lets App.qml's menu-button pulse stop once the player is here.
+    readonly property bool isChoicesScreen: true
     background: Rectangle { color: Theme.bg }
     readonly property QtObject sheetBridge: Window.window.sheetBridge
 
@@ -33,7 +35,20 @@ Page {
             id: topTabBar
             objectName: "choicesLevelUpTabBar"
             Layout.fillWidth: true
-            TabButton { objectName: "choicesTab"; text: "Choices" }
+            TabButton {
+                objectName: "choicesTab"
+                text: "Choices"
+                // Pulses while choices are pending and the player is on
+                // the Level Up tab -- leveling up there is exactly what
+                // creates new choices, and this points them back.
+                MPulseDot {
+                    objectName: "choicesTabPulse"
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.rightMargin: 10
+                    running: !!Window.window && Window.window.choicesPending && topTabBar.currentIndex !== 0
+                }
+            }
             TabButton { objectName: "levelUpTab"; text: "Level Up" }
         }
 

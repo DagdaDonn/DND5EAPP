@@ -14,7 +14,7 @@ import Mimic
 MFullPageDialog {
     id: root
     objectName: "restFlowDialog"
-    dialogTitle: restType === "long" ? "🌙 Long Rest" : "⏸ Short Rest"
+    dialogTitle: restType === "long" ? "Long Rest" : "Short Rest"
 
     // Set explicitly by App.qml (window.sheetBridge) rather than
     // resolved here via the Window.window attached property -- this

@@ -55,6 +55,7 @@ from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON
     ADVENTURING_GEAR, GEAR_NAMES, MOUNTS, ALL_TOOLS, SIMPLE_MELEE, SIMPLE_RANGED,
     MARTIAL_MELEE, MARTIAL_RANGED, ARTISAN_TOOLS, SPECIAL_ARMOR)
 from dnd_app.data.phbCommon.conditions import CONDITIONS
+from dnd_app.ui_desktop import icons as _icons
 # Features that clearly require holding a holy symbol/spellcasting focus
 # and/or speaking — the same standard the real Wild Shape rule applies to
 # spellcasting itself ("you retain the benefit of any features... if the
@@ -281,13 +282,13 @@ class BaseSheetMixin:
             win._show_sheet(char)
             if win._sheet:
                 win._sheet._tabs.setCurrentIndex(cur_tab_idx)
-                win._sheet._toast("🔄 Refreshed")
+                win._sheet._toast("Refreshed")
         else:
             # Defensive fallback if this widget is ever used without a
             # CharacterCreatorApp parent (e.g. an isolated test harness).
             self._blocking_refresh = False
             self._on_char_updated(self.char)
-            self._toast("🔄 Refreshed")
+            self._toast("Refreshed")
 
     def _on_char_updated(self, _char: dict) -> None:
         if self._blocking_refresh:
@@ -480,11 +481,11 @@ class BaseSheetMixin:
         self._mark_dirty()
         self._apply_rest_options(selected_options)
         if dice_spent:
-            self._toast(f"⏸ Short rest: spent {dice_spent} hit dice, healed {healed} HP")
+            self._toast(f"Short rest: spent {dice_spent} hit dice, healed {healed} HP")
         else:
-            self._toast("⏸ Short rest complete — SR resources restored")
+            self._toast("Short rest complete — SR resources restored")
         if expired:
-            self._toast(f"⏸ Faded: {', '.join(expired)}")
+            self._toast(f"Faded: {', '.join(expired)}")
 
     def _long_rest(self):
         """Long rest: preview what it'll restore/reset, then full HP,
@@ -540,9 +541,9 @@ class BaseSheetMixin:
         self._apply_rest_options(selected_options)
         from dnd_app.ui_desktop.style.flavor_text import random_long_rest_dream
         if expired:
-            self._toast(f"🌙 Faded: {', '.join(expired)}")
+            self._toast(f"Faded: {', '.join(expired)}")
         else:
-            self._toast(f"🌙 Long rest complete — HP, slots & resources restored\n"
+            self._toast(f"Long rest complete — HP, slots & resources restored\n"
                         f"{random_long_rest_dream()}")
 
     def _clear_active_toggles(self) -> list[str]:
@@ -601,7 +602,7 @@ class BaseSheetMixin:
             char["spells_prepared"] = [n for n in char.get("spells_prepared", []) if n in bonus]
             removed = before - len(char["spells_prepared"])
             if removed:
-                self._toast(f"📖 Unprepared {removed} spell(s) — pick new ones from the Spells tab")
+                self._toast(f"Unprepared {removed} spell(s) — pick new ones from the Spells tab")
                 changed_anything = True
                 # _refresh_spells() -> _sync_new_spell_rows() deliberately
                 # never touches existing rows' checkbox state, to avoid
@@ -626,7 +627,7 @@ class BaseSheetMixin:
                 self, "Arcane Armor Model", "New model:", pool, 1 - current_idx, False)
             if ok and choice:
                 char.setdefault("_choices", {})["armorer_model_3"] = [choice]
-                self._toast(f"🛡️ Arcane Armor model changed to {choice.split(' – ')[0]}")
+                self._toast(f"Arcane Armor model changed to {choice.split(' – ')[0]}")
                 changed_anything = True
 
         if "arcane_recovery" in selected:
@@ -644,7 +645,7 @@ class BaseSheetMixin:
                     res = next((r for r in char.get("resources", []) if r.get("key") == "arcane_recovery"), None)
                     if res:
                         res["current"] = 0
-                    self._toast(f"📗 Arcane Recovery: recovered {len(to_recover)} slot(s) "
+                    self._toast(f"Arcane Recovery: recovered {len(to_recover)} slot(s) "
                                 f"(levels {', '.join(map(str, sorted(to_recover)))})")
                     changed_anything = True
 
@@ -659,7 +660,7 @@ class BaseSheetMixin:
                 self, "Eladrin Season", "New season:", pool, current_idx, False)
             if ok and choice:
                 char.setdefault("_choices", {})["eladrin_season"] = [choice]
-                self._toast(f"🍂 Eladrin season changed to {choice.split(' – ')[0]}")
+                self._toast(f"Eladrin season changed to {choice.split(' – ')[0]}")
                 changed_anything = True
 
         if "pact_blade_bond" in selected:
@@ -674,15 +675,15 @@ class BaseSheetMixin:
                     self, "Pact of the Blade", "Bond which magic weapon?", weapon_names, 0, False)
                 if ok and choice:
                     char.setdefault("_choices", {})["pact_weapon_bond"] = [choice]
-                    self._toast(f"\U0001f5e1\ufe0f {choice} bonded as your pact weapon")
+                    self._toast(f"{choice} bonded as your pact weapon")
                     changed_anything = True
 
         if "pact_tome_replace" in selected:
-            self._toast("\U0001f4d5 Received a replacement Book of Shadows from your patron")
+            self._toast("Received a replacement Book of Shadows from your patron")
             changed_anything = True
 
         if "pact_talisman_replace" in selected:
-            self._toast("\U0001f4ff Received a replacement Talisman from your patron")
+            self._toast("Received a replacement Talisman from your patron")
             changed_anything = True
 
         if "guidance_spirits_swap" in selected:
@@ -693,7 +694,7 @@ class BaseSheetMixin:
                 ALL_SKILLS.index(current[0]) if current and current[0] in ALL_SKILLS else 0, False)
             if ok and choice:
                 char.setdefault("_choices", {})["guidance_of_the_spirits_skill"] = [choice]
-                self._toast(f"👻 Guidance of the Spirits now grants {choice}")
+                self._toast(f"Guidance of the Spirits now grants {choice}")
                 changed_anything = True
 
         if "whispers_dead_swap" in selected:
@@ -706,7 +707,7 @@ class BaseSheetMixin:
                 pool.index(current[0]) if current and current[0] in pool else 0, False)
             if ok and choice:
                 char.setdefault("_choices", {})["whispers_of_the_dead_prof"] = [choice]
-                self._toast(f"👻 Whispers of the Dead now grants {choice}")
+                self._toast(f"Whispers of the Dead now grants {choice}")
                 changed_anything = True
 
         if "lunar_phase_swap" in selected:
@@ -717,7 +718,7 @@ class BaseSheetMixin:
                 pool.index(current[0]) if current and current[0] in pool else 0, False)
             if ok and choice:
                 char.setdefault("_choices", {})["lunar_phase"] = [choice]
-                self._toast(f"🌙 Lunar phase changed to {choice}")
+                self._toast(f"Lunar phase changed to {choice}")
                 changed_anything = True
 
         if "astral_knowledge_swap" in selected:
@@ -738,7 +739,7 @@ class BaseSheetMixin:
                     wt_pool.index(current_wt[0]) if current_wt and current_wt[0] in wt_pool else 0, False)
                 if ok2 and wt_choice:
                     char.setdefault("_choices", {})["astral_knowledge_weapon_or_tool"] = [wt_choice]
-                    self._toast(f"✨ {trait_name}: {sk_choice}, {wt_choice}")
+                    self._toast(f"{trait_name}: {sk_choice}, {wt_choice}")
                     changed_anything = True
 
         if changed_anything:
@@ -766,7 +767,7 @@ class BaseSheetMixin:
         self._save_path = path
         self._dirty = False
         self._update_title()
-        self._toast(f"💾 Saved to {os.path.basename(path)}")
+        self._toast(f"Saved to {os.path.basename(path)}")
 
     def _load_dialog(self):
         """Open a saved character via file dialog."""
@@ -823,7 +824,7 @@ class BaseSheetMixin:
         try:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(text)
-            self._toast(f"📄 Exported to {os.path.basename(path)}")
+            self._toast(f"Exported to {os.path.basename(path)}")
         except OSError as e:
             QMessageBox.warning(self, "Export Failed", f"Could not write file:\n{e}")
 
@@ -844,7 +845,7 @@ class BaseSheetMixin:
             return
         try:
             export_official_pdf(self.char, path)
-            self._toast(f"📄 Exported to {os.path.basename(path)}")
+            self._toast(f"Exported to {os.path.basename(path)}")
         except Exception as e:
             QMessageBox.warning(self, "Export Failed", f"Could not write PDF:\n{e}")
 
@@ -923,7 +924,8 @@ class BaseSheetMixin:
 
         # Manual refresh — fail-safe in case a future edit reintroduces a
         # stale-tab bug. Forces every tab to repaint from current char data.
-        refresh_btn = QPushButton("🔄")
+        refresh_btn = QPushButton()
+        _icons.set_button_icon(refresh_btn, "refresh", 17)
         refresh_btn.setToolTip("Refresh — repaint every tab from current character data")
         refresh_btn.setAccessibleName("Refresh all tabs")
         refresh_btn.setFixedSize(32,32)
@@ -935,7 +937,8 @@ class BaseSheetMixin:
         hl.addWidget(refresh_btn)
 
         # Inspiration toggle
-        self._insp_btn = QPushButton("☀")
+        self._insp_btn = QPushButton()
+        _icons.set_button_icon(self._insp_btn, "inspiration", 19)
         self._insp_btn.setToolTip("Inspiration")
         self._insp_btn.setCheckable(True)
         self._insp_btn.setChecked(self.char.get("inspiration", False))
@@ -961,6 +964,17 @@ class BaseSheetMixin:
         self._sb_ac   = self._make_stat_pill("AC", "—", GOLD2)
         self._sb_hp   = self._make_stat_pill("HP", "—", GREEN2)
         self._sb_init = self._make_stat_pill("Initiative", "—", TEAL2)
+        # advantage / disadvantage die beside the initiative number
+        _init_lay = self._sb_init.layout()
+        _init_val = self._sb_init._val
+        _idx = _init_lay.indexOf(_init_val)
+        _init_lay.removeWidget(_init_val)
+        _init_row = QWidget(); _init_row.setStyleSheet("background:transparent;border:none;")
+        _irl = QHBoxLayout(_init_row); _irl.setContentsMargins(0, 0, 0, 0); _irl.setSpacing(4)
+        self._sb_init_adv = QLabel(); self._sb_init_adv.setStyleSheet("background:transparent;border:none;")
+        self._sb_init_adv.hide()
+        _irl.addStretch(); _irl.addWidget(_init_val); _irl.addWidget(self._sb_init_adv); _irl.addStretch()
+        _init_lay.insertWidget(_idx, _init_row)
         self._sb_prof = self._make_stat_pill("Prof Bonus", "—", IND2)
         self._sb_spd  = self._make_stat_pill("Speed", "—", TEXT)
         for pill in [self._sb_ac, self._sb_hp, self._sb_init, self._sb_prof, self._sb_spd]:
@@ -986,8 +1000,10 @@ class BaseSheetMixin:
         sl.addStretch()
 
         # Rest buttons in stat bar
-        sr_btn = QPushButton("⏸ Short Rest")
-        lr_btn = QPushButton("🌙 Long Rest")
+        sr_btn = QPushButton("Short Rest")
+        lr_btn = QPushButton("Long Rest")
+        _icons.set_button_icon(sr_btn, "short_rest", 16)
+        _icons.set_button_icon(lr_btn, "long_rest", 16)
         for btn, fn, c in [(sr_btn, self._short_rest, TEAL),(lr_btn, self._long_rest, INDIGO)]:
             btn.setFixedHeight(40)
             btn.setStyleSheet(_btn("", c, variant="cta", radius=8, border_alpha=0x88,
@@ -1009,17 +1025,24 @@ class BaseSheetMixin:
         # QTabWidget{background:...} rule.
         self._tabs.setAttribute(Qt.WA_StyledBackground, True)
         self._tabs.setTabPosition(QTabWidget.North)
-        self._tabs.addTab(self._build_tab_abilities(),    "📊  Abilities & Saves")
-        self._tabs.addTab(self._build_tab_skills(),       "🎲  Skills & Proficiencies")
-        self._tabs.addTab(self._build_tab_combat(),       "⚔   Combat")
-        self._tabs.addTab(self._build_tab_gear(),         "🎒  Gear & Items")
-        self._tabs.addTab(self._build_tab_spells(),       "✨  Spells")
+        # "&&" is a literal ampersand -- a single "&" in tab text is a
+        # keyboard-mnemonic marker and would vanish.
+        def _add_tab(page, label, icon):
+            self._tabs.addTab(page, label)
+            _icons.set_tab_icon(self._tabs, page, icon)
+            return page
+        _add_tab(self._build_tab_abilities(),    "Abilities && Saves",      "abilities")
+        _add_tab(self._build_tab_skills(),       "Skills && Proficiencies", "skills")
+        _add_tab(self._build_tab_combat(),       "Combat",                  "combat")
+        _add_tab(self._build_tab_gear(),         "Gear && Items",           "gear")
+        _add_tab(self._build_tab_spells(),       "Spells",                  "spells")
         if self._has_infuse_item_access():
-            self._tabs.addTab(self._build_tab_infusions(), "\U0001f527  Infusions")
-        self._tabs.addTab(self._build_tab_choices(),      "⚙   Choices")
-        self._tabs.addTab(self._build_tab_features(),     "📖  Features")
-        self._tabs.addTab(self._build_tab_traits_notes(), "📜  Traits & Notes")
+            _add_tab(self._build_tab_infusions(), "Infusions",              "infusions")
+        self._choices_tab_page = _add_tab(self._build_tab_choices(), "Choices", "choices")
+        _add_tab(self._build_tab_features(),     "Features",                "features")
+        _add_tab(self._build_tab_traits_notes(), "Traits && Notes",         "notes")
         root.addWidget(self._tabs, 1)
+        self._install_choices_pulse()
 
     def _show_breakdown_popup(self, title: str, parts, total_str: str, global_pos):
         """Small dismissible popup listing each contribution to a stat,
@@ -1178,7 +1201,7 @@ class BaseSheetMixin:
                 lst = self.char.get(field, [])
                 if swap_old in lst:
                     lst.remove(swap_old)
-            self._toast(f"📖 Swapped {swap_old} for {swap_new}")
+            self._toast(f"Swapped {swap_old} for {swap_new}")
 
         if eldritch_versatility:
             kind = eldritch_versatility["kind"]
@@ -1187,7 +1210,7 @@ class BaseSheetMixin:
                 known = self.char.setdefault("spells_known", [])
                 if old in known: known.remove(old)
                 if new not in known: known.append(new)
-                self._toast(f"📖 Eldritch Versatility: swapped cantrip {old} for {new}")
+                self._toast(f"Eldritch Versatility: swapped cantrip {old} for {new}")
             elif kind == "pact_boon":
                 self.char.setdefault("_choices", {})["warlock_pact_boon"] = [new]
                 # Cascading Eldritch Invocation re-check, per the actual
@@ -1209,14 +1232,14 @@ class BaseSheetMixin:
                         kept.append(inv)
                 self.char["eldritch_invocations"] = kept
                 if removed:
-                    self._toast(f"🔮 Pact Boon changed to {new.split(' – ')[0] if ' – ' in new else new.split('(')[0].strip()} "
+                    self._toast(f"Pact Boon changed to {new.split(' – ')[0] if ' – ' in new else new.split('(')[0].strip()} "
                                 f"— {len(removed)} invocation(s) no longer eligible, re-choose them in the Choices tab")
                 else:
-                    self._toast(f"🔮 Pact Boon changed to {new.split('(')[0].strip()}")
+                    self._toast(f"Pact Boon changed to {new.split('(')[0].strip()}")
             elif kind == "arcanum":
                 spell_lvl, old_name = old
                 self.char.setdefault("_choices", {})[f"mystic_arcanum_{spell_lvl}"] = [new]
-                self._toast(f"📖 Eldritch Versatility: swapped Mystic Arcanum {old_name} for {new}")
+                self._toast(f"Eldritch Versatility: swapped Mystic Arcanum {old_name} for {new}")
 
         mv_kind, mv_old, mv_new = dlg.get_martial_versatility()
         if mv_kind and mv_old and mv_new:
@@ -1225,14 +1248,14 @@ class BaseSheetMixin:
                 if mv_old in styles:
                     styles.remove(mv_old)
                 styles.append(mv_new)
-                self._toast(f"⚔ Martial Versatility: swapped {mv_old.split(' (')[0].strip()} "
+                self._toast(f"Martial Versatility: swapped {mv_old.split(' (')[0].strip()} "
                             f"for {mv_new.split(' (')[0].strip()}")
             elif mv_kind == "maneuver":
                 maneuvers = self.char.setdefault("battle_master_maneuvers", [])
                 if mv_old in maneuvers:
                     maneuvers.remove(mv_old)
                 maneuvers.append(mv_new)
-                self._toast(f"⚔ Martial Versatility: swapped maneuver {mv_old.split(' – ')[0].strip()} "
+                self._toast(f"Martial Versatility: swapped maneuver {mv_old.split(' – ')[0].strip()} "
                             f"for {mv_new.split(' – ')[0].strip()}")
 
         cv_old, cv_new = dlg.get_cantrip_versatility()
@@ -1240,7 +1263,7 @@ class BaseSheetMixin:
             known = self.char.setdefault("spells_known", [])
             if cv_old in known: known.remove(cv_old)
             if cv_new not in known: known.append(cv_new)
-            self._toast(f"📖 Cantrip Versatility: swapped {cv_old} for {cv_new}")
+            self._toast(f"Cantrip Versatility: swapped {cv_old} for {cv_new}")
 
         bv_kind, bv_old, bv_new = dlg.get_bardic_versatility()
         if bv_kind and bv_old and bv_new:
@@ -1248,12 +1271,12 @@ class BaseSheetMixin:
                 skills = self.char.setdefault("skills", {})
                 skills[bv_old] = 2
                 skills[bv_new] = 3
-                self._toast(f"🎵 Bardic Versatility: moved Expertise from {bv_old} to {bv_new}")
+                self._toast(f"Bardic Versatility: moved Expertise from {bv_old} to {bv_new}")
             elif bv_kind == "cantrip":
                 known = self.char.setdefault("spells_known", [])
                 if bv_old in known: known.remove(bv_old)
                 if bv_new not in known: known.append(bv_new)
-                self._toast(f"🎵 Bardic Versatility: swapped {bv_old} for {bv_new}")
+                self._toast(f"Bardic Versatility: swapped {bv_old} for {bv_new}")
 
         sv_kind, sv_old, sv_new = dlg.get_sorcerous_versatility()
         if sv_kind and sv_old and sv_new:
@@ -1261,13 +1284,13 @@ class BaseSheetMixin:
                 mm = self.char.setdefault("_choices", {}).setdefault("sorcerer_metamagic", [])
                 if sv_old in mm: mm.remove(sv_old)
                 mm.append(sv_new)
-                self._toast(f"✨ Sorcerous Versatility: swapped metamagic {sv_old.split(' – ')[0].strip()} "
+                self._toast(f"Sorcerous Versatility: swapped metamagic {sv_old.split(' – ')[0].strip()} "
                             f"for {sv_new.split(' – ')[0].strip()}")
             elif sv_kind == "cantrip":
                 known = self.char.setdefault("spells_known", [])
                 if sv_old in known: known.remove(sv_old)
                 if sv_new not in known: known.append(sv_new)
-                self._toast(f"✨ Sorcerous Versatility: swapped {sv_old} for {sv_new}")
+                self._toast(f"Sorcerous Versatility: swapped {sv_old} for {sv_new}")
 
         self.char["_last_leveled_class"] = cls_name
         self.ctrl.refresh()
@@ -1534,12 +1557,14 @@ class BaseSheetMixin:
         # initiative number sharing the same label. net already handles
         # the RAW cancellation (advantage + disadvantage from different
         # sources -> neither applies), so only one badge (or none) shows.
-        badge = ""
-        if init_adv["net"] == "advantage":
-            badge = f' <span style="color:{GREEN2};">Adv</span>'
-        elif init_adv["net"] == "disadvantage":
-            badge = f' <span style="color:{CRIM2};">Disadv</span>'
-        self._sb_init._val.setText(sign(ini) + badge)
+        self._sb_init._val.setText(sign(ini))
+        if init_adv["net"] in ("advantage", "disadvantage"):
+            adv = init_adv["net"] == "advantage"
+            self._sb_init_adv.setPixmap(_icons.pixmap("adv" if adv else "disadv", _icons.scaled(18),
+                                                      "GREEN2" if adv else "CRIM2"))
+            self._sb_init_adv.show()
+        else:
+            self._sb_init_adv.hide()
         if init_adv["net"] == "advantage":
             notes = "\n".join(f"• {s['source']}: {s['note']}" for s in init_adv["sources"])
             self._sb_init.setToolTip(f"Click to roll initiative (d20 + {sign(ini)})\n\nAdvantage:\n{notes}")
@@ -1580,9 +1605,9 @@ class BaseSheetMixin:
         self._refresh_identity_buttons()
         self._sb_prof._val.setText(sign(pb))
         _spd_parts = [f"{spd} ft"]
-        if fly:  _spd_parts.append(f"✈ {fly}")
-        if swim: _spd_parts.append(f"🌊 {swim}")
-        if clmb: _spd_parts.append(f"↑ {clmb}")
+        if fly:  _spd_parts.append(f"fly {fly}")
+        if swim: _spd_parts.append(f"swim {swim}")
+        if clmb: _spd_parts.append(f"climb {clmb}")
         self._sb_spd._val.setText(" / ".join(_spd_parts))
         cls_parts = []
         for c in self.char.get("classes",[]):

@@ -53,6 +53,7 @@ from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON
 from dnd_app.data.phbCommon.conditions import CONDITIONS
 from .base import *
 from .base import _lbl, _sep, _card
+from dnd_app.ui_desktop import icons as _icons
 
 
 class SkillsMixin:
@@ -131,11 +132,12 @@ class SkillsMixin:
             row_f.mousePressEvent = (lambda e, sk=skill_name, rf=row_f:
                 self._show_skill_prof_menu(sk, e.globalPos()) if e.button() == Qt.RightButton else None)
             row_f.setCursor(Qt.PointingHandCursor)
-            row_f.setToolTip(f"Right-click to set proficiency level  •  🎲 button rolls the check")
+            row_f.setToolTip(f"Right-click to set proficiency level  •  the dice button rolls the check")
 
-            # 🎲 roll button — rolls d20 + skill bonus without touching proficiency
-            roll_btn = _btn("🎲", TEAL, variant="ghost", width=26, height=24, radius=5,
+            # Dice roll button — rolls d20 + skill bonus without touching proficiency
+            roll_btn = _btn("", TEAL, variant="ghost", width=26, height=24, radius=5,
                              font_size=FS_SMALL, tooltip=f"Roll {skill_name} ({sign(bonus)})")
+            _icons.set_button_icon(roll_btn, "dice", 14)
             roll_btn.clicked.connect(
                 lambda checked=False, sk=skill_name, b=bonus:
                     self._quick_roll_toast(f"{sk} check", b))

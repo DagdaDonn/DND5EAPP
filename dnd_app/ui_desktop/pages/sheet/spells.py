@@ -3,7 +3,7 @@ import re
 import random
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon
 from dnd_app.ui_desktop.style.theme import *
 from ...shared import *
 # `import *` silently skips underscore-prefixed names when a module has no
@@ -54,6 +54,7 @@ from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON
 from dnd_app.data.phbCommon.conditions import CONDITIONS
 from .base import *
 from .base import _lbl, _sep, _card
+from dnd_app.ui_desktop import icons as _icons
 
 
 class SlotBar(QWidget):
@@ -303,7 +304,7 @@ class SpellsMixin:
         self._metamagic_box = QVBoxLayout(); self._metamagic_box.setSpacing(4)
         mmcl.addLayout(self._metamagic_box)
         mm_btn_row = QHBoxLayout()
-        self._mm_apply_btn = QPushButton("Spend SP & Mark Active")
+        self._mm_apply_btn = QPushButton("Spend SP && Mark Active")
         self._mm_apply_btn.setStyleSheet(
             _btn("", PURPLE, variant="danger", radius=5, border_width=1,
                  text_color=PURP2, hover_text="white", font_size=FS_SMALL,
@@ -349,7 +350,7 @@ class SpellsMixin:
         # Soul of Artifice (Artificer, 20th level): the "end an infusion
         # to drop to 1 HP instead of 0" half, alongside the +1-save
         # bonus. Buildable since active_infusions tracking exists.
-        self._soul_artifice_btn = QPushButton("💫 Soul of Artifice: End an Infusion (drop to 1 HP)")
+        self._soul_artifice_btn = QPushButton("Soul of Artifice: End an Infusion (drop to 1 HP)")
         self._soul_artifice_btn.setStyleSheet(
             _btn("", PURPLE, variant="danger", border_width=1, text_color=PURP2,
                  hover_text="white", font_size=FS_SMALL, padding="6px").styleSheet())
@@ -379,7 +380,8 @@ class SpellsMixin:
                                GOLD, FS_SMALL, bold=True))
         # Filter box: live-search your known/prepared spells by name
         self._my_sp_filter = QLineEdit()
-        self._my_sp_filter.setPlaceholderText("🔍 Filter my spells…")
+        self._my_sp_filter.setPlaceholderText("Filter my spells…")
+        _icons.set_action_icon(self._my_sp_filter.addAction(QIcon(), QLineEdit.LeadingPosition), "search")
         self._my_sp_filter.setClearButtonEnabled(True)
         self._my_sp_filter.setStyleSheet(
             f"QLineEdit{{background:{SURF2};border:1px solid {BORDER2};border-radius:7px;"
@@ -413,7 +415,8 @@ class SpellsMixin:
         self._my_spells_scroll.setWidget(self._my_spells_inner)
         self._spell_rows = []; self._level_headers = {}
         mst_lay.addWidget(self._my_spells_scroll, 1)
-        right.addTab(my_spells_w, "📖  My Spells")
+        right.addTab(my_spells_w, "My Spells")
+        _icons.set_tab_icon(right, my_spells_w, "features", 15)
 
         # ── Spell Browser tab ─────────────────────────────────────────────────
         browser_w = QWidget(); brl = QVBoxLayout(browser_w); brl.setContentsMargins(8,8,8,8); brl.setSpacing(6)
@@ -429,7 +432,7 @@ class SpellsMixin:
         bt_row.addWidget(self._sp_search, 2); bt_row.addWidget(self._sp_cls_f); bt_row.addWidget(self._sp_lvl_f)
         brcl.addLayout(bt_row)
         # ── Homebrew toggle: OFF = class-list only + known-spell limits enforced
-        self._sp_homebrew = QCheckBox("🔓 Homebrew mode — learn any spell, ignore spell limits")
+        self._sp_homebrew = QCheckBox("Homebrew mode — learn any spell, ignore spell limits")
         self._sp_homebrew.setAccessibleName("Homebrew mode: allow learning any spell and ignore spell limits")
         self._sp_homebrew.setToolTip(
             "Unchecked (default): the browser shows only spells on your classes' lists,\n"
@@ -443,8 +446,8 @@ class SpellsMixin:
             f"QCheckBox:focus{{border:2px solid {TEAL2};border-radius:4px;}}")
         self._sp_homebrew.stateChanged.connect(lambda s: (
             self._filter_spell_browser(),
-            self._toast("🔓 Homebrew learning ON — any spell, no limits" if s
-                        else "🔒 Class lists & spell limits enforced")))
+            self._toast("Homebrew learning ON — any spell, no limits" if s
+                        else "Class lists & spell limits enforced")))
         brcl.addWidget(self._sp_homebrew)
         self._sp_browser = QListWidget()  # no height limit — tab gives full space
         self._sp_browser.setStyleSheet(f"QListWidget{{background:{BG};border:1px solid {BORDER};}}QListWidget::item{{padding:6px 10px;border-bottom:1px solid {BORDER};font-size:{FS_BODY}px;}}QListWidget::item:selected{{background:{INDIGO};color:white;}}")
@@ -454,7 +457,8 @@ class SpellsMixin:
         # Right-click context menu on browser
         self._sp_browser.setContextMenuPolicy(Qt.CustomContextMenu)
         self._sp_browser.customContextMenuRequested.connect(self._on_spell_browser_ctx)
-        right.addTab(browser_w, "🔍  Spell Browser")
+        right.addTab(browser_w, "Spell Browser")
+        _icons.set_tab_icon(right, browser_w, "search", 15)
 
         self._sp_search.textChanged.connect(self._filter_spell_browser)
         self._sp_cls_f.currentTextChanged.connect(self._filter_spell_browser)
@@ -950,7 +954,7 @@ class SpellsMixin:
                 total_cost += cost
         available = sp_res.get("current", 0)
         if total_cost > available:
-            self._toast(f"🔒 Not enough Sorcery Points ({available} available, "
+            self._toast(f"Not enough Sorcery Points ({available} available, "
                         f"{total_cost} needed for fixed-cost options)")
             return
         sp_res["current"] = available - total_cost
@@ -1000,7 +1004,7 @@ class SpellsMixin:
         if not spell: return
         from PySide6.QtWidgets import QMenu, QDialog, QVBoxLayout, QScrollArea, QWidget, QLabel, QDialogButtonBox
         menu = QMenu(self)
-        detail_act = menu.addAction(f"📖  Details: {spell_name}")
+        detail_act = menu.addAction(_icons.icon("features"), f"Details: {spell_name}")
         add_act    = menu.addAction(f"+ Add to My Spells")
         action = menu.exec(self._sp_browser.viewport().mapToGlobal(pos))
         if action == detail_act:
@@ -1113,7 +1117,7 @@ class SpellsMixin:
                 from dnd_app.data.phbCommon.spells import get_mark_expanded_spells
                 mark_spells = get_mark_expanded_spells(self.char)
                 if my_classes and name not in mark_spells and not (set(sp.get("classes",[])) & my_classes):
-                    self._toast(f"🔒 {name} isn't on your class spell lists "
+                    self._toast(f"{name} isn't on your class spell lists "
                                 f"— enable Homebrew mode to learn it")
                     continue
                 # Gate 2: spell level can't exceed what you can actually
@@ -1125,7 +1129,7 @@ class SpellsMixin:
                 if sp_level > 0:
                     max_lvl = self._max_castable_spell_level()
                     if sp_level > max_lvl:
-                        self._toast(f"🔒 {name} is a level {sp_level} spell — you can only "
+                        self._toast(f"{name} is a level {sp_level} spell — you can only "
                                     f"cast up to level {max_lvl} right now "
                                     f"— enable Homebrew mode to exceed it")
                         continue
@@ -1158,7 +1162,7 @@ class SpellsMixin:
                         cap_shown = all_classes[best_cn][0 if is_cantrip else 1]
                         used_shown = cap_shown - _room(best_cn) if cap_shown is not None else "?"
                         kind = "Cantrip" if is_cantrip else "Spells-known"
-                        self._toast(f"🔒 {kind} limit reached for {_real_name(best_cn)} "
+                        self._toast(f"{kind} limit reached for {_real_name(best_cn)} "
                                     f"({used_shown}/{cap_shown}) — enable Homebrew mode to exceed it")
                         continue
             if name not in self.char.get("spells_known", []):
@@ -1307,7 +1311,7 @@ class SpellsMixin:
                 cap = caps[target]
                 if current >= cap:
                     row.set_prepared(False)
-                    self._toast(f"🔒 {target}'s prepared spell limit reached ({current}/{cap}) "
+                    self._toast(f"{target}'s prepared spell limit reached ({current}/{cap}) "
                                 f"— unprepare another {target} spell first")
                     return
         prepared.append(name)
@@ -1427,26 +1431,26 @@ class SpellsMixin:
         10 minutes longer than the spell's normal casting time (PHB
         p.201-202)."""
         if self.char.get("_wildshape_active") and not self._has_beast_spells():
-            self._toast(f"\U0001f43e Can't cast {spell['name']} while Wild Shaped — "
+            self._toast(f"Can't cast {spell['name']} while Wild Shaped — "
                         f"revert to your normal form first")
             return
         block_reason = spell_component_block_reason(self.char, spell)
         if block_reason:
-            self._toast(f"🔇 Can't cast {spell['name']} — {block_reason}")
+            self._toast(f"Can't cast {spell['name']} — {block_reason}")
             return
         base_time = spell.get("casting_time", spell.get("cast_time", "1 action"))
-        self._toast(f"📜 Cast {spell['name']} as a ritual — no spell slot used, "
+        self._toast(f"Cast {spell['name']} as a ritual — no spell slot used, "
                     f"but casting time is {base_time} + 10 minutes.")
         self._mark_dirty()
 
     def _cast_spell(self, spell):
         if self.char.get("_wildshape_active") and not self._has_beast_spells():
-            self._toast(f"\U0001f43e Can't cast {spell['name']} while Wild Shaped — "
+            self._toast(f"Can't cast {spell['name']} while Wild Shaped — "
                         f"revert to your normal form first")
             return
         block_reason = spell_component_block_reason(self.char, spell)
         if block_reason:
-            self._toast(f"🔇 Can't cast {spell['name']} — {block_reason}")
+            self._toast(f"Can't cast {spell['name']} — {block_reason}")
             return
         lvl = spell["level"]
         is_cantrip = (lvl == 0)
@@ -1459,7 +1463,7 @@ class SpellsMixin:
         # Ward) can still be blocked if a leveled spell was already cast
         # via the regular Action that turn.
         if bucket in ("Action", "Bonus Action") and not self._check_bonus_action_spell_rule(is_cantrip, bucket):
-            self._toast(f"✖ Can't cast {spell['name']} via {bucket} — casting a spell with a "
+            self._toast(f"Can't cast {spell['name']} via {bucket} — casting a spell with a "
                         f"bonus action means the only other spell you can cast this turn is a "
                         f"cantrip")
             return
@@ -1469,7 +1473,7 @@ class SpellsMixin:
             # 1-action cast time), so this can't return early before
             # that's consumed.
             self._mark_spell_cast_time(spell)
-            self._toast(f"✨ Cast {spell['name']} (cantrip — at will)")
+            self._toast(f"Cast {spell['name']} (cantrip — at will)")
             return
         for l in range(lvl, 10):
             bar = self._slot_bars.get(l)
@@ -1483,7 +1487,7 @@ class SpellsMixin:
                     self._refresh_concentration()
                 self._apply_spell_active_effect(spell)
                 self._mark_spell_cast_time(spell)
-                self._toast(f"✨ Cast {spell['name']} — slot expended")
+                self._toast(f"Cast {spell['name']} — slot expended")
                 return
         if self._pact_bar._max > 0 and self._pact_bar.get_used() < self._pact_bar._max:
             self._pact_bar.set_used(self._pact_bar.get_used() + 1)
@@ -1498,10 +1502,10 @@ class SpellsMixin:
             # A little flavor for Warlocks specifically -- Pact Magic is
             # power borrowed from your patron, unlike an ordinary prepared
             # or known spell slot, so spending one gets its own tiny nod.
-            self._toast(f"✨ Cast {spell['name']} — pact slot expended\nYour patron approves.")
+            self._toast(f"Cast {spell['name']} — pact slot expended\nYour patron approves.")
             self._mark_dirty()
             return
-        self._toast(f"🔒 Can't cast {spell['name']} — no level-{lvl}+ spell slots available")
+        self._toast(f"Can't cast {spell['name']} — no level-{lvl}+ spell slots available")
 
     def _check_bonus_action_spell_rule(self, is_cantrip: bool, bucket: str) -> bool:
         """The real rule: casting a spell with a bonus action means the
@@ -1597,7 +1601,7 @@ class SpellsMixin:
                 self.ctrl.refresh()
                 self._refresh_effects_list()
                 self._apply_turn_state()
-                self._toast(f"☄ {name} added to Active Effects")
+                self._toast(f"{name} added to Active Effects")
 
     def _drop_concentration(self):
         drop_concentration(self.char)
@@ -1645,7 +1649,7 @@ class SpellsMixin:
             self._conc_lbl.setStyleSheet(f"color:{TEXT2};font-size:{FS_BODY}px;background:transparent;")
         if hasattr(self, "_combat_conc_lbl"):
             if spell:
-                self._combat_conc_lbl.setText(f"🎯 Concentrating: {spell}")
+                self._combat_conc_lbl.setText(f"Concentrating: {spell}")
                 self._combat_conc_lbl.setToolTip(f"{spell} — manage/drop concentration from the Spells tab.")
                 self._combat_conc_lbl.setVisible(True)
             else:

@@ -53,6 +53,7 @@ from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON
 from dnd_app.data.phbCommon.conditions import CONDITIONS
 from .base import *
 from .base import _lbl, _sep, _card
+from dnd_app.ui_desktop import icons as _icons
 
 
 class FeaturesMixin:
@@ -591,13 +592,14 @@ class FeaturesMixin:
             fb_list.addItem(item)
 
         # DM Rewards ("Character Secrets" / narrative bonus features) — same
-        # list, distinguished by a 🔮 marker and the second data role, since
+        # list, distinguished by a crystal-ball icon and the second data role, since
         # these are a genuinely different kind of content (mostly narrative
         # hooks with occasional mechanical traits) than standard feats.
         from dnd_app.data.phbCommon.dm_rewards import ALL_DM_REWARDS
         for rw in ALL_DM_REWARDS:
             already_rw = rw["name"] in self.char.get("dm_rewards", [])
-            item = QListWidgetItem(("✓ " if already_rw else "") + "🔮 " + rw["name"])
+            item = QListWidgetItem(("✓ " if already_rw else "") + rw["name"])
+            item.setIcon(_icons.icon("orb"))
             item.setData(Qt.UserRole, rw["name"])
             item.setData(Qt.UserRole + 1, "dm_reward")
             item.setData(Qt.UserRole + 2, rw.get("category", ""))
@@ -916,7 +918,7 @@ class FeaturesMixin:
             def _show_detail_menu(ev, _item=item, _tip=(tip or item), _raw=raw_no_paren, _row=row):
                 from PySide6.QtWidgets import QMenu
                 menu = QMenu(_row)
-                act = menu.addAction(f"📖  Show Details: {_raw[:40]}")
+                act = menu.addAction(_icons.icon("features"), f"Show Details: {_raw[:40]}")
                 act.triggered.connect(lambda: QMessageBox.information(
                     _row, _raw,
                     f"<b>{_raw}</b><br><br>{_tip}",
@@ -936,12 +938,12 @@ class FeaturesMixin:
         if is_barb_wm:
             table_data = [(i+1, i+1, eff) for i, (_, eff) in enumerate(WILD_MAGIC_BARBARIAN_TABLE)]
             title = "Wild Magic Surge Table  (Barbarian — roll d8 when you enter your rage)"
-            die_label = "🎲  Roll Wild Magic Surge (d8)"
+            die_label = "Roll Wild Magic Surge (d8)"
             die_max = 8
         else:
             table_data = WILD_MAGIC_SURGE_TABLE
             title = "Wild Magic Surge Table  (Sorcerer — roll d100 after casting a spell)"
-            die_label = "🎲  Roll Wild Magic Surge (d100)"
+            die_label = "Roll Wild Magic Surge (d100)"
             die_max = 100
 
         grp = QGroupBox(title)

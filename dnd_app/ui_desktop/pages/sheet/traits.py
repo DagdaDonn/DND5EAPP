@@ -197,7 +197,7 @@ class TraitsNotesMixin:
 
     def _add_notes_page(self) -> None:
         if self._notes_tabs.count() - 1 >= self._MAX_NOTES_PAGES:
-            self._toast(f"⚠️ Notes pages are capped at {self._MAX_NOTES_PAGES}")
+            self._toast(f"Notes pages are capped at {self._MAX_NOTES_PAGES}")
             return
         title, ok = QInputDialog.getText(self, "New Notes Page", "Page name:")
         title = (title or "").strip()
@@ -212,10 +212,10 @@ class TraitsNotesMixin:
         if ed is None:
             return
         if ed is self._backstory_edit:
-            self._toast("📖 Backstory can't be removed")
+            self._toast("Backstory can't be removed")
             return
         if self._notes_tabs.count() - 1 <= 1:
-            self._toast("⚠️ Keep at least one notes page")
+            self._toast("Keep at least one notes page")
             return
         title = getattr(ed, "_page_title", "this page")
         reply = QMessageBox.question(

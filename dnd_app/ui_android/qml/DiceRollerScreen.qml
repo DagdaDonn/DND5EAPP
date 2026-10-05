@@ -38,7 +38,7 @@ Flickable {
                 width: parent.width - 20
                 Label {
                     visible: drBridge.isNat20 || drBridge.isNat1
-                    text: drBridge.isNat20 ? "✨ NATURAL 20" : "\U0001f480 NATURAL 1"
+                    text: drBridge.isNat20 ? "NATURAL 20" : "NATURAL 1"
                     color: "white"
                     font.pixelSize: Theme.fsSmall
                     font.bold: true

@@ -521,6 +521,11 @@ def apply_theme(name: str):
     # happens, to stay current for every caller.
     import dnd_app.ui_desktop.shared as _shared
     sync_globals(_shared.__dict__)
+    # Line icons are drawn in the theme accent (IND2) -- repaint every live
+    # one so screens that aren't rebuilt on a theme switch (Start Menu,
+    # menu bar, wizard) pick up the new colour too.
+    import dnd_app.ui_desktop.icons as _icons
+    _icons.refresh_all()
     return build_qss(t)
 
 

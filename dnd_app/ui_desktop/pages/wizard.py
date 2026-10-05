@@ -29,6 +29,7 @@ from dnd_app.data.phbCommon.backgrounds import ALL_BACKGROUNDS, BACKGROUND_NAMES
 from dnd_app.data.phbCommon.feats import ALL_FEATS
 from dnd_app.data.phbCommon.spells import ALL_SPELLS, spells_for_class, get_spell
 from dnd_app.data.phbCommon.items import ARMOR, ALL_WEAPONS, ADVENTURING_GEAR, SIMPLE_MELEE, SIMPLE_RANGED, MARTIAL_MELEE, MARTIAL_RANGED
+from dnd_app.ui_desktop import icons as _icons
 
 ABILITIES = ["STR","DEX","CON","INT","WIS","CHA"]
 AB_FULL = {"STR":"Strength","DEX":"Dexterity","CON":"Constitution",
@@ -64,7 +65,7 @@ class CharacterWizard(QWidget):
         header.setStyleSheet(f"QFrame{{background:{SURF};border-bottom:2px solid {BORDER};}}")
         header.setFixedHeight(64)
         hl = QHBoxLayout(header); hl.setContentsMargins(24,0,24,0)
-        hl.addWidget(_lbl("⚔", GOLD2, 28, bold=True, wrap=False))
+        hl.addWidget(_icons.icon_label("combat", 30))
         hl.addWidget(_lbl("New Character", TEXT, FS_TITLE, bold=True, wrap=False))
         hl.addStretch()
         # Step indicator pills
@@ -1351,7 +1352,7 @@ class Step4Spells(QWidget):
                 continue
             self._add_spell_row(sp)
         if blocked:
-            self._hint.setText(f"⚠ Not added (above your current max castable level {max_lvl}): "
+            self._hint.setText(f"Not added (above your current max castable level {max_lvl}): "
                                 f"{', '.join(blocked)}")
 
     def _add_spell_row(self, spell, prepared=False):

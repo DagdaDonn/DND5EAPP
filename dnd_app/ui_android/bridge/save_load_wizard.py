@@ -226,7 +226,7 @@ class SaveLoadBridge(QObject):
         self._clean_snapshot = self._serialize()
         self.characterSaved.emit()
         self.savedListChanged.emit()
-        self.toastRequested.emit(f"\U0001f4be Saved to {os.path.basename(filepath)}")
+        self.toastRequested.emit(f"Saved to {os.path.basename(filepath)}")
         return True
 
     # ── Load ───────────────────────────────────────────────────────────
@@ -238,7 +238,7 @@ class SaveLoadBridge(QObject):
             self._set_error(f"Couldn't load: {e}")
             return False
         self._apply_loaded(data, loaded_path=filepath)
-        self.toastRequested.emit(f"\U0001f4c2 Loaded {os.path.basename(filepath)}")
+        self.toastRequested.emit(f"Loaded {os.path.basename(filepath)}")
         return True
 
     @Slot(str, result=bool)
@@ -271,7 +271,7 @@ class SaveLoadBridge(QObject):
             self._set_error(f"Couldn't load: {e}")
             return False
         self._apply_loaded(data)
-        self.toastRequested.emit("\U0001f4c2 Character loaded")
+        self.toastRequested.emit("Character loaded")
         return True
 
     # ── Start Menu: begin a brand-new character ─────────────────────
@@ -331,7 +331,7 @@ class SaveLoadBridge(QObject):
             self._set_error(f"Couldn't export text: {e}")
             return False
         self._set_error("")
-        self.toastRequested.emit(f"\U0001f4c4 Exported {os.path.basename(filepath)}")
+        self.toastRequested.emit(f"Exported {os.path.basename(filepath)}")
         return True
 
     # ── PDF export ───────────────────────────────────────────────────
@@ -352,5 +352,5 @@ class SaveLoadBridge(QObject):
             self._set_error(f"Couldn't export PDF: {e}")
             return False
         self._set_error("")
-        self.toastRequested.emit(f"\U0001f4c4 Exported {os.path.basename(filepath)}")
+        self.toastRequested.emit(f"Exported {os.path.basename(filepath)}")
         return True

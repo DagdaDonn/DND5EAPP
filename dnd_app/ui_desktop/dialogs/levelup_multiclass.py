@@ -332,7 +332,7 @@ class LevelUpMulticlassDialog(QDialog):
         due = xp_progress(self.char)["levels_due"]
         if due > 1:
             lines.append("")
-            lines.append(f"🌟 You have enough XP for {due} levels right now — "
+            lines.append(f"You have enough XP for {due} levels right now — "
                           f"this uses 1, leaving {due - 1} more to take right after.")
 
     def _on_pick(self, cls_name):

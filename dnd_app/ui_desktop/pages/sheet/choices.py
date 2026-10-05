@@ -55,6 +55,7 @@ from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON
 from dnd_app.data.phbCommon.conditions import CONDITIONS
 from .base import *
 from .base import _lbl, _sep, _card
+from dnd_app.ui_desktop import icons as _icons
 
 
 class ChoicesMixin:
@@ -75,7 +76,7 @@ class ChoicesMixin:
         if prog["eligible"]:
             due = prog["levels_due"]
             suffix = "ready to level up!" if due <= 1 else f"ready to level up ×{due}!"
-            self._toast(f"🌟 +{amount:,} XP — {suffix}")
+            self._toast(f"+{amount:,} XP — {suffix}")
         else:
             self._toast(f"+{amount:,} XP")
 
@@ -292,16 +293,18 @@ class ChoicesMixin:
 
         # Title row
         title_row = QHBoxLayout()
-        title_row.addWidget(_lbl("⚔  CLASS & LEVEL", INDIGO, FS_SMALL, bold=True))
+        title_row.addWidget(_icons.icon_header("combat", _lbl("CLASS & LEVEL", INDIGO, FS_SMALL, bold=True)))
         title_row.addStretch()
         # Class action buttons
-        for label, fn, color, tip in [
-            ("⬆ Level Up / Multiclass", self._open_level_up_or_multiclass, GOLD,
-             "Gain a level in an existing class, or add a new one"),
-            ("⬇ Level Down",      self._open_level_down,      CRIMSON,"Remove one level"),
-            ("✕ Remove Class",    self._open_remove_class,    CRIMSON,"Remove an entire class (multiclass only)"),
+        for label, fn, color, tip, icon in [
+            ("Level Up / Multiclass", self._open_level_up_or_multiclass, GOLD,
+             "Gain a level in an existing class, or add a new one", "arrow_up"),
+            ("Level Down",        self._open_level_down,      CRIMSON,"Remove one level", "arrow_down"),
+            ("✕ Remove Class",    self._open_remove_class,    CRIMSON,"Remove an entire class (multiclass only)", None),
         ]:
             b = _btn(label, color, variant="chip", height=28, font_size=FS_TINY, tooltip=tip)
+            if icon:
+                _icons.set_button_icon(b, icon, 13)
             b.clicked.connect(fn)
             title_row.addWidget(b)
         cls_cl.addLayout(title_row)
@@ -321,7 +324,7 @@ class ChoicesMixin:
         xp_cl = QVBoxLayout(self._xp_card); xp_cl.setContentsMargins(12, 8, 12, 8); xp_cl.setSpacing(6)
 
         xp_title_row = QHBoxLayout()
-        xp_title_row.addWidget(_lbl("🌟  EXPERIENCE", GOLD2, FS_SMALL, bold=True))
+        xp_title_row.addWidget(_icons.icon_header("experience", _lbl("EXPERIENCE", GOLD2, FS_SMALL, bold=True)))
         xp_title_row.addStretch()
         self._xp_total_lbl = _lbl("0 XP", GOLD2, FS_SMALL, bold=True)
         xp_title_row.addWidget(self._xp_total_lbl)
@@ -367,7 +370,7 @@ class ChoicesMixin:
         id_card = QFrame()
         id_card.setStyleSheet(f"QFrame{{background:{SURF};border:1px solid {qa(TEAL,0x33)};border-radius:10px;}}")
         id_cl = QVBoxLayout(id_card); id_cl.setContentsMargins(12,8,12,8); id_cl.setSpacing(6)
-        id_cl.addWidget(_lbl("🧬  IDENTITY", TEAL2, FS_SMALL, bold=True))
+        id_cl.addWidget(_icons.icon_header("identity", _lbl("IDENTITY", TEAL2, FS_SMALL, bold=True)))
         id_btn_row = QHBoxLayout(); id_btn_row.setSpacing(8)
         self._identity_btns = {}
         self._identity_btn_labels = {}
@@ -438,6 +441,28 @@ class ChoicesMixin:
         self.ctrl.refresh()
         self._mark_dirty()
 
+    def _install_choices_pulse(self):
+        """Pulsing dot (the theme's own accent color) on the Choices tab while level-up choices are
+        pending -- LevelUpPanel's own "PENDING CHOICES (N remaining)"
+        count -- so they're noticed from any other tab. Paused while the
+        Choices tab itself is showing, since the player is already there."""
+        panel = getattr(self, "_levelup_panel", None)
+        if panel is None:   # LevelUpPanel failed to build; nothing to watch
+            return
+        self._choices_pulse = PulseDot(IND2)
+        idx = self._tabs.indexOf(self._choices_tab_page)
+        self._tabs.tabBar().setTabButton(idx, QTabBar.RightSide, self._choices_pulse)
+        panel.pending_count_changed.connect(lambda _n: self._update_choices_pulse())
+        self._tabs.currentChanged.connect(lambda _i: self._update_choices_pulse())
+        self._update_choices_pulse()
+
+    def _update_choices_pulse(self):
+        n = self._levelup_panel.pending_count
+        idx = self._tabs.indexOf(self._choices_tab_page)
+        self._choices_pulse.set_active(n > 0 and self._tabs.currentIndex() != idx)
+        self._tabs.setTabToolTip(idx,
+                                 f"{n} pending choice{'s' if n != 1 else ''}" if n else "")
+
     # ══ TAB 4: SPELLS ══════════════════════════════════════════════════════════
     def _has_infuse_item_access(self):
         from dnd_app.core.calculator import class_levels
@@ -491,8 +516,8 @@ class ChoicesMixin:
                     self._xp_status_lbl.setText("Max level")
                     self._xp_status_lbl.setStyleSheet(f"color:{TEXT3};font-size:{FS_SMALL}px;font-weight:700;")
                 elif eligible:
-                    self._xp_status_lbl.setText(f"🌟 {ready_phrase} ({xp_line} XP)" if levels_due <= 1
-                                                 else f"🌟 {ready_phrase} ({xp_line})")
+                    self._xp_status_lbl.setText(f"{ready_phrase} ({xp_line} XP)" if levels_due <= 1
+                                                 else f"{ready_phrase} ({xp_line})")
                     self._xp_status_lbl.setStyleSheet(f"color:{GOLD2};font-size:{FS_SMALL}px;font-weight:700;")
                 else:
                     remaining = prog["next"] - prog["xp"]

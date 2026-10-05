@@ -203,7 +203,7 @@ Page {
                                         x: 12; y: 8
                                         width: parent.width - 24
                                         spacing: 10
-                                        Label { text: "🛒"; color: Theme.gold2; font.pixelSize: Theme.fsBody }
+                                        MIcon { name: "wagon"; size: 22 }
                                         ColumnLayout {
                                             spacing: 0
                                             Layout.fillWidth: true

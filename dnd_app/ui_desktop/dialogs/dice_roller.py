@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QFont, QColor
 from dnd_app.ui_desktop.style.theme import *
 from ..shared import h as _h, card as _card
+from dnd_app.ui_desktop import icons as _icons
 
 
 def sign(n): return f"+{n}" if n >= 0 else str(n)
@@ -65,7 +66,7 @@ class DiceRollerPanel(QWidget):
         outer = QVBoxLayout(self); outer.setContentsMargins(12,12,12,12); outer.setSpacing(10)
 
         title_row = QHBoxLayout()
-        title_row.addWidget(lbl("\U0001f3b2  DICE ROLLER", GOLD2, bold=True, size=FS_LABEL))
+        title_row.addWidget(_icons.icon_header("dice", lbl("DICE ROLLER", GOLD2, bold=True, size=FS_LABEL), size=18))
         title_row.addStretch()
         outer.addLayout(title_row)
 
@@ -250,14 +251,14 @@ class DiceRollerPanel(QWidget):
 
         if nat20:
             color, border_color = TEAL2, TEAL2
-            self.crit_badge.setText("✨  NATURAL 20")
+            self.crit_badge.setText("NATURAL 20")
             self.crit_badge.setStyleSheet(
                 f"background:{TEAL};color:white;font-size:{FS_TINY}px;font-weight:700;"
                 f"border-radius:4px;padding:2px 8px;")
             self.crit_badge.show()
         elif nat1:
             color, border_color = CRIM2, CRIM2
-            self.crit_badge.setText("\U0001f480  NATURAL 1")
+            self.crit_badge.setText("NATURAL 1")
             self.crit_badge.setStyleSheet(
                 f"background:{CRIMSON};color:white;font-size:{FS_TINY}px;font-weight:700;"
                 f"border-radius:4px;padding:2px 8px;")

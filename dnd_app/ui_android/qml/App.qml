@@ -113,6 +113,13 @@ ApplicationWindow {
     // state, so it's correct immediately after a Start Menu "Load" too.
     readonly property bool sheetMode: sheetBridge !== null && sheetBridge.hasCharacter
 
+    // True while the character has level-up choices still to make.
+    // Drives the pulsing dot on the header's menu button, the drawer's
+    // Choices row and SheetChoicesScreen's Choices tab, so the player is
+    // led from wherever they are to the choices waiting for them.
+    // Computed once here rather than in each of those bindings.
+    readonly property bool choicesPending: sheetMode && sheetBridge.hasPendingChoices
+
     // Each step is greyed out in the drawer until the previous one is
     // actually confirmed -- the player can still get there via each
     // screen's own bottom "Next" button (see advanceToAbilities() etc.
@@ -150,7 +157,8 @@ ApplicationWindow {
             ? sheetNavItemsBase.concat([{ label: "Infusions", screen: sheetInfusionsComp, enabled: true }])
             : sheetNavItemsBase
         ).concat([
-            { label: "Choices", screen: sheetChoicesComp, enabled: true },
+            { label: "Choices", screen: sheetChoicesComp, enabled: true,
+              pulse: window.choicesPending },
             { label: "Notes", screen: sheetNotesComp, enabled: true },
         ])
     readonly property var navItems: sheetMode ? sheetNavItems : wizardNavItems
@@ -268,10 +276,10 @@ ApplicationWindow {
     // rather than a StackView navigation that would replace it. Laid
     // out as a 2x2 tile grid in the drawer's own bottom section.
     readonly property var utilityNavItems: [
-        { label: "Dice Roller", icon: "🎲", enabled: true, onOpen: function() { diceRollerDialog.open() } },
-        { label: "Settings", icon: "⚙", enabled: true, onOpen: function() { settingsDialog.open() } },
-        { label: "Save / Load", icon: "💾", enabled: true, onOpen: function() { saveLoadDialog.open(); window.saveLoadBridge.refresh() } },
-        { label: "Credits", icon: "©", enabled: true, onOpen: function() { creditsDialog.open() } },
+        { label: "Dice Roller", icon: "dice", enabled: true, onOpen: function() { diceRollerDialog.open() } },
+        { label: "Settings", icon: "settings", enabled: true, onOpen: function() { settingsDialog.open() } },
+        { label: "Save / Load", icon: "save", enabled: true, onOpen: function() { saveLoadDialog.open(); window.saveLoadBridge.refresh() } },
+        { label: "Credits", icon: "credits", enabled: true, onOpen: function() { creditsDialog.open() } },
     ]
 
     Popup {
@@ -376,6 +384,21 @@ ApplicationWindow {
             width: 44
             height: 44
             onClicked: drawer.open()
+
+            // Pending level-up choices: a pulsing dot on the menu button,
+            // since the drawer's own pulsing Choices row is hidden until
+            // it's opened. Not shown on the Choices screen itself --
+            // the player is already there.
+            MPulseDot {
+                objectName: "hamburgerPulse"
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.rightMargin: -2
+                anchors.topMargin: 2
+                diameter: 8
+                running: window.choicesPending
+                         && !(stackView.currentItem && stackView.currentItem.isChoicesScreen === true)
+            }
 
             // Drawn instead of a "☰" text glyph -- that Unicode symbol
             // (U+2630) isn't covered by every Android device's font
@@ -533,12 +556,11 @@ ApplicationWindow {
         interval: 5000
         onTriggered: cheeseLabel.visible = false
     }
-    Label {
+    MCheese {
         id: cheeseLabel
         parent: Overlay.overlay
         visible: false
-        text: "🧀"
-        font.pixelSize: 32
+        pixel: 3
         anchors.top: parent.top
         anchors.right: parent.right
         anchors.topMargin: 46

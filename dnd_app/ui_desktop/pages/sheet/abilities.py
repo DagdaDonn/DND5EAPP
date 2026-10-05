@@ -53,6 +53,7 @@ from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON
 from dnd_app.data.phbCommon.conditions import CONDITIONS
 from .base import *
 from .base import _lbl, _sep, _card
+from dnd_app.ui_desktop import icons as _icons
 
 
 class AbilitiesMixin:
@@ -110,11 +111,12 @@ class AbilitiesMixin:
             val_lbl.setFixedWidth(52)
             ab_lbl = _lbl(f"{AB_FULL[ab]}", TEXT, FS_BODY, bold=is_p, wrap=False)
 
-            # 🎲 roll button — same role as Skills' roll button: rolls the
+            # Dice roll button — same role as Skills' roll button: rolls the
             # save without touching proficiency, which is now a separate
             # click target (the row itself, like Skills' cycle-on-click).
-            roll_btn = _btn("🎲", TEAL, variant="ghost", width=26, height=24, radius=5,
+            roll_btn = _btn("", TEAL, variant="ghost", width=26, height=24, radius=5,
                              font_size=FS_SMALL, tooltip=f"Roll {AB_FULL[ab]} save ({sign(val)})")
+            _icons.set_button_icon(roll_btn, "dice", 14)
             roll_btn.clicked.connect(
                 lambda checked=False, a=ab, v=val:
                     self._quick_roll_toast(f"{AB_FULL[a]} save", v))
@@ -128,7 +130,7 @@ class AbilitiesMixin:
             # can keep it in sync if class/level changes after the sheet
             # is already open, rather than only reflecting state from
             # whenever the tab was first built.
-            adv_badge = _lbl("Adv", GREEN2, FS_SMALL, bold=True, wrap=False)
+            adv_badge = _icons.icon_label("adv", 18, "GREEN2")
             if not hasattr(self, "_save_adv_badges"):
                 self._save_adv_badges = {}
             self._save_adv_badges[ab] = adv_badge
@@ -161,10 +163,10 @@ class AbilitiesMixin:
             # of a 4-state cycle since saves don't have Expertise/Half.
             if is_class:
                 row_f.setToolTip(f"{AB_FULL[ab]} save proficiency comes from your "
-                                  f"class and can't be toggled off here — 🎲 rolls it")
+                                  f"class and can't be toggled off here — the dice button rolls it")
             else:
                 row_f.setCursor(Qt.PointingHandCursor)
-                row_f.setToolTip(f"Click to toggle {AB_FULL[ab]} save proficiency  •  🎲 rolls it")
+                row_f.setToolTip(f"Click to toggle {AB_FULL[ab]} save proficiency  •  the dice button rolls it")
                 row_f.mousePressEvent = lambda e, a=ab: self._toggle_save_prof(a)
                 dot.toggled.connect(lambda checked, a=ab: self._toggle_save_prof(a, checked))
 
@@ -249,9 +251,9 @@ class AbilitiesMixin:
         d = random.randint(1, 20)
         total = d + bonus
         flair = ""
-        if d == 20: flair = "  🌟 NAT 20!"
-        elif d == 1: flair = "  💀 Nat 1…"
-        self._toast(f"🎲 {label}: [{d}] {bonus:+d} = {total}{flair}", 4200)
+        if d == 20: flair = "  NAT 20!"
+        elif d == 1: flair = "  Nat 1…"
+        self._toast(f"{label}: [{d}] {bonus:+d} = {total}{flair}", 4200)
 
     def _update_save_advantage_badge(self, ab: str):
         """Sync one saving throw's advantage indicator badge to current
@@ -265,7 +267,6 @@ class AbilitiesMixin:
         badge.setVisible(status["has_advantage"])
         if status["has_advantage"]:
             notes = "\n".join(f"• {s['source']}: {s['note']}" for s in status["sources"])
-            badge.setText("Adv")
             badge.setToolTip(
                 ("Conditional advantage:\n" if status["conditional"] else "Advantage:\n") + notes)
 
@@ -287,7 +288,7 @@ class AbilitiesMixin:
             badge.setToolTip(f"Auto-fails {AB_FULL[ab]} saves: {', '.join(status['sources'])}")
         elif status["disadvantage"]:
             badge.setVisible(True)
-            badge.setText("DISADV")
+            badge.setPixmap(_icons.pixmap("disadv", _icons.scaled(18), "CRIM2"))
             badge.setToolTip(f"Disadvantage on {AB_FULL[ab]} saves: {', '.join(status['sources'])}")
         else:
             badge.setVisible(False)

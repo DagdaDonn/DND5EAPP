@@ -154,40 +154,77 @@ Page {
                     Repeater {
                         model: modelData.items
                         delegate: Rectangle {
+                            id: actCard
+                            // Spent this turn (turn tracker) -> greyed, same as
+                            // desktop's _apply_turn_state on its Use/Cast buttons.
+                            readonly property bool bucketSpent: {
+                                var tc = sheetBridge.turnCounts
+                                if (modelData.bucketKey === "Action") return tc.action >= tc.actionLimit
+                                if (modelData.bucketKey === "Bonus Action") return tc.bonusAction >= tc.bonusActionLimit
+                                if (modelData.bucketKey === "Reaction") return tc.reaction >= tc.reactionLimit
+                                return false
+                            }
                             Layout.fillWidth: true
-                            Layout.preferredHeight: cardCol.height + 16
+                            Layout.preferredHeight: cardRow.implicitHeight + 20
                             radius: 10
                             color: Theme.surf
                             border.color: Theme.border
 
-                            Column {
-                                id: cardCol
-                                x: 10; y: 8
-                                width: parent.width - 20
-                                spacing: 3
+                            RowLayout {
+                                id: cardRow
+                                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 10 }
+                                spacing: 10
 
-                                RowLayout {
-                                    width: parent.width
-                                    Label {
-                                        text: modelData.name
-                                        color: Theme.text
-                                        font.pixelSize: Theme.fsBody
-                                        font.bold: true
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 3
+                                    RowLayout {
                                         Layout.fillWidth: true
-                                        wrapMode: Text.WordWrap
+                                        spacing: 8
+                                        MIcon {
+                                            visible: modelData.isSpell && modelData.pinned
+                                            name: "star_solid"
+                                            size: 14
+                                        }
+                                        Label {
+                                            text: modelData.name
+                                            color: Theme.text
+                                            font.pixelSize: Theme.fsBody
+                                            font.bold: true
+                                            Layout.fillWidth: true
+                                            wrapMode: Text.WordWrap
+                                        }
+                                        Label {
+                                            text: modelData.source
+                                            color: Theme.text3
+                                            font.pixelSize: Theme.fsSmall
+                                        }
                                     }
                                     Label {
-                                        text: modelData.source
-                                        color: Theme.text3
+                                        text: modelData.desc
+                                        color: Theme.text2
                                         font.pixelSize: Theme.fsSmall
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                        maximumLineCount: 4
+                                        elide: Text.ElideRight
                                     }
                                 }
-                                Label {
-                                    text: modelData.desc
-                                    color: Theme.text2
-                                    font.pixelSize: Theme.fsSmall
-                                    wrapMode: Text.WordWrap
-                                    width: parent.width
+
+                                // Cast for spells, Use for everything else (not
+                                // for passive features -- there's nothing to do)
+                                MButton {
+                                    objectName: "useButton_" + modelData.name
+                                    visible: modelData.bucketKey !== "Passive"
+                                    Layout.alignment: Qt.AlignVCenter
+                                    implicitWidth: 72
+                                    implicitHeight: 36
+                                    primary: modelData.isSpell
+                                    enabled: !actCard.bucketSpent
+                                    text: modelData.isSpell ? "Cast" : "Use"
+                                    onClicked: modelData.isSpell
+                                               ? sheetBridge.castSpell(modelData.spellName)
+                                               : sheetBridge.useAbility(modelData.bucketKey, modelData.name, modelData.desc)
                                 }
                             }
                         }
