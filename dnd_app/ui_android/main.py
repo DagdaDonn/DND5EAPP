@@ -1,6 +1,3 @@
-import os as _os
-_os.environ["QML_DISABLE_DISK_CACHE"] = "1"
-
 #!/usr/bin/env python3
 """Entry point for MIMIC's touch-first (Qt Quick/QML) UI. Scaffold --
 currently launches straight into the Race step of the creation wizard;
@@ -79,9 +76,50 @@ def _qt_message_handler(msg_type, context, message):
 qInstallMessageHandler(_qt_message_handler)
 
 
+def _setup_qml_disk_cache():
+    """Keep Qt's compiled-QML cache between launches, so only the first
+    launch after an install or update compiles the QML -- every later
+    one loads it precompiled, which is most of the UI's startup time.
+
+    The cache lives in a folder named after a hash of the QML files
+    themselves, so an update can never pick up stale compiled screens
+    (the reason the cache used to be switched off entirely); folders
+    left by older versions are removed."""
+    import hashlib
+    import shutil
+    from PySide6.QtCore import QStandardPaths
+    digest = hashlib.sha1()
+    for dirpath, dirnames, filenames in os.walk(_QML_DIR):
+        dirnames.sort()
+        for name in sorted(filenames):
+            if name.endswith((".qml", ".js")) or name == "qmldir":
+                path = os.path.join(dirpath, name)
+                digest.update(os.path.relpath(path, _QML_DIR).encode())
+                with open(path, "rb") as f:
+                    digest.update(f.read())
+    base = QStandardPaths.writableLocation(QStandardPaths.CacheLocation)
+    if not base:
+        os.environ["QML_DISABLE_DISK_CACHE"] = "1"
+        return
+    root = os.path.join(base, "qmlcache_mimic")
+    key = digest.hexdigest()[:16]
+    try:
+        os.makedirs(os.path.join(root, key), exist_ok=True)
+        for old in os.listdir(root):
+            if old != key:
+                shutil.rmtree(os.path.join(root, old), ignore_errors=True)
+    except OSError:
+        os.environ["QML_DISABLE_DISK_CACHE"] = "1"
+        return
+    os.environ.pop("QML_DISABLE_DISK_CACHE", None)
+    os.environ["QML_DISK_CACHE_PATH"] = os.path.join(root, key)
+
+
 def main():
     app = QGuiApplication(sys.argv)
     app.setApplicationName("MIMIC")
+    # before the engine exists -- Qt reads these when it's created
+    _setup_qml_disk_cache()
 
     # Diagnostics for the "QML fails to load, app silently exits"
     # failure mode -- confirms path resolution (__file__ can behave

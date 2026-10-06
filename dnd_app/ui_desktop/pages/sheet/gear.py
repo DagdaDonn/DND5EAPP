@@ -838,10 +838,12 @@ class GearMixin:
             self._magic_item_rows.append(item)
 
         self._magic_items_tree.setContextMenuPolicy(Qt.CustomContextMenu)
-        try:
-            self._magic_items_tree.customContextMenuRequested.disconnect()
-        except Exception:
-            pass
+        prev = getattr(self, "_mi_tree_ctx_handler", None)
+        if prev is not None:
+            try:
+                self._magic_items_tree.customContextMenuRequested.disconnect(prev)
+            except (RuntimeError, TypeError):
+                pass
         def _mi_ctx_menu(pos):
             it = self._magic_items_tree.itemAt(pos)
             if not it: return
@@ -860,6 +862,7 @@ class GearMixin:
             rm_act.triggered.connect(lambda: self._remove_magic_item(_name))
             menu.exec(self._magic_items_tree.viewport().mapToGlobal(pos))
         self._magic_items_tree.customContextMenuRequested.connect(_mi_ctx_menu)
+        self._mi_tree_ctx_handler = _mi_ctx_menu
 
     def _set_item_damage_type(self, item_name: str, dmg_type):
         """Store which damage type a resistance-choice item (Ring/Armor of
@@ -1222,10 +1225,14 @@ class GearMixin:
             item.setData(0, Qt.UserRole, (name, eq, is_magic, is_weapon, is_armor, is_shield))
 
         self._gear_equip_tree.setContextMenuPolicy(Qt.CustomContextMenu)
-        try:
-            self._gear_equip_tree.customContextMenuRequested.disconnect()
-        except Exception:
-            pass
+        # Drop the handler from the previous refresh (a bare disconnect()
+        # warns on the first refresh, when nothing is connected yet).
+        prev = getattr(self, "_gear_tree_ctx_handler", None)
+        if prev is not None:
+            try:
+                self._gear_equip_tree.customContextMenuRequested.disconnect(prev)
+            except (RuntimeError, TypeError):
+                pass
         def _tree_ctx_menu(pos):
             item = self._gear_equip_tree.itemAt(pos)
             if not item: return
@@ -1273,6 +1280,7 @@ class GearMixin:
                 rm_act.setText("(Manage in Magic Items list below)")
             menu.exec(self._gear_equip_tree.viewport().mapToGlobal(pos))
         self._gear_equip_tree.customContextMenuRequested.connect(_tree_ctx_menu)
+        self._gear_tree_ctx_handler = _tree_ctx_menu
 
     def _get_applicable_infusions(self, is_weapon, is_armor, is_shield):
         """Returns the names of infusions this character knows that apply

@@ -173,65 +173,53 @@ Page {
             }
 
             // ── Slots ─────────────────────────────────────────────────
-            Label {
+            // Same pips as desktop's Spells tab: one row per level, blue
+            // for ordinary slots, and Pact Magic in its own purple card
+            // since it recharges on a short rest. Tap a pip to spend or
+            // restore that slot.
+            ColumnLayout {
                 id: slotsAnchor
-                visible: sheetBridge.spellSlots.length > 0 || sheetBridge.pactSlots.max > 0
-                text: "Spell Slots"
-                color: Theme.gold
-                font.pixelSize: Theme.fsSmall
-                font.bold: true
-            }
-            Flow {
                 Layout.fillWidth: true
-                spacing: 8
-                Repeater {
-                    model: sheetBridge.spellSlots
-                    delegate: Rectangle {
-                        width: 74; height: 54
-                        radius: 8
-                        color: Theme.surf
-                        border.color: Theme.border
-                        Column {
-                            anchors.centerIn: parent
-                            spacing: 2
-                            Label {
-                                text: "Lvl " + modelData.level
-                                color: Theme.text3
-                                font.pixelSize: Theme.fsSmall
-                                anchors.horizontalCenter: parent.horizontalCenter
-                            }
-                            Label {
-                                text: (modelData.max - modelData.used) + " / " + modelData.max
-                                color: Theme.teal2
-                                font.pixelSize: Theme.fsBody
-                                font.bold: true
-                                anchors.horizontalCenter: parent.horizontalCenter
-                            }
+                spacing: 10
+                visible: sheetBridge.spellSlots.length > 0 || sheetBridge.pactSlots.max > 0
+
+                MCard {
+                    visible: sheetBridge.spellSlots.length > 0
+                    title: "Spell Slots"
+                    iconName: "spells"
+                    bodySpacing: 0
+                    Repeater {
+                        model: sheetBridge.spellSlots
+                        delegate: MSlotBar {
+                            Layout.fillWidth: true
+                            label: "Level " + modelData.level
+                            max: modelData.max
+                            used: modelData.used
+                            onToggled: (n) => sheetBridge.setSlotsUsed(modelData.level, n)
                         }
                     }
                 }
-                Rectangle {
+
+                MCard {
                     visible: sheetBridge.pactSlots.max > 0
-                    width: 90; height: 54
-                    radius: 8
-                    color: Theme.surf
-                    border.color: Theme.indigo2
-                    Column {
-                        anchors.centerIn: parent
-                        spacing: 2
-                        Label {
-                            text: "Pact (Lvl " + sheetBridge.pactSlots.level + ")"
-                            color: Theme.text3
-                            font.pixelSize: Theme.fsSmall
-                            anchors.horizontalCenter: parent.horizontalCenter
-                        }
-                        Label {
-                            text: (sheetBridge.pactSlots.max - sheetBridge.pactSlots.used) + " / " + sheetBridge.pactSlots.max
-                            color: Theme.indigo2
-                            font.pixelSize: Theme.fsBody
-                            font.bold: true
-                            anchors.horizontalCenter: parent.horizontalCenter
-                        }
+                    title: "Pact Magic"
+                    iconName: "magic"
+                    accent: Theme.purple2
+                    border.color: Theme.purple
+                    bodySpacing: 0
+                    Label {
+                        text: "Recharges on a short rest"
+                        color: Theme.text3
+                        font.pixelSize: Theme.fsSmall
+                    }
+                    MSlotBar {
+                        Layout.fillWidth: true
+                        label: "Level " + sheetBridge.pactSlots.level
+                        max: sheetBridge.pactSlots.max
+                        used: sheetBridge.pactSlots.used
+                        fillColor: Theme.purple
+                        accentColor: Theme.purple2
+                        onToggled: (n) => sheetBridge.setSlotsUsed(-1, n)
                     }
                 }
             }
@@ -251,7 +239,8 @@ Page {
                     Layout.preferredHeight: knownCol.height + 16
                     radius: 10
                     color: Theme.surf
-                    border.color: modelData.prepared ? Theme.teal : Theme.border
+                    // teal = prepared; only for spells that are prepared at all
+                    border.color: modelData.preparable && modelData.prepared ? Theme.teal : Theme.border
 
                     Column {
                         id: knownCol
@@ -278,14 +267,30 @@ Page {
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
                             }
-                            Label {
-                                text: modelData.levelText
-                                color: Theme.text3
-                                font.pixelSize: Theme.fsSmall
+                            // View (same as the spell browser) and remove sit
+                            // in the title row, which leaves the action row
+                            // below room for Conc. + Ritual + Cast on one line
+                            MButton {
+                                primary: false
+                                implicitWidth: 64
+                                implicitHeight: 34
+                                text: "View"
+                                onClicked: {
+                                    Window.window.pendingSpellDetail = sheetBridge.getSpellDetail(modelData.name)
+                                    spellDetail.open()
+                                }
+                            }
+                            MButton {
+                                primary: false
+                                implicitWidth: 40
+                                implicitHeight: 34
+                                iconName: "trash"
+                                iconSize: 16
+                                onClicked: sheetBridge.removeKnownSpell(modelData.name)
                             }
                         }
                         Label {
-                            text: modelData.school
+                            text: modelData.levelText + "  ·  " + modelData.school
                                   + (modelData.concentration ? "  ·  Concentration" : "")
                                   + (modelData.ritual ? "  ·  Ritual" : "")
                             color: Theme.text3
@@ -298,7 +303,9 @@ Page {
                             width: parent.width
                             spacing: 6
                             MCheckBox {
-                                visible: modelData.level > 0   // cantrips are never prepared
+                                // cantrips are never prepared, and neither is a spell
+                                // only a Warlock/Sorcerer/Bard/Ranger casts
+                                visible: modelData.level > 0 && modelData.preparable
                                 text: "Prepared"
                                 checked: modelData.prepared
                                 onToggled: sheetBridge.setSpellPrepared(modelData.name, checked)
@@ -318,6 +325,7 @@ Page {
                             MButton {
                                 visible: modelData.concentration && sheetBridge.concentratingSpell !== modelData.name
                                 primary: false
+                                implicitWidth: 58
                                 implicitHeight: 34
                                 text: "Conc."
                                 onClicked: sheetBridge.startConcentration(modelData.name)
@@ -325,20 +333,13 @@ Page {
                             MButton {
                                 visible: modelData.ritual
                                 primary: false
+                                implicitWidth: 58
                                 implicitHeight: 34
                                 text: "Ritual"
                                 onClicked: sheetBridge.castSpellAsRitual(modelData.name)
                             }
                             MButton {
-                                primary: false
-                                implicitWidth: 40
-                                implicitHeight: 34
-                                iconName: "trash"
-                                iconSize: 16
-                                onClicked: sheetBridge.removeKnownSpell(modelData.name)
-                            }
-                            MButton {
-                                implicitWidth: 68
+                                implicitWidth: 60
                                 implicitHeight: 34
                                 text: "Cast"
                                 onClicked: sheetBridge.castSpell(modelData.name)
@@ -363,7 +364,7 @@ Page {
             // narrow a multiclass character's browser to one class.
             Label { id: addSpellAnchor; text: "Add a Spell"; color: Theme.gold; font.pixelSize: Theme.fsSmall; font.bold: true; Layout.topMargin: 6 }
             Label {
-                text: "From your class's spell list. Tap a spell to view details."
+                text: "From your class's spell list. Tap View for a spell's details."
                 color: Theme.text3
                 font.pixelSize: Theme.fsSmall
                 wrapMode: Text.WordWrap

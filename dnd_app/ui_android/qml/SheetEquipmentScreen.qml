@@ -15,6 +15,50 @@ Page {
 
     Component.onCompleted: sheetBridge.refresh()
 
+    // Adds a magic item from the browser: "+N weapon/armor" entries
+    // enchant something already owned, spell scrolls ask which spell,
+    // everything else is added as is.
+    function pickMagicItem(name) {
+        var info = sheetBridge.classifyMagicItemPick(name)
+        if (info.kind === "enchant") {
+            pendingEnchantKind = info.itemKind
+            pendingEnchantBonus = info.bonus
+            if (info.itemKind === "Shield") {
+                sheetBridge.applyShieldEnchant(info.bonus)
+            } else {
+                var candidates = sheetBridge.enchantCandidates(info.itemKind, info.bonus)
+                if (candidates.length === 0) {
+                    sheetBridge.notify("You don't own a nonmagical " + info.itemKind.toLowerCase() + " to enchant yet.")
+                } else {
+                    enchantPickerDialog.dialogTitle = "Enchant which " + info.itemKind.toLowerCase() + "?"
+                    enchantPickerDialog.options = candidates.map(function(c) {
+                        var tag = c.equipped ? "  (equipped)" : "  (owned)"
+                        if (c.existingBonus) tag += "  — currently +" + c.existingBonus
+                        return c.name + tag
+                    })
+                    enchantPickerDialog.rawNames = candidates.map(function(c) { return c.name })
+                    enchantPickerDialog.open()
+                }
+            }
+        } else if (info.kind === "scroll") {
+            pendingScrollName = name
+            var spells = sheetBridge.spellsForScrollLevel(info.level)
+            if (spells.length === 0) {
+                sheetBridge.addMagicItem(name)
+            } else {
+                scrollSpellDialog.options = spells
+                scrollSpellDialog.open()
+            }
+        } else {
+            sheetBridge.addMagicItem(name)
+        }
+    }
+
+    function showItemDetail(name) {
+        Window.window.pendingItemDetail = sheetBridge.getItemDetail(name)
+        itemDetail.open()
+    }
+
     // Jump-to-section targets for the drawer's expandable sub-menu (see
     // NavDrawer.qml's sectionSelected).
     function scrollToSection(name) {
@@ -268,6 +312,7 @@ Page {
                                     MButton {
                                         visible: modelData.equipKind !== ""
                                         primary: false
+                                        implicitWidth: 80
                                         implicitHeight: 34
                                         text: modelData.equipKind === "weapon" ? (modelData.equipped ? "Unequip" : "Equip")
                                               : (modelData.equipped ? "Take off" : (modelData.equipKind === "shield" ? "Equip" : "Wear"))
@@ -283,6 +328,7 @@ Page {
                                     MButton {
                                         visible: modelData.isPotion
                                         primary: false
+                                        implicitWidth: 64
                                         implicitHeight: 34
                                         text: "Drink"
                                         onClicked: sheetBridge.usePotion(modelData.name)
@@ -290,9 +336,17 @@ Page {
                                     MButton {
                                         visible: modelData.isScroll
                                         primary: false
+                                        implicitWidth: 64
                                         implicitHeight: 34
                                         text: "Read"
                                         onClicked: sheetBridge.useScroll(modelData.name)
+                                    }
+                                    MButton {
+                                        primary: false
+                                        implicitWidth: 56
+                                        implicitHeight: 34
+                                        text: "View"
+                                        onClicked: root.showItemDetail(modelData.name)
                                     }
                                     MButton {
                                         primary: false
@@ -402,27 +456,56 @@ Page {
                     anchors.margins: 4
                     clip: true
                     model: eqAddModel.results
-                    delegate: ItemDelegate {
+                    // Same layout as the spell browser: explicit View/Add
+                    // buttons rather than a whole-row tap, so browsing a
+                    // list can't add things by accident.
+                    delegate: Rectangle {
                         width: ListView.view.width
-                        height: 48
-                        contentItem: RowLayout {
+                        height: 52
+                        color: "transparent"
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            spacing: 8
                             ColumnLayout {
                                 Layout.fillWidth: true
+                                Layout.preferredWidth: 0
                                 spacing: 1
-                                Label { text: modelData.name; color: Theme.text; font.pixelSize: Theme.fsBody }
-                                Label { text: modelData.category + (modelData.detail ? "  ·  " + modelData.detail : ""); color: Theme.text3; font.pixelSize: Theme.fsSmall }
+                                Label {
+                                    text: modelData.name
+                                    color: Theme.text
+                                    font.pixelSize: Theme.fsBody
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                                Label {
+                                    text: modelData.category + (modelData.detail ? "  ·  " + modelData.detail : "")
+                                    color: Theme.text3
+                                    font.pixelSize: Theme.fsSmall
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                            }
+                            MButton {
+                                primary: false
+                                implicitWidth: 64
+                                height: 34
+                                text: "View"
+                                onClicked: root.showItemDetail(modelData.name)
+                            }
+                            MButton {
+                                implicitWidth: 64
+                                height: 34
+                                text: "Add"
+                                // No explicit eqAddModel refresh here: the
+                                // Connections block above already refreshes
+                                // on statsChanged, and a second refresh
+                                // mid-click can destroy this delegate while
+                                // the handler is still running.
+                                onClicked: sheetBridge.addEquipmentItem(modelData.name, eqQty.value)
                             }
                         }
-                        // Refreshing eqAddModel here too (in addition to
-                        // the Connections-driven refresh on statsChanged
-                        // below) would double-refresh, and for a result
-                        // list that excludes already-added items (like
-                        // the magic item browser below), a second
-                        // refresh mid-click can destroy this very
-                        // delegate while onClicked is still running --
-                        // let the single Connections-driven refresh
-                        // handle it.
-                        onClicked: sheetBridge.addEquipmentItem(modelData.name, eqQty.value)
                     }
                 }
             }
@@ -470,6 +553,13 @@ Page {
                                 text: modelData.rarity
                                 color: Theme.text3
                                 font.pixelSize: Theme.fsSmall
+                            }
+                            MButton {
+                                primary: false
+                                implicitWidth: 64
+                                implicitHeight: 34
+                                text: "View"
+                                onClicked: root.showItemDetail(modelData.name)
                             }
                         }
                         Label {
@@ -602,67 +692,109 @@ Page {
                     anchors.margins: 4
                     clip: true
                     model: miAddModel.results
-                    delegate: ItemDelegate {
+                    delegate: Rectangle {
                         width: ListView.view.width
-                        height: 48
-                        contentItem: RowLayout {
-                            Label {
-                                text: modelData.name
-                                color: Theme.text
-                                font.pixelSize: Theme.fsBody
+                        height: 52
+                        color: "transparent"
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            spacing: 8
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                elide: Text.ElideRight
-                            }
-                            Label {
-                                text: modelData.rarity
-                                color: Theme.text3
-                                font.pixelSize: Theme.fsSmall
-                            }
-                        }
-                        // See the equipment browser's onClicked above --
-                        // the Connections-driven refresh on statsChanged
-                        // already updates miAddModel; a second explicit
-                        // refresh here would destroy this delegate mid-
-                        // click (this list excludes already-added items,
-                        // so adding one always shrinks it).
-                        onClicked: {
-                            var info = sheetBridge.classifyMagicItemPick(modelData.name)
-                            if (info.kind === "enchant") {
-                                pendingEnchantKind = info.itemKind
-                                pendingEnchantBonus = info.bonus
-                                if (info.itemKind === "Shield") {
-                                    sheetBridge.applyShieldEnchant(info.bonus)
-                                } else {
-                                    var candidates = sheetBridge.enchantCandidates(info.itemKind, info.bonus)
-                                    if (candidates.length === 0) {
-                                        sheetBridge.notify("You don't own a nonmagical " + info.itemKind.toLowerCase() + " to enchant yet.")
-                                    } else {
-                                        enchantPickerDialog.dialogTitle = "Enchant which " + info.itemKind.toLowerCase() + "?"
-                                        enchantPickerDialog.options = candidates.map(function(c) {
-                                            var tag = c.equipped ? "  (equipped)" : "  (owned)"
-                                            if (c.existingBonus) tag += "  — currently +" + c.existingBonus
-                                            return c.name + tag
-                                        })
-                                        enchantPickerDialog.rawNames = candidates.map(function(c) { return c.name })
-                                        enchantPickerDialog.open()
-                                    }
+                                Layout.preferredWidth: 0
+                                spacing: 1
+                                Label {
+                                    text: modelData.name
+                                    color: Theme.text
+                                    font.pixelSize: Theme.fsBody
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
                                 }
-                            } else if (info.kind === "scroll") {
-                                pendingScrollName = modelData.name
-                                var spells = sheetBridge.spellsForScrollLevel(info.level)
-                                if (spells.length === 0) {
-                                    sheetBridge.addMagicItem(modelData.name)
-                                } else {
-                                    scrollSpellDialog.options = spells
-                                    scrollSpellDialog.open()
+                                Label {
+                                    text: modelData.rarity
+                                    color: Theme.text3
+                                    font.pixelSize: Theme.fsSmall
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
                                 }
-                            } else {
-                                sheetBridge.addMagicItem(modelData.name)
+                            }
+                            MButton {
+                                primary: false
+                                implicitWidth: 64
+                                height: 34
+                                text: "View"
+                                onClicked: root.showItemDetail(modelData.name)
+                            }
+                            MButton {
+                                implicitWidth: 64
+                                height: 34
+                                text: "Add"
+                                // See the equipment browser's Add above -- the
+                                // Connections-driven refresh on statsChanged
+                                // already updates miAddModel.
+                                onClicked: root.pickMagicItem(modelData.name)
                             }
                         }
                     }
                 }
             }
+            }
+        }
+    }
+
+    // ── Item detail popup ────────────────────────────────────────────
+    // Read through Window.window.pendingItemDetail for the same reason
+    // the spell detail popup is -- see SheetSpellsScreen.qml.
+    property var itemData: Window.window.pendingItemDetail
+
+    MFullPageDialog {
+        id: itemDetail
+        dialogTitle: (root.itemData && root.itemData.name) || "Item"
+
+        Flickable {
+            anchors.fill: parent
+            anchors.margins: 16
+            contentWidth: width
+            contentHeight: itemDetailCol.height
+            clip: true
+
+            ColumnLayout {
+                id: itemDetailCol
+                width: parent.width
+                spacing: 8
+
+                Label {
+                    visible: !!root.itemData.subtitle
+                    text: root.itemData.subtitle || ""
+                    color: Theme.gold2
+                    font.pixelSize: Theme.fsBody
+                    font.bold: true
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
+                Label {
+                    visible: text.length > 0
+                    text: (root.itemData.facts || []).join("\n")
+                    color: Theme.text2
+                    font.pixelSize: Theme.fsSmall
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
+                Rectangle {
+                    visible: !!root.itemData.desc
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Theme.border
+                }
+                Label {
+                    text: root.itemData.desc || ""
+                    color: Theme.text
+                    font.pixelSize: Theme.fsSmall
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
             }
         }
     }

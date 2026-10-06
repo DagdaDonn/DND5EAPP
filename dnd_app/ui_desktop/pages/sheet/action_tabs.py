@@ -373,7 +373,7 @@ class ActionTabsMixin:
             self._bucket_use_btns[bucket_name] = []
 
             # ── Laptop-friendly 2-column card grid ───────────────────────────
-            grid_host = QWidget(); grid_host.setStyleSheet("background:transparent;")
+            grid_host = QWidget(); grid_host.setStyleSheet("background:transparent;border:none;")
             grid = QGridLayout(grid_host)
             grid.setContentsMargins(0,0,0,0)
             grid.setHorizontalSpacing(8); grid.setVerticalSpacing(6)
@@ -406,7 +406,8 @@ class ActionTabsMixin:
                 cl = QHBoxLayout(card); cl.setContentsMargins(10,7,8,7); cl.setSpacing(8)
 
                 src_badge = _lbl(source[:9], src_color, FS_TINY, bold=True, wrap=False)
-                src_badge.setFixedWidth(60); src_badge.setAlignment(Qt.AlignCenter)
+                # wide enough for 9-letter tags ("Universal", "Barbarian") in bold
+                src_badge.setFixedWidth(76); src_badge.setAlignment(Qt.AlignCenter)
                 src_badge.setStyleSheet(
                     f"background:{qa(src_color,0x22)};border:1px solid {qa(src_color,0x55)};"
                     f"border-radius:4px;color:{src_color};font-size:{FS_TINY}px;"
@@ -725,7 +726,7 @@ class ActionTabsMixin:
             if rows:
                 # Balance odd counts so the last card doesn't stretch full width
                 if len(rows) % 2 == 1:
-                    filler = QWidget(); filler.setStyleSheet("background:transparent;")
+                    filler = QWidget(); filler.setStyleSheet("background:transparent;border:none;")
                     grid.addWidget(filler, (len(rows)-1)//2, 1)
                 bl.insertWidget(bl.count()-1, grid_host)
             else:

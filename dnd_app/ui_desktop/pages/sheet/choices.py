@@ -414,7 +414,7 @@ class ChoicesMixin:
         opt_lay.addWidget(_lbl("Toggle alternate features for your classes. Discuss with your DM first.",
                                TEXT3, FS_SMALL))
         self._opt_feat_checks = {}
-        self._opt_inner = QWidget(); self._opt_inner.setStyleSheet("background:transparent;")
+        self._opt_inner = QWidget(); self._opt_inner.setStyleSheet("background:transparent;border:none;")
         self._opt_inner_lay = QVBoxLayout(self._opt_inner)
         self._opt_inner_lay.setSpacing(3); self._opt_inner_lay.setContentsMargins(0,4,0,0)
         opt_lay.addWidget(self._opt_inner)

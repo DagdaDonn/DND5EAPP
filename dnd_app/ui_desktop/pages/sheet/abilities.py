@@ -69,7 +69,7 @@ class AbilitiesMixin:
         for ab in ABILITIES:
             blk = AbilityBlock(ab, ability_score(self.char, ab), editable=False)
             blk.roll_requested.connect(
-                lambda a: self._quick_roll_toast(f"{AB_FULL[a]} check", ability_mod(self.char, a)))
+                lambda a: self._quick_roll_toast(f"{AB_FULL[a]} check", ability_mod(self.char, a), "check", a))
             ab_row.addWidget(blk); self._ab_blocks[ab] = blk
         ab_row.addStretch()
         abcl.addLayout(ab_row)
@@ -119,7 +119,7 @@ class AbilitiesMixin:
             _icons.set_button_icon(roll_btn, "dice", 14)
             roll_btn.clicked.connect(
                 lambda checked=False, a=ab, v=val:
-                    self._quick_roll_toast(f"{AB_FULL[a]} save", v))
+                    self._quick_roll_toast(f"{AB_FULL[a]} save", v, "save", a))
 
             rl.addWidget(dot); rl.addWidget(val_lbl); rl.addWidget(ab_lbl)
 
@@ -246,14 +246,27 @@ class AbilitiesMixin:
             current.remove(ability)
         self.ctrl.update("_choices.extra_save_profs", current)
 
-    def _quick_roll_toast(self, label: str, bonus: int):
-        import random
-        d = random.randint(1, 20)
+    def _quick_roll_toast(self, label: str, bonus: int, kind: str = "check", ability: str = ""):
+        """Roll a check or save with any condition rules applied: an
+        automatic failure (Stunned/Paralyzed/... STR and DEX saves), or
+        two d20s kept high/low for advantage/disadvantage."""
+        from dnd_app.core.calculator import condition_roll_mode, roll_d20
+        cm = condition_roll_mode(self.char, kind, ability)
+        if cm["mode"] == "auto_fail":
+            self._toast(f"{label}: automatic failure ({', '.join(cm['sources'])})", 4200)
+            return
+        r = roll_d20(cm["mode"])
+        d = r["d20"]
         total = d + bonus
         flair = ""
         if d == 20: flair = "  NAT 20!"
         elif d == 1: flair = "  Nat 1…"
-        self._toast(f"{label}: [{d}] {bonus:+d} = {total}{flair}", 4200)
+        if len(r["rolls"]) == 2:
+            tag = "ADV" if cm["mode"] == "advantage" else "DIS"
+            dice = f"[{r['rolls'][0]}, {r['rolls'][1]} → {d}] {tag} ({', '.join(cm['sources'])})"
+        else:
+            dice = f"[{d}]"
+        self._toast(f"{label}: {dice} {bonus:+d} = {total}{flair}", 4200)
 
     def _update_save_advantage_badge(self, ab: str):
         """Sync one saving throw's advantage indicator badge to current
@@ -308,7 +321,7 @@ class AbilitiesMixin:
             val_lbl.setText(sign(val))
             self._update_save_advantage_badge(ab)
             self._update_save_condition_badge(ab)
-            val_lbl.setStyleSheet(f"color:{color};font-size:{FS_TITLE}px;font-weight:700;background:transparent;")
+            val_lbl.setStyleSheet(f"color:{color};font-size:{FS_TITLE}px;font-weight:700;background:transparent;border:none;")
             is_p = ab in profs or self.char.get("saving_throws",{}).get(ab,False)
             dot.setChecked(is_p)
 

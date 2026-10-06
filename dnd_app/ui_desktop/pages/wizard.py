@@ -21,7 +21,7 @@ from dnd_app.ui_desktop.style.theme import *
 from ..shared import *
 from ..shared import _btn
 from dnd_app.core.character import new_character, add_class, ability_score, ability_mod, get_class_entry, set_subclass
-from dnd_app.core.builder import rebuild, get_choices_needed, apply_choice
+from dnd_app.core.builder import rebuild, get_choices_needed, apply_choice, race_requires_subrace
 from dnd_app.core.multiclass import check_multiclass_prereq
 from dnd_app.data.phb2014.races import ALL_RACES, RACE_NAMES, RACE_DICT, get_race, flex_asi_desc, combined_racial_asi
 from dnd_app.data.phb2014.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
@@ -302,7 +302,7 @@ class Step1Race(QWidget):
 
         rdata = RACE_DICT.get(name, {})
         self._detail_name.setText(name)
-        self._detail_name.setStyleSheet(f"color:{GOLD2};font-size:{FS_TITLE}px;font-weight:700;background:transparent;")
+        self._detail_name.setStyleSheet(f"color:{GOLD2};font-size:{FS_TITLE}px;font-weight:700;background:transparent;border:none;")
 
         # ASI display
         asi = rdata.get("asi", {})
@@ -322,7 +322,7 @@ class Step1Race(QWidget):
 
         # Subraces
         self._subrace_combo.clear()
-        self._subrace_combo.addItem("(None)")
+        self._subrace_combo.addItem("(Choose a subrace)" if race_requires_subrace(name) else "(None)")
         for sub in rdata.get("subraces", []):
             display_name = sub.split("(")[0].strip()
             full_desc = sub[sub.find("("):]  # the parenthetical bit
@@ -359,11 +359,14 @@ class Step1Race(QWidget):
                     shape = DRACONIC_ANCESTRY[anc][1]
                     self._ancestry_combo.addItem(f"{anc}  –  {dmg}, {shape}", anc)
             self._update_subrace_detail()
-        try:
-            self._subrace_combo.currentIndexChanged.disconnect()
-        except (TypeError, RuntimeError):
-            pass
+        prev = getattr(self, "_subrace_changed_handler", None)
+        if prev is not None:
+            try:
+                self._subrace_combo.currentIndexChanged.disconnect(prev)
+            except (TypeError, RuntimeError):
+                pass
         self._subrace_combo.currentIndexChanged.connect(_on_subrace_changed)
+        self._subrace_changed_handler = _on_subrace_changed
 
         # Also show ASI summary for the race in Step1 panel
         if rdata.get("subraces") and not asi_parts:
@@ -430,13 +433,18 @@ class Step1Race(QWidget):
         if not self._selected_race:
             QMessageBox.warning(self, "Race Required", "Please choose a race before continuing.")
             return False
+        if race_requires_subrace(self._selected_race) and self._subrace_combo.currentIndex() <= 0:
+            QMessageBox.warning(self, "Subrace Required",
+                                f"Please choose a subrace -- {'an' if self._selected_race[:1] in 'AEIOU' else 'a'} {self._selected_race}'s ability "
+                                f"score bonus comes from its subrace.")
+            return False
         char["race"] = self._selected_race
         char["species"] = self._selected_race
         sub_data = self._subrace_combo.currentData()  # stored as name only
         sub_text = self._subrace_combo.currentText()
         if sub_data:
             char["subrace"] = sub_data  # clean name like "Hill"
-        elif sub_text and sub_text != "(None)":
+        elif sub_text and not sub_text.startswith("("):
             char["subrace"] = sub_text.split("(")[0].strip().rstrip()
         else:
             char["subrace"] = ""
@@ -629,7 +637,7 @@ class Step2Abilities(QWidget):
             "Only where the ability score increases land is changed.",
             TEAL2, FS_SMALL))
         self._tashas_summary = _lbl("", TEXT2, FS_SMALL); tcl.addWidget(self._tashas_summary)
-        self._tashas_spins_frame = QWidget(); self._tashas_spins_frame.setStyleSheet("background:transparent;")
+        self._tashas_spins_frame = QWidget(); self._tashas_spins_frame.setStyleSheet("background:transparent;border:none;")
         tsf = QHBoxLayout(self._tashas_spins_frame); tsf.setSpacing(10)
         self._tashas_spins = {}; self._tashas_mod_lbls = {}
         for ab in ABILITIES:
@@ -641,7 +649,7 @@ class Step2Abilities(QWidget):
                              f"border:2px solid {qa(GOLD,0x55)};border-radius:6px;background:{SURF2};}}")
             sp.valueChanged.connect(self._on_tashas_spin)
             mod_lbl = QLabel("0"); mod_lbl.setAlignment(Qt.AlignCenter)
-            mod_lbl.setStyleSheet(f"color:{TEXT3};font-size:{FS_SMALL}px;background:transparent;")
+            mod_lbl.setStyleSheet(f"color:{TEXT3};font-size:{FS_SMALL}px;background:transparent;border:none;")
             col.addWidget(sp); col.addWidget(mod_lbl); tsf.addLayout(col)
             self._tashas_spins[ab] = sp; self._tashas_mod_lbls[ab] = mod_lbl
         tsf.addStretch(); tcl.addWidget(self._tashas_spins_frame)
@@ -739,7 +747,7 @@ class Step2Abilities(QWidget):
         color = TEAL2 if used == pool else (GOLD2 if used < pool else CRIM2)
         if hasattr(self, '_tashas_pts_lbl'):
             self._tashas_pts_lbl.setText(f"Points used: {used} / {pool}")
-            self._tashas_pts_lbl.setStyleSheet(f"color:{color};font-size:{FS_SMALL}px;font-weight:700;background:transparent;")
+            self._tashas_pts_lbl.setStyleSheet(f"color:{color};font-size:{FS_SMALL}px;font-weight:700;background:transparent;border:none;")
         for ab, sp in self._tashas_spins.items():
             base = self._ab_blocks[ab].value() if ab in self._ab_blocks else 10
             total = base + sp.value()
@@ -748,7 +756,7 @@ class Step2Abilities(QWidget):
             ml = self._tashas_mod_lbls.get(ab)
             if ml:
                 ml.setText(f"{total}\n({sign}{mod})")
-                ml.setStyleSheet(f"color:{TEAL2 if sp.value()>0 else TEXT3};font-size:{FS_SMALL}px;background:transparent;")
+                ml.setStyleSheet(f"color:{TEAL2 if sp.value()>0 else TEXT3};font-size:{FS_SMALL}px;background:transparent;border:none;")
 
     def _on_flex_changed(self, _state):
         """Enforce max selection for flex ASI checkboxes."""
@@ -809,7 +817,7 @@ class Step2Abilities(QWidget):
             rem = 27 - used
             self._pb_lbl.setText(f"Points remaining: {rem} / 27")
             color = TEAL2 if rem >= 0 else CRIM2
-            self._pb_lbl.setStyleSheet(f"color:{color};font-size:{FS_BODY}px;font-weight:700;background:transparent;")
+            self._pb_lbl.setStyleSheet(f"color:{color};font-size:{FS_BODY}px;font-weight:700;background:transparent;border:none;")
 
     def _update_race_bonuses(self, char):
         """Update the racial ASI preview label. Uses combined_racial_asi
@@ -1368,7 +1376,9 @@ class Step4Spells(QWidget):
             insert_idx = self._find_header_pos(lvl)
             self._spell_lay.insertWidget(insert_idx, hdr)
 
-        row = SpellRow(spell, prepared)
+        from dnd_app.core.calculator import spell_preparing_classes
+        row = SpellRow(spell, prepared,
+                       preparable=bool(spell_preparing_classes(self.char, spell)))
         row.remove.connect(self._remove_spell_row)
         insert_idx = self._find_spell_pos(lvl)
         self._spell_lay.insertWidget(insert_idx, row)
@@ -1472,7 +1482,7 @@ class Step5Equipment(QWidget):
         self._groups = get_starting_equipment(cls_name)
         scroll = QScrollArea(); scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea{background:transparent;border:none;}")
-        inner = QWidget(); inner.setStyleSheet("background:transparent;")
+        inner = QWidget(); inner.setStyleSheet("background:transparent;border:none;")
         gl = QVBoxLayout(inner); gl.setSpacing(10)
 
         for gi, group in enumerate(self._groups):

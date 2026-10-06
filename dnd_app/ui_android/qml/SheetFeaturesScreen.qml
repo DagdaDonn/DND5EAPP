@@ -230,10 +230,18 @@ Page {
                         RowLayout {
                             anchors.fill: parent
                             anchors.margins: 4
-                            MIcon {
-                                visible: modelData.itemType === "dm_reward"
-                                name: "orb"
-                                size: 18
+                            spacing: 8
+                            // fixed-width icon slot on every row, so names and
+                            // buttons line up whether or not a row has an icon
+                            Item {
+                                Layout.preferredWidth: 20
+                                Layout.preferredHeight: 20
+                                MIcon {
+                                    anchors.centerIn: parent
+                                    visible: modelData.itemType === "dm_reward"
+                                    name: "orb"
+                                    size: 18
+                                }
                             }
                             ColumnLayout {
                                 Layout.fillWidth: true
@@ -243,16 +251,20 @@ Page {
                                     color: modelData.granted ? Theme.amber : Theme.text
                                     font.pixelSize: Theme.fsBody
                                     elide: Text.ElideRight
+                                    Layout.fillWidth: true
                                 }
                                 Label {
                                     text: modelData.category + (modelData.source ? "  ·  " + modelData.source : "")
                                     color: Theme.text3
                                     font.pixelSize: Theme.fsSmall
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
                                 }
                             }
                             MButton {
                                 primary: false
                                 height: 32
+                                Layout.preferredWidth: 64
                                 text: "View"
                                 onClicked: {
                                     Window.window.pendingDmRewardDetail = modelData
@@ -261,6 +273,7 @@ Page {
                             }
                             MButton {
                                 height: 32
+                                Layout.preferredWidth: 84
                                 primary: !modelData.granted
                                 text: modelData.granted ? "Revoke" : "Grant"
                                 // No extra explicit refresh here -- the

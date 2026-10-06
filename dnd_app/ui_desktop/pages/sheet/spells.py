@@ -58,10 +58,10 @@ from dnd_app.ui_desktop import icons as _icons
 
 
 class SlotBar(QWidget):
-    """One row of spell-slot squares for a given level.
+    """One row of spell-slot squares (rounded corners) for a given level.
 
-    Squares are uniformly blue (INDIGO/IND2) — filled = slot available,
-    hollow (outline only) = slot spent. Click a square to toggle it (handy
+    Pips are uniformly blue (INDIGO/IND2), purple for Pact Magic — filled =
+    slot available, hollow (outline only) = slot spent. Click a pip to toggle it (handy
     for manually correcting state); casting a spell fills them in from the
     left automatically via set_used().
     """
@@ -80,14 +80,19 @@ class SlotBar(QWidget):
         self.bubbles = []
         self._color = color or INDIGO   # blue by default; pact magic uses purple
 
-    def _style_square(self, cb: "QCheckBox"):
+    def _style_pip(self, cb: "QCheckBox"):
         accent = IND2 if self._color == INDIGO else (PURP2 if self._color == PURPLE else self._color)
         cb.setStyleSheet(
-            f"QCheckBox::indicator{{width:18px;height:18px;border-radius:3px;"
+            f"QCheckBox::indicator{{width:16px;height:16px;border-radius:5px;"
             f"border:2px solid {self._color};background:{self._color};}}"
             f"QCheckBox::indicator:checked{{background:transparent;border:2px solid {accent};}}"
             f"QCheckBox::indicator:hover{{border-color:{accent};}}"
         )
+
+    def set_label(self, text):
+        self._lbl_w.setText(text)
+        for cb in self.bubbles:
+            cb.setToolTip(f"{text} slot — click to toggle spent/available")
 
     def set_max(self, n):
         self._max = n
@@ -95,7 +100,7 @@ class SlotBar(QWidget):
             cb = QCheckBox()
             cb.setFixedSize(20,20)
             cb.setToolTip(f"{self._lbl_w.text()} slot — click to toggle spent/available")
-            self._style_square(cb)
+            self._style_pip(cb)
             cb.stateChanged.connect(self.changed)
             self._bubble_lay.addWidget(cb); self.bubbles.append(cb)
         while len(self.bubbles) > n:
@@ -104,7 +109,7 @@ class SlotBar(QWidget):
         self.setVisible(n > 0)
         self._update_count()
 
-    # NOTE: checkbox "checked" = SPENT (hollow square); unchecked = available (filled).
+    # NOTE: checkbox "checked" = SPENT (hollow pip); unchecked = available (filled).
     def get_used(self): return sum(1 for b in self.bubbles if b.isChecked())
     def set_used(self, n):
         for i,b in enumerate(self.bubbles):
@@ -118,7 +123,7 @@ class SlotBar(QWidget):
     def _update_count(self):
         used = self.get_used(); rem = self._max - used
         self._count_lbl.setText(f"{rem}/{self._max}")
-        self._count_lbl.setStyleSheet(f"color:{TEAL2 if rem>0 else TEXT3};font-size:{FS_SMALL}px;background:transparent;")
+        self._count_lbl.setStyleSheet(f"color:{TEAL2 if rem>0 else TEXT3};font-size:{FS_SMALL}px;background:transparent;border:none;")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -169,6 +174,9 @@ class SpellsMixin:
             _wlvl = class_levels(self.char).get("Warlock", 0)
             _ps = get_warlock_slots(_wlvl) if _wlvl else {}
             _pact_max = _ps.get("count", 0)
+            # Pact slots are all one level, which changes as Warlock
+            # levels go up -- shown on the row, as on Android
+            self._pact_bar.set_label(f"Level {_ps.get('level', 0)}" if _pact_max else "Pact")
             self._pact_bar.set_max(_pact_max)
             self._pact_bar.set_used(self.char.get("pact_slots_used", 0))
             if hasattr(self, "_pact_card"):
@@ -529,10 +537,19 @@ class SpellsMixin:
         all_classes = self._all_caster_classes()
         class_order = [c.get("class","") for c in self.char.get("classes", [])
                        if c.get("class","") in all_classes]
+        from dnd_app.core.calculator import spell_preparing_classes
+        prepared_set = set(self.char.get("spells_prepared", []))
         spell_to_class = {}
         for name in self.char.get("spells_known", []):
             sp = _gs(name)
             sp_classes = set(sp.get("classes", [])) if sp else set()
+            # a prepared spell is listed under the class preparing it --
+            # a Wizard/Warlock's prepared Charm Person sits with the Wizard
+            # spells, not under Warlock just because Warlock came first
+            preparers = spell_preparing_classes(self.char, sp) if name in prepared_set else []
+            if preparers and preparers[0] in class_order:
+                spell_to_class[name] = preparers[0]
+                continue
             for cn in class_order:
                 cn_bare = cn.split(" (")[0]  # "Fighter (EK)" -> "Fighter" for list matching
                 if cn in sp_classes or cn_bare in sp_classes:
@@ -735,6 +752,14 @@ class SpellsMixin:
         full_dumped = set()
         for names in full_list_dumped_spell_names(self.char).values():
             full_dumped.update(names)
+        # A leveled spell a prepared caster (Wizard/Cleric/...) can prepare
+        # belongs to that class rather than a known-spells pool when it's
+        # actually prepared, or when no known-spells class could have it
+        # at all -- a Wizard/Warlock preparing Charm Person as a Wizard
+        # spell, or keeping Shield in the spellbook, shouldn't use up one
+        # of the Warlock's spells known.
+        from dnd_app.core.calculator import spell_preparing_classes
+        prepared_set = set(self.char.get("spells_prepared", []))
         for name in self.char.get("spells_known", []):
             if name in bonus:
                 continue
@@ -744,6 +769,9 @@ class SpellsMixin:
             if not is_cantrip and name in full_dumped:
                 continue
             sp_classes = set(sp.get("classes", []))
+            if not is_cantrip and spell_preparing_classes(self.char, sp):
+                if name in prepared_set or not any(_real_name(cn) in sp_classes for cn in known_classes):
+                    continue
             pool = all_classes if is_cantrip else known_classes
             eligible = [cn for cn in pool if _real_name(cn) in sp_classes]
             eligible = list(dict.fromkeys(eligible)) or list(pool.keys())
@@ -1209,7 +1237,7 @@ class SpellsMixin:
             name = row.spell.get("name", "").lower()
             cn = self._spell_row_class.get(row, "") if hasattr(self, "_spell_row_class") else ""
             text_match = (q in name) if q else True
-            prep_match = (not prepared_only) or row.is_prepared()
+            prep_match = (not prepared_only) or row.is_ready()
             class_match = (class_f == "All Classes") or (cn == class_f)
             match = text_match and prep_match and class_match
             row.setVisible(match)
@@ -1293,6 +1321,7 @@ class SpellsMixin:
             if name in prepared:
                 prepared.remove(name)
             self._refresh_spell_count_labels()
+            self._regroup_after_prep_change()
             self._mark_dirty()
             return
         if name in prepared:
@@ -1316,7 +1345,19 @@ class SpellsMixin:
                     return
         prepared.append(name)
         self._refresh_spell_count_labels()
+        self._regroup_after_prep_change()
         self._mark_dirty()
+
+    def _regroup_after_prep_change(self):
+        """A shared spell (on both a Wizard's and a Warlock's list, say) is
+        listed under the class preparing it once prepared -- re-group so it
+        moves there straight away. Only repositions rows, so prepared/pin
+        state elsewhere is untouched."""
+        if len(getattr(self, "_class_level_headers", {}) or {}) == 0:
+            return
+        spell_to_class, class_order = self._compute_spell_class_attribution()
+        self._relayout_my_spells_by_class(spell_to_class, class_order)
+        self._filter_my_spells()
 
     def _add_spell_row(self, spell, prepared=False):
         lvl = spell["level"]
@@ -1340,8 +1381,10 @@ class SpellsMixin:
             ins = self._find_hdr_pos(lvl)
             self._my_spells_lay.insertWidget(ins, hdr)
         from dnd_app.ui_desktop.style.immersive_spells import compute_display_spell_title
+        from dnd_app.core.calculator import spell_preparing_classes
         row = SpellRow(spell, prepared, locked=is_bonus,
-                        display_name=compute_display_spell_title(self.char, spell))
+                        display_name=compute_display_spell_title(self.char, spell),
+                        preparable=bool(spell_preparing_classes(self.char, spell)))
         from dnd_app.core.calculator import can_ritual_cast
         row.set_can_ritual(can_ritual_cast(self.char, spell))
         row.remove.connect(self._remove_spell_row)
@@ -1646,7 +1689,7 @@ class SpellsMixin:
         else:
             self._conc_lbl.setText("—")
             self._conc_lbl.setToolTip("")
-            self._conc_lbl.setStyleSheet(f"color:{TEXT2};font-size:{FS_BODY}px;background:transparent;")
+            self._conc_lbl.setStyleSheet(f"color:{TEXT2};font-size:{FS_BODY}px;background:transparent;border:none;")
         if hasattr(self, "_combat_conc_lbl"):
             if spell:
                 self._combat_conc_lbl.setText(f"Concentrating: {spell}")

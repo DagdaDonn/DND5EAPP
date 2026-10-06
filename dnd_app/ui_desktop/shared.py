@@ -51,7 +51,10 @@ def h(text, color=None, size=FS_BODY, bold=False, align=Qt.AlignLeft, wrap=True)
     """Quick label factory."""
     w = QLabel(text)
     c = color or TEXT
-    s = f"color:{c};font-size:{size}px;background:transparent;"
+    # border:none -- QLabel is a QFrame subclass, so without it every label
+    # inside a card picked up the card's own "QFrame{border:...}" rule and
+    # drew a box around itself. A widget's own style beats inherited ones.
+    s = f"color:{c};font-size:{size}px;background:transparent;border:none;"
     if bold: s += "font-weight:700;"
     w.setStyleSheet(s)
     w.setAlignment(align)
@@ -305,10 +308,10 @@ class BigStatBox(QFrame):
         f.setPointSize(20 if len(str(value)) <= 8 else 12)
         self._val_lbl.setFont(f)
         self._val_lbl.setWordWrap(True)
-        self._val_lbl.setStyleSheet(f"color:{self._color};background:transparent;")
+        self._val_lbl.setStyleSheet(f"color:{self._color};background:transparent;border:none;")
         self._ttl_lbl = QLabel(label)
         self._ttl_lbl.setAlignment(Qt.AlignCenter)
-        self._ttl_lbl.setStyleSheet(f"color:{TEXT2};font-size:{FS_SMALL}px;font-weight:700;background:transparent;letter-spacing:1px;")
+        self._ttl_lbl.setStyleSheet(f"color:{TEXT2};font-size:{FS_SMALL}px;font-weight:700;background:transparent;border:none;letter-spacing:1px;")
         lay.addWidget(self._val_lbl); lay.addWidget(self._ttl_lbl)
 
     def set_val(self, v):
@@ -318,7 +321,7 @@ class BigStatBox(QFrame):
         self._val_lbl.setFont(f)
     def set_color(self, c):
         self._color = c
-        self._val_lbl.setStyleSheet(f"color:{c};background:transparent;")
+        self._val_lbl.setStyleSheet(f"color:{c};background:transparent;border:none;")
 
 class AbilityBlock(QFrame):
     """One ability score block: name / score / modifier."""
@@ -442,9 +445,14 @@ class SpellRow(QFrame):
     toggle_quick     = Signal(str, bool)   # (spell_name, pinned)
     prepared_toggled = Signal(object, bool)  # (row, checked)
 
-    def __init__(self, spell, prepared=False, parent=None, locked=False, display_name=None):
+    def __init__(self, spell, prepared=False, parent=None, locked=False, display_name=None,
+                 preparable=True):
         super().__init__(parent)
         self.spell = spell
+        # False when none of the character's classes prepares spells from
+        # this one's list (a Warlock/Sorcerer/Bard/Ranger spell): it's just
+        # known, so there's no Prepared box to show.
+        self._preparable = preparable
         lvl = spell["level"]
         # Built fresh on every row, not a class attribute: a class-level
         # list literal is evaluated exactly once, at class-definition time
@@ -483,9 +491,15 @@ class SpellRow(QFrame):
             self._prep_cb.setToolTip(
                 "Granted outside normal preparation (feat/racial/class bonus spell) — "
                 "always available and doesn't count against your prepared spell limit.")
-        else:
+        elif preparable:
             self._prep_cb.setToolTip("Prepared")
             self._prep_cb.toggled.connect(lambda checked: self.prepared_toggled.emit(self, checked))
+        if not preparable:
+            # hidden but still taking its space, so names line up with
+            # the rows that do have a box
+            keep = self._prep_cb.sizePolicy(); keep.setRetainSizeWhenHidden(True)
+            self._prep_cb.setSizePolicy(keep)
+            self._prep_cb.setVisible(False)
         lay.addWidget(self._prep_cb)
 
         # Spell info
@@ -571,7 +585,9 @@ class SpellRow(QFrame):
 
     def is_prepared(self): return self._prep_cb.isChecked()
     def set_prepared(self, v): self._prep_cb.setChecked(v)
-    def is_prepared(self): return self._prep_cb.isChecked()
+    def is_ready(self):
+        """Castable without preparing: prepared, or never needs preparing."""
+        return self._prep_cb.isChecked() or not self._preparable
     def set_can_ritual(self, v): self._can_ritual = bool(v)
 
     def contextMenuEvent(self, event):

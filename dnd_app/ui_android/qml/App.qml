@@ -55,6 +55,7 @@ ApplicationWindow {
     // its own bridge, rather than a bare reference to an outer id's
     // property.
     property var pendingSpellDetail: ({})
+    property var pendingItemDetail: ({})
     property var pendingDmRewardDetail: ({})
     property var pendingFeatDetail: ({})
 
@@ -80,27 +81,58 @@ ApplicationWindow {
     // compiles without error but the pushed page silently never
     // renders any content bound to a context property (confirmed by
     // testing both paths side by side; a Component reference or a
-    // direct type instantiation both work correctly). Every screen
-    // this drawer can navigate to needs its own named Component here
-    // for that reason. Only "Race" is real today -- the rest are
-    // placeholders so the nav shape (and the drawer itself) doesn't
-    // need rebuilding as each one comes online.
-    Component { id: startMenuComp; StartMenuScreen {} }
-    Component { id: raceListComp; RaceListScreen {} }
-    Component { id: abilitiesComp; AbilitiesScreen {} }
-    Component { id: classComp; ClassScreen {} }
-    Component { id: equipmentComp; EquipmentScreen {} }
-    Component { id: sheetComp; SheetCombatScreen {} }
-    Component { id: sheetActionsComp; SheetActionsScreen {} }
-    Component { id: sheetAbilitiesComp; SheetAbilitiesScreen {} }
-    Component { id: sheetProficienciesComp; SheetProficienciesScreen {} }
-    Component { id: sheetSpellsComp; SheetSpellsScreen {} }
-    Component { id: sheetEquipmentComp; SheetEquipmentScreen {} }
-    Component { id: sheetCompanionsComp; SheetCompanionsScreen {} }
-    Component { id: sheetFeaturesComp; SheetFeaturesScreen {} }
-    Component { id: sheetInfusionsComp; SheetInfusionsScreen {} }
-    Component { id: sheetChoicesComp; SheetChoicesScreen {} }
-    Component { id: sheetNotesComp; SheetNotesScreen {} }
+    // direct type instantiation both work correctly).
+    //
+    // Screens are named by file here and only compiled the first time
+    // they're opened (screenComp() below), not all ~11k lines of them
+    // before the Start Menu can appear -- the single biggest part of
+    // startup. screenComp() still hands StackView a real Component (made
+    // with Qt.createComponent and cached), never a bare URL string, for
+    // the reason above. Once the Start Menu is up, preloadScreens()
+    // compiles the rest in the background so first visits stay quick.
+    readonly property string startMenuComp: "StartMenuScreen.qml"
+    readonly property string raceListComp: "RaceListScreen.qml"
+    readonly property string abilitiesComp: "AbilitiesScreen.qml"
+    readonly property string classComp: "ClassScreen.qml"
+    readonly property string equipmentComp: "EquipmentScreen.qml"
+    readonly property string sheetComp: "SheetCombatScreen.qml"
+    readonly property string sheetActionsComp: "SheetActionsScreen.qml"
+    readonly property string sheetAbilitiesComp: "SheetAbilitiesScreen.qml"
+    readonly property string sheetProficienciesComp: "SheetProficienciesScreen.qml"
+    readonly property string sheetSpellsComp: "SheetSpellsScreen.qml"
+    readonly property string sheetEquipmentComp: "SheetEquipmentScreen.qml"
+    readonly property string sheetCompanionsComp: "SheetCompanionsScreen.qml"
+    readonly property string sheetFeaturesComp: "SheetFeaturesScreen.qml"
+    readonly property string sheetInfusionsComp: "SheetInfusionsScreen.qml"
+    readonly property string sheetChoicesComp: "SheetChoicesScreen.qml"
+    readonly property string sheetNotesComp: "SheetNotesScreen.qml"
+
+    property var _screenCache: ({})
+    function screenComp(file) {
+        if (typeof file !== "string")
+            return file
+        var c = _screenCache[file]
+        // a background preload still in progress is replaced by a
+        // synchronous load (which just finishes the same compile)
+        if (!c || c.status !== Component.Ready) {
+            c = Qt.createComponent(Qt.resolvedUrl(file))
+            if (c.status === Component.Error)
+                console.warn("[MIMIC] " + file + ": " + c.errorString())
+            _screenCache[file] = c
+        }
+        return c
+    }
+    function preloadScreens() {
+        var files = [sheetComp, raceListComp, abilitiesComp, classComp, equipmentComp,
+                     sheetActionsComp, sheetSpellsComp, sheetEquipmentComp, sheetAbilitiesComp,
+                     sheetProficienciesComp, sheetFeaturesComp, sheetChoicesComp, sheetNotesComp,
+                     sheetCompanionsComp, sheetInfusionsComp]
+        for (var i = 0; i < files.length; ++i) {
+            if (!_screenCache[files[i]])
+                _screenCache[files[i]] = Qt.createComponent(Qt.resolvedUrl(files[i]), Component.Asynchronous)
+        }
+    }
+    Timer { interval: 400; running: true; onTriggered: window.preloadScreens() }
 
     // The drawer shows a different step list depending on whether the
     // current character is still being built or already finished --
@@ -159,7 +191,9 @@ ApplicationWindow {
         ).concat([
             { label: "Choices", screen: sheetChoicesComp, enabled: true,
               pulse: window.choicesPending },
-            { label: "Notes", screen: sheetNotesComp, enabled: true },
+            { label: "Notes", screen: sheetNotesComp, enabled: true,
+              sections: ["Personality", "Appearance", "Backstory"].concat(
+                  sheetBridge !== null ? sheetBridge.notesPages.map(p => p.title) : []) },
         ])
     readonly property var navItems: sheetMode ? sheetNavItems : wizardNavItems
 
@@ -185,7 +219,7 @@ ApplicationWindow {
         // the app's own remembered default -- same reasoning as
         // ui_desktop's _go_menu().
         Theme.applyTheme(appSettingsBridge.theme)
-        stackView.replace(startMenuComp)
+        stackView.replace(screenComp(startMenuComp))
         drawer.close()
     }
 
@@ -223,7 +257,7 @@ ApplicationWindow {
         classBridge.refresh()
         equipmentBridge.refresh()
         sheetBridge.refresh()
-        stackView.replace(raceListComp)
+        stackView.replace(screenComp(raceListComp))
     }
     function loadCharacterIntoSheet(filepath) {
         // A saved character is already complete (confirmRace()/
@@ -241,7 +275,7 @@ ApplicationWindow {
             Theme.applyTheme(sheetBridge.theme)
             Theme.applyFontScale(sheetBridge.fontScale)
             characterActive = true
-            stackView.replace(sheetComp)
+            stackView.replace(screenComp(sheetComp))
         }
     }
     function finishCharacterCreation() {
@@ -256,7 +290,7 @@ ApplicationWindow {
             Theme.applyTheme(sheetBridge.theme)
             Theme.applyFontScale(sheetBridge.fontScale)
             characterActive = true
-            stackView.replace(sheetComp)
+            stackView.replace(screenComp(sheetComp))
             saveLoadBridge.autoSave()      // a new character is saved straight away
             return true
         }
@@ -268,9 +302,9 @@ ApplicationWindow {
     // rather than popping back to a list or just sitting still. Named
     // per-destination (instead of one generic "advance" helper) so
     // each screen states in plain text which step it's headed to.
-    function advanceToAbilities() { stackView.replace(abilitiesComp) }
-    function advanceToClass() { stackView.replace(classComp) }
-    function advanceToEquipment() { stackView.replace(equipmentComp) }
+    function advanceToAbilities() { stackView.replace(screenComp(abilitiesComp)) }
+    function advanceToClass() { stackView.replace(screenComp(classComp)) }
+    function advanceToEquipment() { stackView.replace(screenComp(equipmentComp)) }
     // App-level destinations, not character-creation steps -- each
     // opens as a full-page modal dialog (see the MFullPageDialog
     // instances below) on top of whatever step screen is showing,
@@ -350,25 +384,25 @@ ApplicationWindow {
         id: settingsDialog
         objectName: "settingsDialog"
         dialogTitle: "Settings"
-        SettingsScreen {}
+        contentSource: Qt.resolvedUrl("SettingsScreen.qml")
     }
     MFullPageDialog {
         id: saveLoadDialog
         objectName: "saveLoadDialog"
         dialogTitle: "Save & Export"
-        SaveLoadScreen {}
+        contentSource: Qt.resolvedUrl("SaveLoadScreen.qml")
     }
     MFullPageDialog {
         id: diceRollerDialog
         objectName: "diceRollerDialog"
         dialogTitle: "Dice Roller"
-        DiceRollerScreen {}
+        contentSource: Qt.resolvedUrl("DiceRollerScreen.qml")
     }
     MFullPageDialog {
         id: creditsDialog
         objectName: "creditsDialog"
         dialogTitle: "Credits"
-        CreditsScreen {}
+        contentSource: Qt.resolvedUrl("CreditsScreen.qml")
     }
 
     RestFlowDialog { id: restFlowDialog; sheetBridge: window.sheetBridge }
@@ -443,14 +477,14 @@ ApplicationWindow {
         utilityItems: window.utilityNavItems
         onItemSelected: (screen) => {
             if (screen) {
-                stackView.replace(screen)
+                stackView.replace(screenComp(screen))
             }
             drawer.close()
         }
         onSectionSelected: (screen, sectionName) => {
             window.pendingScrollSection = sectionName
             if (screen) {
-                stackView.replace(screen)
+                stackView.replace(screenComp(screen))
             }
             drawer.close()
         }
@@ -459,7 +493,7 @@ ApplicationWindow {
     StackView {
         id: stackView
         anchors.fill: parent
-        initialItem: startMenuComp
+        initialItem: screenComp(startMenuComp)
     }
 
     // Consumes pendingScrollSection once the page StackView just

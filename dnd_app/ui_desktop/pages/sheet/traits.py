@@ -181,7 +181,9 @@ class TraitsNotesMixin:
         ed.setPlainText(text)
         ed._page_title = title
         ed.textChanged.connect(self._sync_notes_pages_to_char)
-        self._notes_tabs.addTab(ed, title)
+        # "&&": a lone "&" in a tab title is a keyboard-shortcut marker to
+        # Qt, so "Loot & Treasure" showed as "Loot _Treasure"
+        self._notes_tabs.addTab(ed, title.replace("&", "&&"))
         return ed
 
     def _sync_notes_pages_to_char(self) -> None:
@@ -237,7 +239,7 @@ class TraitsNotesMixin:
         if not ok or not title or title == old_title:
             return
         ed._page_title = title
-        self._notes_tabs.setTabText(index, title)
+        self._notes_tabs.setTabText(index, title.replace("&", "&&"))
         self._sync_notes_pages_to_char()
 
     # ════════════════════════════════════════════════════════════

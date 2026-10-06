@@ -44,6 +44,16 @@ def get_race_asi(race_name: str) -> dict:
     race = RACE_DICT.get(race_name, {})
     return dict(race.get("asi", {}))
 
+
+def race_requires_subrace(race_name: str) -> bool:
+    """True for races whose ability score bonus comes entirely from the
+    subrace (Elf, Gnome, Halfling, Shifter, ...): with no subrace picked
+    they'd silently get no racial bonus at all, so both wizards insist
+    on one."""
+    from dnd_app.data.phb2014.races import RACE_DICT
+    race = RACE_DICT.get(race_name, {})
+    return bool(race.get("subraces")) and not race.get("asi")
+
 def get_race_skills(race_name: str) -> list:
     """Return skill proficiencies granted automatically by race."""
     return list(RACE_SKILL_GRANTS.get(race_name, []))

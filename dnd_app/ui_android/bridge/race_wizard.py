@@ -8,7 +8,7 @@ from PySide6.QtCore import QObject, QAbstractListModel, QModelIndex, Qt, Signal,
 from dnd_app.data.phb2014.races import (
     RACE_NAMES, RACE_DICT, DRACONIC_ANCESTRY, ANCESTRY_BY_SUBRACE, flex_asi_desc,
 )
-from dnd_app.core.builder import rebuild
+from dnd_app.core.builder import rebuild, race_requires_subrace
 
 ELADRIN_SEASONS = [
     ("Autumn", "charm one creature within 5 ft of your destination"),
@@ -210,7 +210,7 @@ class RaceWizardBridge(QObject):
     def subraceNames(self):
         """'(None)' first, then each subrace's clean display name --
         matches the desktop combo box's contents/order."""
-        names = ["(None)"]
+        names = ["(Choose a subrace)" if self.subraceRequired else "(None)"]
         for s in self._rdata().get("subraces", []):
             names.append(s.split("(")[0].strip())
         return names
@@ -239,9 +239,22 @@ class RaceWizardBridge(QObject):
         return self._selected_race == "Simic Hybrid"
 
     # ── Commit into the character dict (mirrors Step1Race.collect()) ──
+    @Property(bool, notify=raceDetailChanged)
+    def subraceRequired(self):
+        return bool(self._selected_race) and race_requires_subrace(self._selected_race)
+
+    @Property(str, notify=raceDetailChanged)
+    def confirmBlockReason(self):
+        if not self._selected_race:
+            return "Choose a race first."
+        if self.subraceRequired and not self._selected_subrace:
+            return (f"Choose a subrace -- {'an' if self._selected_race[:1] in 'AEIOU' else 'a'} {self._selected_race}'s ability score "
+                    f"bonus comes from its subrace.")
+        return ""
+
     @Slot(result=bool)
     def confirmRace(self) -> bool:
-        if not self._selected_race:
+        if self.confirmBlockReason:
             return False
         char = self.char
         char["race"] = self._selected_race

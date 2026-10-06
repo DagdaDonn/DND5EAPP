@@ -56,7 +56,9 @@ class StartMenu(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         from dnd_app.ui_desktop.style.theme import sync_globals as _sg; _sg(globals())
-        root = QVBoxLayout(self); root.setContentsMargins(0,0,0,0)
+        # no gap between the header and the saved list -- it showed the bare
+        # window background as a bright stripe
+        root = QVBoxLayout(self); root.setContentsMargins(0,0,0,0); root.setSpacing(0)
 
         hero = QFrame(); hero.setStyleSheet(f"QFrame{{background:{SURF};}}")
         hl = QVBoxLayout(hero); hl.setContentsMargins(60,60,60,40); hl.setSpacing(16)
@@ -65,7 +67,7 @@ class StartMenu(QWidget):
         title = QLabel("MIMIC")
         tf = QFont(); tf.setBold(True); tf.setPointSize(28)
         title.setFont(tf); title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet(f"color:{GOLD2};background:transparent;")
+        title.setStyleSheet(f"color:{GOLD2};background:transparent;border:none;")
         hl.addWidget(_icons.icon_header("combat", title, size=40, spacing=14, center=True))
         hl.addWidget(_lbl("A D&D 5e Character Creator", GOLD, FS_BODY, bold=True, align=Qt.AlignCenter))
         hl.addWidget(_lbl("Build, track, and play your character from creation to legend.", TEXT2, FS_BODY+2, align=Qt.AlignCenter))
@@ -738,7 +740,7 @@ class CharacterCreatorApp(QMainWindow):
         if not hasattr(self, "_cheese_lbl"):
             self._cheese_lbl = QLabel(self)
             self._cheese_lbl.setPixmap(_icons.cheese_pixmap(3))
-            self._cheese_lbl.setStyleSheet("background:transparent;")
+            self._cheese_lbl.setStyleSheet("background:transparent;border:none;")
             self._cheese_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
             self._cheese_timer = QTimer(self)
             self._cheese_timer.setSingleShot(True)

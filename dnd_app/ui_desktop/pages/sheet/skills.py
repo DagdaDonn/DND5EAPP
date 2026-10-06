@@ -140,7 +140,7 @@ class SkillsMixin:
             _icons.set_button_icon(roll_btn, "dice", 14)
             roll_btn.clicked.connect(
                 lambda checked=False, sk=skill_name, b=bonus:
-                    self._quick_roll_toast(f"{sk} check", b))
+                    self._quick_roll_toast(f"{sk} check", b, "check"))
 
             rl.addWidget(sym_l); rl.addWidget(val_l); rl.addWidget(name_l); rl.addWidget(ab_l)
             rl.addWidget(roll_btn)
@@ -177,7 +177,7 @@ class SkillsMixin:
         # fixed column count instead of dynamically by pixel width, an
         # acceptable trade-off since tool names are short and this list
         # rarely exceeds a handful of entries.
-        self._tool_prof_frame = QWidget(); self._tool_prof_frame.setStyleSheet("QWidget{background:transparent;}")
+        self._tool_prof_frame = QWidget(); self._tool_prof_frame.setStyleSheet("QWidget{background:transparent;border:none;}")
         self._tool_prof_lay = QGridLayout(self._tool_prof_frame)
         self._tool_prof_lay.setSpacing(4); self._tool_prof_lay.setContentsMargins(0,0,0,0)
         tcl.addWidget(self._tool_prof_frame)
@@ -247,8 +247,8 @@ class SkillsMixin:
             sym = {0:"—",1:"½",2:"◆",3:"◈"}.get(_disp,"—")
             sym_color = {0:TEXT3,1:IND2,2:INDIGO,3:PURP2}.get(_disp,TEXT3)
             val_color = TEAL2 if bonus>0 else (CRIM2 if bonus<0 else TEXT2)
-            sym_l.setText(sym); sym_l.setStyleSheet(f"color:{sym_color};font-size:{FS_BODY}px;font-weight:700;background:transparent;")
-            val_l.setText(sign(bonus)); val_l.setStyleSheet(f"color:{val_color};font-size:{FS_LABEL}px;font-weight:700;background:transparent;")
+            sym_l.setText(sym); sym_l.setStyleSheet(f"color:{sym_color};font-size:{FS_BODY}px;font-weight:700;background:transparent;border:none;")
+            val_l.setText(sign(bonus)); val_l.setStyleSheet(f"color:{val_color};font-size:{FS_LABEL}px;font-weight:700;background:transparent;border:none;")
             row_f.setStyleSheet(f"QFrame{{background:{SURF2 if prof>0 else SURF};border:1px solid {BORDER2 if prof>0 else BORDER};border-radius:7px;}}")
 
             # Advantage / disadvantage badge, with a tooltip explaining why

@@ -57,7 +57,7 @@ Page {
                 }
             }
             Label {
-                text: "Tap the proficiency marker to cycle it (○ None / ◐ Half / ● Proficient / ★ Expertise); tap the rest of the row to roll a check."
+                text: "Tap a skill to roll it. Press and hold its marker to change the proficiency level (○ None / ◐ Half / ● Proficient / ★ Expertise)."
                 color: Theme.text3
                 font.pixelSize: Theme.fsSmall
                 wrapMode: Text.WordWrap
@@ -103,9 +103,19 @@ Page {
                                         color: modelData.expertise ? Theme.gold2 : (modelData.proficient ? Theme.teal2 : Theme.text3)
                                         font.pixelSize: Theme.fsBody
                                     }
+                                    // Press and hold to change the level -- a tap was too easy
+                                    // to hit by accident while scrolling. A tap rolls the check,
+                                    // like the rest of the row.
                                     MouseArea {
                                         anchors.fill: parent
-                                        onClicked: sheetBridge.setSkillProficiency(skillRow.skillName, (skillRow.currentLevel + 1) % 4)
+                                        pressAndHoldInterval: 450
+                                        onClicked: sheetBridge.rollQuickCheck(skillRow.skillName, skillRow.skillBonus)
+                                        onPressAndHold: {
+                                            var next = (skillRow.currentLevel + 1) % 4
+                                            sheetBridge.setSkillProficiency(skillRow.skillName, next)
+                                            Window.window.showToast(skillRow.skillName + ": "
+                                                + ["not proficient", "half proficiency", "proficient", "expertise"][next])
+                                        }
                                     }
                                 }
                                 Label {

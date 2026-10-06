@@ -206,7 +206,7 @@ def icon_header(name: str, text_label, size: int = 15, spacing: int = 6, center:
     emoji. Left-aligned unless `center`. Returns a QWidget."""
     from PySide6.QtWidgets import QHBoxLayout, QWidget
     w = QWidget()
-    w.setStyleSheet("background:transparent;")
+    w.setStyleSheet("background:transparent;border:none;")
     row = QHBoxLayout(w)
     row.setContentsMargins(0, 0, 0, 0)
     row.setSpacing(spacing)

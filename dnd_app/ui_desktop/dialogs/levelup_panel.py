@@ -218,7 +218,7 @@ class ChoiceWidget(QFrame):
         
         scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setMinimumHeight(100)
         scroll.setStyleSheet(f"QScrollArea{{background:transparent;border:1px solid {BORDER};border-radius:4px;}}")
-        inner = QWidget(); inner.setStyleSheet("background:transparent;")
+        inner = QWidget(); inner.setStyleSheet("background:transparent;border:none;")
         grid = QGridLayout(inner); grid.setSpacing(2); grid.setContentsMargins(4,4,4,4)
         self._skill_cbs = {}
 
@@ -261,7 +261,7 @@ class ChoiceWidget(QFrame):
 
         scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setMinimumHeight(140)
         scroll.setStyleSheet(f"QScrollArea{{background:transparent;border:1px solid {BORDER};border-radius:4px;}}")
-        inner = QWidget(); inner.setStyleSheet("background:transparent;")
+        inner = QWidget(); inner.setStyleSheet("background:transparent;border:none;")
         grid = QGridLayout(inner); grid.setSpacing(2); grid.setContentsMargins(4,4,4,4)
         self._tool_cbs = {}
 
@@ -363,7 +363,7 @@ class ChoiceWidget(QFrame):
         self._asi_type.addItems(["+2 to one ability", "+1 to two abilities", "Take a Feat"])
         self._lay.addWidget(self._asi_type)
 
-        self._asi_frame = QWidget(); self._asi_frame.setStyleSheet("background:transparent;")
+        self._asi_frame = QWidget(); self._asi_frame.setStyleSheet("background:transparent;border:none;")
         asf = QGridLayout(self._asi_frame)
         asf.setSpacing(4); asf.setContentsMargins(0,0,0,0)
         self._asi_spins = {}; self._asi_mod_lbls = {}
@@ -377,7 +377,7 @@ class ChoiceWidget(QFrame):
             sign = "+" if cur_mod >= 0 else ""
             mod_lbl = QLabel(f"{cur_score}\n({sign}{cur_mod})")
             mod_lbl.setAlignment(Qt.AlignCenter)
-            mod_lbl.setStyleSheet(f"color:{TEXT2};font-size:{FS_SMALL}px;font-weight:600;background:transparent;")
+            mod_lbl.setStyleSheet(f"color:{TEXT2};font-size:{FS_SMALL}px;font-weight:600;background:transparent;border:none;")
             self._asi_mod_lbls[ab] = mod_lbl
             asf.addWidget(mod_lbl, 1, col_i)
 
@@ -411,7 +411,7 @@ class ChoiceWidget(QFrame):
                 f"QPushButton:hover{{background:{qa(TEAL,0x55)};color:{TEAL2};}}"
                 f"QPushButton:pressed{{background:{TEAL};color:white;}}")
 
-            ctrl_w = QWidget(); ctrl_w.setStyleSheet("background:transparent;")
+            ctrl_w = QWidget(); ctrl_w.setStyleSheet("background:transparent;border:none;")
             ctrl_lay = QHBoxLayout(ctrl_w)
             ctrl_lay.setContentsMargins(0,0,0,0); ctrl_lay.setSpacing(2)
             ctrl_lay.addWidget(minus); ctrl_lay.addWidget(val_lbl); ctrl_lay.addWidget(plus)
@@ -442,7 +442,7 @@ class ChoiceWidget(QFrame):
         self._lay.addWidget(self._asi_frame)
 
         # Feat chooser frame — searchable list
-        self._feat_frame = QWidget(); self._feat_frame.setStyleSheet("background:transparent;")
+        self._feat_frame = QWidget(); self._feat_frame.setStyleSheet("background:transparent;border:none;")
         ff = QVBoxLayout(self._feat_frame); ff.setSpacing(4); ff.setContentsMargins(0,0,0,0)
         feat_hdr = QHBoxLayout()
         feat_hdr.addWidget(_lbl("Choose Feat:", TEXT2, size=FS_BODY, bold=True, wrap=False))
@@ -493,7 +493,7 @@ class ChoiceWidget(QFrame):
 
         # Points remaining label
         self._asi_total = _lbl("Points: 0/2", TEXT2, size=FS_SMALL, bold=True)
-        self._asi_total.setStyleSheet(f"color:{TEXT2};font-size:{FS_SMALL}px;font-weight:700;background:transparent;")
+        self._asi_total.setStyleSheet(f"color:{TEXT2};font-size:{FS_SMALL}px;font-weight:700;background:transparent;border:none;")
         self._lay.addWidget(self._asi_total)
 
         self._asi_type.currentTextChanged.connect(self._on_asi_type)
@@ -619,7 +619,7 @@ class ChoiceWidget(QFrame):
                                  f"background:{SURF2};border:2px solid {BORDER2};border-radius:4px;")
         self._selected = []
         self._asi_total.setText("Points: 0/2")
-        self._asi_total.setStyleSheet(f"color:{TEXT2};font-size:{FS_SMALL}px;font-weight:700;background:transparent;")
+        self._asi_total.setStyleSheet(f"color:{TEXT2};font-size:{FS_SMALL}px;font-weight:700;background:transparent;border:none;")
         # Reset modifier labels to base scores
         from dnd_app.core.character import ability_score as _as, ability_mod as _am
         if hasattr(self, "_asi_mod_lbls") and self.char:
@@ -627,7 +627,7 @@ class ChoiceWidget(QFrame):
                 sc = _as(self.char, ab); md = _am(self.char, ab)
                 sign = "+" if md >= 0 else ""
                 mod_lbl.setText(f"{sc}\n({sign}{md})")
-                mod_lbl.setStyleSheet(f"color:{TEXT2};font-size:{FS_SMALL}px;font-weight:600;background:transparent;")
+                mod_lbl.setStyleSheet(f"color:{TEXT2};font-size:{FS_SMALL}px;font-weight:600;background:transparent;border:none;")
 
     def _on_asi_spin(self):
         # Legacy signal from hidden QSpinBox — delegate to manual handler
@@ -655,7 +655,7 @@ class ChoiceWidget(QFrame):
         # Update total label
         color = TEAL2 if total <= max_pts else CRIM2
         self._asi_total.setText(f"Points: {total}/{max_pts}")
-        self._asi_total.setStyleSheet(f"color:{color};font-size:{FS_SMALL}px;font-weight:700;background:transparent;")
+        self._asi_total.setStyleSheet(f"color:{color};font-size:{FS_SMALL}px;font-weight:700;background:transparent;border:none;")
         # Update EVERY ability modifier preview label LIVE
         if hasattr(self, "_asi_mod_lbls") and self.char:
             for ab, mod_lbl in self._asi_mod_lbls.items():
@@ -667,7 +667,7 @@ class ChoiceWidget(QFrame):
                 mod_lbl.setText(f"{new_score}\n({sign}{new_mod})")
                 fg = TEAL2 if bonus > 0 else (TEXT2 if new_mod >= 0 else CRIM2)
                 fw = 700 if bonus > 0 else 600
-                mod_lbl.setStyleSheet(f"color:{fg};font-size:{FS_SMALL}px;font-weight:{fw};background:transparent;")
+                mod_lbl.setStyleSheet(f"color:{fg};font-size:{FS_SMALL}px;font-weight:{fw};background:transparent;border:none;")
         # Store selection
         vals = {ab: sp.value() for ab, sp in self._asi_spins.items() if sp.value() > 0}
         self._selected = [f"asi:{ab}:{v}" for ab, v in vals.items()]
@@ -1050,7 +1050,7 @@ class GrantsSummaryWidget(QFrame):
             return
 
         for source, desc, color in rows:
-            row_frame = QFrame(); row_frame.setStyleSheet("background:transparent;")
+            row_frame = QFrame(); row_frame.setStyleSheet("background:transparent;border:none;")
             rl = QHBoxLayout(row_frame); rl.setContentsMargins(0,0,0,0); rl.setSpacing(8)
             badge = _lbl(source, "white", bold=True, size=FS_TINY, align=Qt.AlignCenter, wrap=False)
             badge.setFixedHeight(16)
@@ -1243,23 +1243,23 @@ class LevelUpPanel(QWidget):
                 for fname in fl:
                     row = QHBoxLayout(); row.setSpacing(6); row.setContentsMargins(8,1,4,1)
                     badge = QLabel(f"L{lvl}"); badge.setFixedWidth(26)
-                    badge.setStyleSheet(f"color:{qa(color,0x55)};font-size:{FS_TINY}px;font-weight:700;background:transparent;")
+                    badge.setStyleSheet(f"color:{qa(color,0x55)};font-size:{FS_TINY}px;font-weight:700;background:transparent;border:none;")
                     badge.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
                     lbl = QLabel(f"▸ {resolve_stat_placeholders(fname, self.char)}")
                     lbl.setWordWrap(True)
-                    lbl.setStyleSheet(f"color:{TEXT2};font-size:{FS_SMALL}px;background:transparent;")
+                    lbl.setStyleSheet(f"color:{TEXT2};font-size:{FS_SMALL}px;background:transparent;border:none;")
                     row.addWidget(badge); row.addWidget(lbl, 1)
-                    w = QWidget(); w.setStyleSheet("background:transparent;"); w.setLayout(row)
+                    w = QWidget(); w.setStyleSheet("background:transparent;border:none;"); w.setLayout(row)
                     self._features_lay.addWidget(w)
                 for ch in cl:
                     row = QHBoxLayout(); row.setSpacing(6); row.setContentsMargins(8,1,4,1)
                     badge = QLabel(f"L{lvl}"); badge.setFixedWidth(26)
-                    badge.setStyleSheet(f"color:{qa(AMBE2,0x55)};font-size:{FS_TINY}px;font-weight:700;background:transparent;")
+                    badge.setStyleSheet(f"color:{qa(AMBE2,0x55)};font-size:{FS_TINY}px;font-weight:700;background:transparent;border:none;")
                     badge.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
                     lbl = QLabel(ch); lbl.setWordWrap(True)
-                    lbl.setStyleSheet(f"color:{AMBE2};font-size:{FS_SMALL}px;background:transparent;")
+                    lbl.setStyleSheet(f"color:{AMBE2};font-size:{FS_SMALL}px;background:transparent;border:none;")
                     row.addWidget(badge); row.addWidget(_icons.icon_label("choices", 12)); row.addWidget(lbl, 1)
-                    w = QWidget(); w.setStyleSheet("background:transparent;"); w.setLayout(row)
+                    w = QWidget(); w.setStyleSheet("background:transparent;border:none;"); w.setLayout(row)
                     self._features_lay.addWidget(w)
 
     def refresh(self, char=None):

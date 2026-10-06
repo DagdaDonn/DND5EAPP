@@ -179,6 +179,30 @@ def get_max_active_infusions(char: dict) -> int:
     return known // 2
 
 
+PREPARED_CASTER_CLASSES = ("Wizard", "Cleric", "Druid", "Paladin", "Artificer")
+
+
+def spell_preparing_classes(char: dict, spell: dict) -> list:
+    """The character's own prepared-caster classes (Wizard, Cleric, Druid,
+    Paladin, Artificer) that could prepare this spell -- its class list
+    includes it, or a racial Mark adds it. Empty means nothing prepares
+    it: a Warlock/Sorcerer/Bard/Ranger spell (or an Eldritch Knight's or
+    Arcane Trickster's) is simply known, so the sheet shows no Prepared
+    box for it. A spell on both a Wizard's and a Warlock's list stays
+    preparable as a Wizard spell, whichever class it's listed under."""
+    from dnd_app.data.phbCommon.spells import get_mark_expanded_spells
+    if not spell:
+        return []
+    mine = [c.get("class", "") for c in char.get("classes", [])
+            if c.get("level", 0) > 0 and c.get("class", "") in PREPARED_CASTER_CLASSES]
+    if not mine:
+        return []
+    sp_classes = set(spell.get("classes", []))
+    if spell.get("name") in get_mark_expanded_spells(char):
+        return mine
+    return [c for c in mine if c in sp_classes]
+
+
 def can_ritual_cast(char: dict, spell: dict) -> bool:
     """Whether the character can cast this spell as a ritual (no slot
     expended, +10 min casting time) per the real 5e rules.
@@ -247,7 +271,7 @@ def get_initiative_advantage_status(char: dict) -> dict:
     dis_sources = []
     if char.get("exhaustion", 0) >= 1:
         dis_sources.append("Exhaustion (level 1+)")
-    active_conds = set(char.get("conditions", []))
+    active_conds = effective_conditions(char)
     for cond in ("Frightened", "Poisoned"):
         if cond in active_conds:
             dis_sources.append(cond)
@@ -736,7 +760,9 @@ def get_speed_breakdown(char: dict) -> list[tuple[str, str]]:
         parts.append(("Exhaustion (5+)", "speed = 0"))
     elif exh >= 2:
         parts.append(("Exhaustion (2+)", "\u00d70.5 (rounded down)"))
-    active_conditions = set(char.get("conditions", []))
+    active_conditions = effective_conditions(char)
+    if "Prone" in active_conditions:
+        parts.append(("Prone (crawling)", "\u00d70.5 (rounded down)"))
     lock_sources = active_conditions & {
         "Grappled", "Restrained", "Paralyzed", "Petrified", "Stunned", "Surprised", "Unconscious",
     }
@@ -768,6 +794,102 @@ def get_spell_attack_breakdown(char: dict, ability: str) -> list[tuple[str, int]
     return parts
 
 
+# ── Conditions that include others ──────────────────────────────────────
+# PHB p.290-292: Paralyzed, Petrified, Stunned and Unconscious each make
+# the creature incapacitated, and an unconscious creature also falls
+# prone. effective_conditions() adds these so every rule below sees them
+# without the player having to tick Incapacitated/Prone by hand.
+INCAPACITATING = ("Paralyzed", "Petrified", "Stunned", "Unconscious")
+
+
+def effective_conditions(char: dict) -> set:
+    active = set(char.get("conditions", []))
+    if active & set(INCAPACITATING):
+        active.add("Incapacitated")
+    if "Unconscious" in active:
+        active.add("Prone")
+    return active
+
+
+def implied_conditions(char: dict) -> dict:
+    """{implied condition: the condition(s) causing it} -- for showing
+    "Incapacitated (from Stunned)" without ticking it."""
+    active = set(char.get("conditions", []))
+    out = {}
+    causes = [c for c in INCAPACITATING if c in active]
+    if causes and "Incapacitated" not in active:
+        out["Incapacitated"] = causes
+    if "Unconscious" in active and "Prone" not in active:
+        out["Prone"] = ["Unconscious"]
+    return out
+
+
+def get_turn_blocks(char: dict) -> dict:
+    """{"Action"/"Bonus Action"/"Reaction": reason} for each part of the
+    turn the character currently can't use. Incapacitated (or anything
+    that includes it): no actions or reactions at all, and with no
+    actions there's no bonus action either. Surprised: no action, bonus
+    action or reaction until the end of its first turn (PHB p.189)."""
+    active = effective_conditions(char)
+    if "Incapacitated" in active:
+        cause = next((c for c in INCAPACITATING if c in active), "Incapacitated")
+        why = f"{cause} -- incapacitated, no actions or reactions"
+        return {b: why for b in ("Action", "Bonus Action", "Reaction")}
+    if "Surprised" in active:
+        why = "Surprised -- nothing this turn; ends when your first turn does"
+        return {b: why for b in ("Action", "Bonus Action", "Reaction")}
+    return {}
+
+
+def get_condition_check_status(char: dict, ability: str = "") -> dict:
+    """Ability checks (skills included): disadvantage from exhaustion 1+,
+    Frightened and Poisoned -- the same sources the skill list already
+    marks. Returns {'disadvantage': bool, 'sources': [str]}."""
+    active = effective_conditions(char)
+    src = []
+    if char.get("exhaustion", 0) >= 1:
+        src.append("Exhaustion (1+)")
+    src += [c for c in ("Frightened", "Poisoned") if c in active]
+    return {"disadvantage": bool(src), "sources": src}
+
+
+def condition_roll_mode(char: dict, kind: str, ability: str = "") -> dict:
+    """How a d20 roll of `kind` ("attack", "save", "check") should be
+    rolled right now: {'mode': 'normal'|'advantage'|'disadvantage'|
+    'auto_fail', 'sources': [str]}. Both apps' roll buttons use this, so
+    conditions change the dice rather than only a label."""
+    if kind == "attack":
+        st = get_condition_attack_status(char)
+        mode = "advantage" if st["advantage"] else "disadvantage" if st["disadvantage"] else "normal"
+        return {"mode": mode, "sources": st["sources"]}
+    if kind == "save":
+        st = get_condition_save_status(char, ability)
+        mode = "auto_fail" if st["auto_fail"] else "disadvantage" if st["disadvantage"] else "normal"
+        return {"mode": mode, "sources": st["sources"]}
+    st = get_condition_check_status(char, ability)
+    return {"mode": "disadvantage" if st["disadvantage"] else "normal", "sources": st["sources"]}
+
+
+def roll_d20(mode: str = "normal", rng=None) -> dict:
+    """One d20 roll under `mode`: two dice kept high/low for advantage /
+    disadvantage. Returns {'d20': kept, 'rolls': [all dice], 'mode': mode}."""
+    import random as _random
+    rng = rng or _random
+    if mode in ("advantage", "disadvantage"):
+        a, b = rng.randint(1, 20), rng.randint(1, 20)
+        return {"d20": max(a, b) if mode == "advantage" else min(a, b), "rolls": [a, b], "mode": mode}
+    d = rng.randint(1, 20)
+    return {"d20": d, "rolls": [d], "mode": mode}
+
+
+def describe_roll(roll: dict, sources: list) -> str:
+    """'Disadvantage (Poisoned): 15 / 3' style prefix for a roll result."""
+    if roll["mode"] in ("advantage", "disadvantage") and len(roll["rolls"]) == 2:
+        why = f" ({', '.join(sources)})" if sources else ""
+        return f"{roll['mode'].title()}{why}: rolled {roll['rolls'][0]} and {roll['rolls'][1]}, kept {roll['d20']}"
+    return ""
+
+
 def get_condition_save_status(char: dict, ability: str) -> dict:
     """Whether a saving throw of the given ability currently auto-fails
     or has disadvantage from active conditions/exhaustion. Distinguishes
@@ -777,7 +899,7 @@ def get_condition_save_status(char: dict, ability: str) -> dict:
     all saves) since the real rule text for each is genuinely different,
     not just "some generic penalty."
     Returns {'auto_fail': bool, 'disadvantage': bool, 'sources': [str]}."""
-    active = set(char.get("conditions", []))
+    active = effective_conditions(char)
     auto_fail_sources = []
     dis_sources = []
     if ability in ("STR", "DEX"):
@@ -800,7 +922,7 @@ def get_condition_attack_status(char: dict) -> dict:
     explicitly here rather than just returning whichever was checked
     first.
     Returns {'advantage': bool, 'disadvantage': bool, 'sources': [str]}."""
-    active = set(char.get("conditions", []))
+    active = effective_conditions(char)
     adv_sources = []
     dis_sources = []
     # The creature's OWN attack rolls have disadvantage:
@@ -2039,9 +2161,11 @@ def get_effective_speed(char: dict) -> dict:
     # Grappled/Restrained ("speed becomes 0") and Paralyzed/Petrified/
     # Stunned/Surprised/Unconscious ("can't move") each zero every movement speed a
     # creature has, not just walking. Incapacitated alone does not stop
-    # movement, and Prone only restricts movement to crawling, so neither
-    # is included here.
-    active_conditions = set(char.get("conditions", []))
+    # movement. Prone means crawling, and crawling costs 1 extra foot per
+    # foot, so walking speed is effectively halved (PHB p.191).
+    active_conditions = effective_conditions(char)
+    if "Prone" in active_conditions:
+        walk = walk // 2
     speed_locked = bool(active_conditions & {
         "Grappled", "Restrained", "Paralyzed", "Petrified", "Stunned", "Surprised", "Unconscious",
     })
@@ -2335,7 +2459,7 @@ def update_all(char: dict) -> dict:
     # simplification used for its attack-roll disadvantage in
     # get_condition_attack_status — it applies unconditionally whenever
     # the condition is checked.
-    _active_conds_for_checks = set(char.get("conditions", []))
+    _active_conds_for_checks = effective_conditions(char)
     for _cond_name in ("Frightened", "Poisoned"):
         if _cond_name in _active_conds_for_checks:
             from dnd_app.data.phb2014.classes import SKILLS as _ALL_SKILLS
@@ -2493,7 +2617,10 @@ def update_all(char: dict) -> dict:
         char["_died_of_exhaustion"] = True
 
     # ── Hit Dice ──────────────────────────────────────────────────────────────
-    hit_dice = {}
+    # One pool per die size, summed across classes that share it (Fighter
+    # and Paladin levels both add d10s). Levels gained since the last
+    # recompute add their hit dice unspent, rather than arriving used.
+    totals = {}
     for c in char.get("classes", []):
         if c.get("level", 0) > 0:
             # Self-heal: correct any stale hit_die against class data
@@ -2502,13 +2629,15 @@ def update_all(char: dict) -> dict:
             if c.get("hit_die") != correct_hd:
                 c["hit_die"] = correct_hd
             hd_key = f"d{c['hit_die']}"
-            existing = char.get("hit_dice", {}).get(hd_key, {})
-            total_for_class = c["level"]
-            remaining = existing.get("remaining", total_for_class)
-            hit_dice[hd_key] = {
-                "total": total_for_class,
-                "remaining": min(remaining, total_for_class),
-            }
+            totals[hd_key] = totals.get(hd_key, 0) + c["level"]
+    hit_dice = {}
+    for hd_key, total in totals.items():
+        existing = char.get("hit_dice", {}).get(hd_key, {})
+        old_total = existing.get("total", total)
+        remaining = existing.get("remaining", total)
+        if total > old_total:
+            remaining += total - old_total
+        hit_dice[hd_key] = {"total": total, "remaining": max(0, min(remaining, total))}
     char["hit_dice"] = hit_dice
 
     # ── Resources from multiclass handler ────────────────────────────────────

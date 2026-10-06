@@ -17,6 +17,12 @@ Popup {
     id: root
     default property alias dialogContent: contentArea.data
     property string dialogTitle: ""
+    // Alternative to inline content: a QML file (pass Qt.resolvedUrl(...)
+    // from the caller -- a bare relative path resolves against this file)
+    // built the first time the dialog opens and kept afterwards, so a
+    // dialog nobody has opened yet costs nothing at startup.
+    property url contentSource: ""
+    onAboutToShow: if (contentSource.toString() !== "") lazyContent.active = true
 
     modal: true
     focus: true
@@ -91,6 +97,13 @@ Popup {
             id: contentArea
             Layout.fillWidth: true
             Layout.fillHeight: true
+
+            Loader {
+                id: lazyContent
+                anchors.fill: parent
+                active: false
+                source: root.contentSource
+            }
         }
     }
 }
