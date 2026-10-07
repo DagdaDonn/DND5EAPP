@@ -110,3 +110,37 @@ class FlowContainer(QWidget):
             needed = lay.heightForWidth(self.width())
             if needed > 0 and self.minimumHeight() != needed:
                 self.setMinimumHeight(needed)
+
+
+# Item data role holding a row's rarity colour (a "#rrggbb" string) for
+# RarityBarDelegate.
+RARITY_ROLE = Qt.UserRole + 42
+RARITY_BAR_WIDTH = 8
+
+
+class RarityBarDelegate(QStyledItemDelegate):
+    """Paints a solid bar in the item's rarity colour down the left edge of
+    the cell, and moves the text over to make room. Colour marks rarity
+    without colouring the text itself -- coloured text (navy on a dark
+    background...) is hard to read. Rows with no RARITY_ROLE colour are
+    drawn as normal, with the same indent so names line up."""
+
+    def paint(self, painter, option, index):
+        from PySide6.QtGui import QColor
+        colour = index.data(RARITY_ROLE)
+        bar = QRect(option.rect.left() + 2, option.rect.top() + 3,
+                    RARITY_BAR_WIDTH, max(4, option.rect.height() - 6))
+        shifted = QStyleOptionViewItem(option)
+        shifted.rect = option.rect.adjusted(RARITY_BAR_WIDTH + 6, 0, 0, 0)
+        super().paint(painter, shifted, index)
+        if colour:
+            painter.save()
+            painter.setRenderHint(painter.RenderHint.Antialiasing)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(colour))
+            painter.drawRoundedRect(bar, 2, 2)
+            painter.restore()
+
+    def sizeHint(self, option, index):
+        s = super().sizeHint(option, index)
+        return QSize(s.width() + RARITY_BAR_WIDTH + 6, s.height())

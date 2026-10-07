@@ -69,15 +69,20 @@ MIMIC is a Dungeons & Dragons 5th Edition app that brings together everything a 
 
 ### Magic Item Integration
 - **1,283 magic items** with full descriptions
-- **Attunement tracking** — max 3 attuned items (4 for Artificers at 10th level)
+- **Attunement tracking** — max 3 attuned items (4 for Artificers at 10th level), and never two copies of the same item (XGtE)
 - **Mechanical effects wired for over 99% of the catalog** — resistances, immunities, ability score overrides, AC/save bonuses, weapon and damage bonuses, resource pools, and reminders for effects too situational to automate
-- **Searchable magic item browser** with filtering
+- **Searchable magic item browser** with filtering, sorted by rarity (Common → Artifact) and then name — as is your own list
+- **Colour means rarity** — dark grey Common, green Uncommon, blue Rare, purple Very Rare, amber Legendary, crimson Artifact, the same on both apps. It's shown as a coloured bar beside the item (or the card's border on Android), never as coloured text, so names stay easy to read
+- **Every copy is its own item** — two Manuals of Bodily Health are two books; only magic ammunition stacks, with a quantity
+- **Manuals and tomes work once** — studying one raises the score by 2 *and its maximum* by 2 (so a 20 becomes 22, or a Primal Champion's 24 becomes 26), and marks that book "Studied"; it stays in your bag but can't be studied again
+- **Spell scrolls carry their spell** — picking a scroll asks which spell is on it, and **Use** casts it with no slot and no material components, at the scroll's own save DC and attack bonus. Following the DMG: a spell not on your class list can't be read (the scroll isn't used up), and one above the level you can cast needs a spellcasting check, DC 10 + its level, or the scroll is lost. Eldritch Knights and Arcane Tricksters read from the wizard list; a Thief's Use Magic Device reads anything
 
 ### Gear & Inventory
 - **Equipment browser** with search and category filtering
 - **Inventory grouped by kind** — weapons, armor, magic items, consumables, tools and gear — with equipped items first
 - **Items you use get their own icon** — tool kits, musical instruments, tinderboxes and torches, lanterns, thrown flasks, healer's kits
-- **Quantity tracking** for stackable items
+- **Quantity tracking** for stackable items — on Android a stack shows its count as a button beside View; tap it (or press and hold the item) to type a new amount or step it with − / + (hold to go in 5s); 0 removes it
+- **Magic potions and scrolls** sit with the consumables, bordered in their rarity colour and sorted by rarity, then name
 - **Real tooltips on every item**, both in the reference browser and your owned inventory
 
 ### Feat Manager
@@ -90,6 +95,7 @@ MIMIC is a Dungeons & Dragons 5th Edition app that brings together everything a 
 - **Resizable window** with draggable splitters between panels
 - **Right-click any feature, race trait, or subrace trait** for a full detail popup
 - **Search everywhere** — find spells, feats, items, and equipment instantly
+- **On Android, one consistent pattern:** the everyday action is a button (Cast, Equip, Drink, Use), the magnifying glass shows details, and press-and-hold opens a small menu for the rarer things — preparing or favouriting a spell, attuning, studying, removing
 
 ### Custom Icon Set
 - **74 hand-built line icons** replace every emoji the app used to show — tabs, actions, items, rests, conditions, and app chrome
@@ -99,9 +105,10 @@ MIMIC is a Dungeons & Dragons 5th Edition app that brings together everything a 
 - **The MIMIC app icon** — the d20 in golden amber, with a proper adaptive icon on Android
 
 ### Save & Share
-- **Save characters** — to `~/.dnd_characters/` on desktop, and to your character list on Android
+- **Save characters** — to `Documents/MIMIC Characters` on both desktop and Android (change it in Settings); each character's exported sheets go in its own folder there
 - **Auto-save** when you create a character, level up or down, or confirm a choice — the same file Save writes
 - **Load characters** — pick up where you left off
+- **Import from a PDF character sheet** — a character typed into the official 5e character sheet PDF (fillable, or flattened/"printed to PDF") becomes a full character: ability scores (whichever box they were written in), proficiencies and expertise, HP, spells, gear, magic items and money. Anything it can't match is kept word for word on an "Imported from PDF" notes page, along with anything worth checking. Before you pick a file, both apps show what it can and can't do: only the official sheet (not D&D Beyond's or homemade layouts), typed rather than scanned or handwritten, a flattened sheet's tick boxes can't be read, and spells that didn't fit on the sheet aren't there to bring in
 - **Export a copy** — a character file to share or back up, a plain-text summary, or a filled-in official PDF character sheet
 - **One file format on both apps** — a character saved on your phone opens on your computer, and vice versa
 
@@ -154,7 +161,8 @@ character builds, levels and saves identically on both. It has:
 - **A working turn tracker** — Action, Bonus Action and Reaction, used by the Use/Cast buttons as you play
 - **Level-up and Choices** — with the Choices tab pulsing while you still have picks to make
 - **Rests, a dice roller, themes and settings** — the same 26 themes as desktop
-- **Save & Export** — your character list, auto-save, and exports to a file, text or PDF
+- **Save & Export** — your character list, auto-save, exports to a file, text or PDF, and Import… for a character file or a filled-in PDF character sheet
+- **Touch-first controls** — a magnifying glass for details, press-and-hold for the rarer actions, quantity buttons on stacks, and dark-backed dialogs throughout
 
 To build it into an `.apk` you can install on your own phone, see
 [`packaging/android/BUILD_APK.md`](packaging/android/BUILD_APK.md) —
@@ -193,6 +201,13 @@ dnd_app/
     KNOWN_IMPLEMENTATION_GAPS.md      # Running changelog/known-gaps doc
   core/                               # Character model, calculator, builder, save/load
                                       #   (non-UI application logic, shared by every platform)
+    character.py                      #   The character dict and its basic helpers
+    builder.py                        #   Re-derives grants from race/class/background
+    calculator.py                     #   AC, saves, skills, HP, slots... (update_all)
+    magic_items.py                    #   Item effects, attunement, owned copies, manuals
+    spell_scrolls.py                  #   Spell scroll rules (DMG p.200)
+    save_load.py                      #   Save folder, files, duplicate-name guard
+    pdf_export.py / pdf_import.py     #   Fill / read the official 5e PDF sheet
   ui_desktop/                         # PySide6 QtWidgets UI (Windows/macOS/Linux)
     style/                            #   Theme/QSS engine + cosmetic text helpers
     pages/                            #   Top-level app screens

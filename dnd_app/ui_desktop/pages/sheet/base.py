@@ -763,6 +763,12 @@ class BaseSheetMixin:
         # name and leave the original behind as an orphan, since the
         # path was always re-derived from whatever the current name is.
         path = self._save_path or character_filename(self.char)
+        if not self._save_path:
+            # a new file -- never on top of another character's
+            from dnd_app.core.save_load import name_in_use, NAME_IN_USE_MESSAGE
+            if os.path.exists(path) or name_in_use(self.char.get("name", "")):
+                QMessageBox.warning(self, "Name Already Used", NAME_IN_USE_MESSAGE)
+                return
         save_character(self.char, path)
         self._save_path = path
         self._dirty = False
@@ -779,6 +785,11 @@ class BaseSheetMixin:
         if not validate_character(self.char)[0]:
             return
         path = self._save_path or character_filename(self.char)
+        if not self._save_path:
+            import os
+            from dnd_app.core.save_load import name_in_use
+            if os.path.exists(path) or name_in_use(self.char.get("name", "")):
+                return      # would replace another character's file
         try:
             save_character(self.char, path)
         except (OSError, ValueError):
@@ -792,9 +803,9 @@ class BaseSheetMixin:
         from PySide6.QtWidgets import QFileDialog
         from dnd_app.core.save_load import load_character
         import os
-        save_dir = os.path.expanduser("~/.dnd_characters")
+        from dnd_app.core.save_load import get_save_dir
         path, _ = QFileDialog.getOpenFileName(
-            self, "Load Character", save_dir, "Character Files (*.json)")
+            self, "Load Character", get_save_dir(), "Character Files (*.json)")
         if path:
             char = load_character(path)
             if char:
@@ -832,8 +843,10 @@ class BaseSheetMixin:
         from PySide6.QtWidgets import QFileDialog
         from dnd_app.core.save_load import export_character_text
         import os
-        name = self.char.get("name", "Unknown").strip() or "Unknown"
-        default_path = os.path.join(os.path.expanduser("~"), f"{name} - Character Sheet.txt")
+        from dnd_app.core.save_load import character_export_dir, character_folder_name
+        # the character's own folder in the save location (same as Android)
+        name = character_folder_name(self.char)
+        default_path = os.path.join(character_export_dir(self.char), f"{name} - Character Sheet.txt")
         path, _ = QFileDialog.getSaveFileName(
             self, "Export Character Sheet", default_path, "Text Files (*.txt)")
         if not path:
@@ -855,8 +868,10 @@ class BaseSheetMixin:
                 self, "Export Failed",
                 f"The official character sheet template is missing:\n{TEMPLATE_PATH}")
             return
-        name = self.char.get("name", "Unknown").strip() or "Unknown"
-        default_path = os.path.join(os.path.expanduser("~"), f"{name} - Character Sheet.pdf")
+        from dnd_app.core.save_load import character_export_dir, character_folder_name
+        # the character's own folder in the save location (same as Android)
+        name = character_folder_name(self.char)
+        default_path = os.path.join(character_export_dir(self.char), f"{name} - Character Sheet.pdf")
         path, _ = QFileDialog.getSaveFileName(
             self, "Export Character Sheet (PDF)", default_path, "PDF Files (*.pdf)")
         if not path:
@@ -923,6 +938,9 @@ class BaseSheetMixin:
         self._name_edit.setMinimumWidth(180)
         self._name_edit.setMaximumWidth(320)
         self._name_edit.textChanged.connect(self._on_name_changed)
+        # A rename that clashes with another saved character is refused
+        self._accepted_name = self.char.get("name", "")
+        self._name_edit.editingFinished.connect(self._check_name_unique)
         hl.addWidget(self._name_edit)
 
         # (Race/Subrace/Ancestry/Background edit buttons live in the Choices tab)
@@ -1130,6 +1148,17 @@ class BaseSheetMixin:
         self.char["name"] = text.strip() or "Unnamed"
         self._update_title()
         self._mark_dirty()
+
+    def _check_name_unique(self):
+        from dnd_app.core.save_load import name_in_use, NAME_IN_USE_MESSAGE
+        name = self._name_edit.text().strip()
+        if name == getattr(self, "_accepted_name", None):
+            return
+        if name and name_in_use(name, exclude_path=self._save_path):
+            QMessageBox.warning(self, "Name Already Used", NAME_IN_USE_MESSAGE)
+            self._name_edit.setText(self._accepted_name)   # textChanged puts it back in char
+            return
+        self._accepted_name = name
 
     # ════════════════════════════════════════════════════════════════════════
     # Character state helpers (refresh, collect, title, rest, level ops)

@@ -43,3 +43,27 @@ def set_app_theme(name: str) -> None:
     data = _load()
     data["theme"] = name
     _save(data)
+
+
+def get_custom_save_dir() -> str:
+    """The character folder chosen in Settings ("" = the default)."""
+    return _load().get("save_dir", "") or ""
+
+
+def set_custom_save_dir(path: str) -> None:
+    data = _load()
+    if path:
+        data["save_dir"] = path
+    else:
+        data.pop("save_dir", None)
+    _save(data)
+
+
+def get_flag(key: str) -> bool:
+    return bool(_load().get(key, False))
+
+
+def set_flag(key: str, value: bool) -> None:
+    data = _load()
+    data[key] = bool(value)
+    _save(data)

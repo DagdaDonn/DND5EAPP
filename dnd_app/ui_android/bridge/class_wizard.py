@@ -10,6 +10,7 @@ from PySide6.QtCore import QObject, QAbstractListModel, QModelIndex, Qt, Signal,
 from dnd_app.data.phbCommon.backgrounds import BACKGROUND_NAMES, get_background
 from dnd_app.data.phb2014.classes import CLASS_NAMES, CLASS_DICT
 from dnd_app.core.builder import rebuild
+from dnd_app.core.save_load import name_in_use, NAME_IN_USE_MESSAGE
 
 ALIGNMENTS = [
     "Lawful Good", "Neutral Good", "Chaotic Good",
@@ -123,6 +124,12 @@ class ClassWizardBridge(QObject):
             return
         self._name = value
         self.nameChanged.emit()
+
+    @Property(bool, notify=nameChanged)
+    def nameInUse(self):
+        """Another saved character already has this name -- shown as a
+        warning under the name field (confirmClass() refuses it too)."""
+        return bool(self._name.strip()) and name_in_use(self._name)
 
     @Property(str, notify=alignmentChanged)
     def alignment(self):
@@ -255,6 +262,9 @@ class ClassWizardBridge(QObject):
         name = self._name.strip()
         if not name:
             self._set_error("Please enter a character name.")
+            return False
+        if name_in_use(name):
+            self._set_error(NAME_IN_USE_MESSAGE)
             return False
         if not self._background:
             self._set_error("Please choose a background.")

@@ -12,7 +12,7 @@ from ...shared import *
 # aliases to h/card/hline, which ARE plain names the wildcard import above
 # already brought in).
 from ...shared import _btn, _pill
-from ...widgets import FlowLayout, FlowContainer
+from ...widgets import FlowLayout, FlowContainer, RarityBarDelegate, RARITY_ROLE
 from dnd_app.core.character import (
     ability_score, ability_mod, total_level, class_levels, subclasses,
     long_rest, short_rest, add_class
@@ -122,18 +122,22 @@ class GearMixin:
         self._gear_equip_tree.setAlternatingRowColors(True)
         self._gear_equip_tree.setRootIsDecorated(False)
         self._gear_equip_tree.setStyleSheet(
+            # text colour on the widget, not ::item -- an ::item colour would
+            # override each row's own (rarity) colour
             f"QTreeWidget{{background:{BG};border:1px solid {BORDER};border-radius:6px;"
-            f"alternate-background-color:{SURF};}}"
-            f"QTreeWidget::item{{padding:3px 2px;font-size:{FS_SMALL}px;color:{TEXT};}}"
+            f"alternate-background-color:{SURF};color:{TEXT};}}"
+            f"QTreeWidget::item{{padding:3px 2px;font-size:{FS_SMALL}px;}}"
             f"QTreeWidget::item:selected{{background:{TEAL};color:#0a0d12;}}")
         self._gear_equip_tree.header().setStyleSheet(
             f"QHeaderView::section{{background:{SURF2};color:{GOLD2};font-weight:700;"
             f"font-size:{FS_TINY}px;padding:4px;border:1px solid {BORDER};}}")
         hdr = self._gear_equip_tree.header()
         hdr.setSectionResizeMode(0, QHeaderView.Stretch)
-        for col, w in [(1,32),(2,52),(3,48),(4,55),(5,28)]:
+        for col, w in [(1,40),(2,52),(3,48),(4,55),(5,28)]:   # col 1: Eq tick / scroll's Use
             hdr.setSectionResizeMode(col, QHeaderView.Fixed)
             self._gear_equip_tree.setColumnWidth(col, w)
+        # a magic item's rarity is a coloured bar on the row's left edge
+        self._gear_equip_tree.setItemDelegateForColumn(0, RarityBarDelegate(self._gear_equip_tree))
         egl.addWidget(self._gear_equip_tree, 1)
         add_eq = pill_btn("+ Custom Item", TEAL)
         add_eq.clicked.connect(self._add_equipment_dialog)
@@ -155,9 +159,11 @@ class GearMixin:
         self._magic_items_tree.setAlternatingRowColors(True)
         self._magic_items_tree.setRootIsDecorated(False)
         self._magic_items_tree.setStyleSheet(
+            # text colour on the widget, not ::item -- an ::item colour would
+            # override each row's own (rarity) colour
             f"QTreeWidget{{background:{BG};border:1px solid {BORDER};border-radius:6px;"
-            f"alternate-background-color:{SURF};}}"
-            f"QTreeWidget::item{{padding:3px 2px;font-size:{FS_SMALL}px;color:{TEXT};}}"
+            f"alternate-background-color:{SURF};color:{TEXT};}}"
+            f"QTreeWidget::item{{padding:3px 2px;font-size:{FS_SMALL}px;}}"
             f"QTreeWidget::item:selected{{background:{PURP2};color:#0a0d12;}}")
         self._magic_items_tree.header().setStyleSheet(
             f"QHeaderView::section{{background:{SURF2};color:{GOLD2};font-weight:700;"
@@ -167,6 +173,7 @@ class GearMixin:
         for col, w in [(1,80),(2,64),(3,52),(4,28)]:
             mhdr.setSectionResizeMode(col, QHeaderView.Fixed)
             self._magic_items_tree.setColumnWidth(col, w)
+        self._magic_items_tree.setItemDelegateForColumn(0, RarityBarDelegate(self._magic_items_tree))
         mgl.addWidget(self._magic_items_tree, 1)
         self._magic_item_rows = []
         left_split.addWidget(mi_w)
@@ -251,12 +258,18 @@ class GearMixin:
 
         self._mi_browser = QListWidget()
         self._mi_browser.setStyleSheet(
-            f"QListWidget{{background:{BG};border:1px solid {BORDER};border-radius:6px;}}"
-            f"QListWidget::item{{padding:6px 10px;font-size:{FS_BODY}px;color:{TEXT};}}"
+            # alternate-background-color: the strip beside the rarity bar on
+            # alternate rows (otherwise the default, white)
+            f"QListWidget{{background:{BG};border:1px solid {BORDER};border-radius:6px;color:{TEXT};"
+            f"alternate-background-color:{SURF};}}"
+            f"QListWidget::item{{padding:6px 10px;font-size:{FS_BODY}px;}}"
             f"QListWidget::item:selected{{background:{PURP2};color:#15071f;font-weight:700;}}"
             f"QListWidget::item:selected:!active{{background:{PURP2};color:#15071f;}}"
             f"QListWidget::item:alternate{{background:{SURF};}}")
         self._mi_browser.setAlternatingRowColors(True)
+        # rarity shown as a coloured bar on the left of each row (text stays
+        # the normal text colour -- easier to read)
+        self._mi_browser.setItemDelegate(RarityBarDelegate(self._mi_browser))
         self._mi_browser.itemDoubleClicked.connect(lambda item: self._add_magic_item_by_name(item.data(Qt.UserRole)))
         mgt.addWidget(self._mi_browser,1)
 
@@ -468,14 +481,9 @@ class GearMixin:
         return "Other"
 
     _RARITY_ORDER = ["Common","Uncommon","Rare","Very Rare","Legendary","Artifact"]
-    _RARITY_COLORS = {
-        "Common":    "#aaaaaa",
-        "Uncommon":  "#1eff00",
-        "Rare":      "#0070dd",
-        "Very Rare": "#a335ee",
-        "Legendary": "#ff8000",
-        "Artifact":  "#e6cc80",
-    }
+    # dark grey -> amber, the same palette the Android app uses (one source:
+    # data/phbCommon/magic_items.py RARITY_COLORS)
+    from dnd_app.data.phbCommon.magic_items import RARITY_COLORS as _RARITY_COLORS
 
     def _populate_magic_browser(self):
         self._mi_browser.clear()
@@ -508,24 +516,31 @@ class GearMixin:
 
         from PySide6.QtWidgets import QListWidgetItem
         from PySide6.QtGui import QColor, QFont
-        for rarity in self._RARITY_ORDER:
+        # the six standard rarities in order, then any other the catalogue
+        # uses (the Gnomengarde Grenade is "Unique") so nothing is hidden
+        extra = sorted(r for r in by_rarity if r not in self._RARITY_ORDER)
+        for rarity in self._RARITY_ORDER + extra:
             items_in_rarity = by_rarity.get(rarity,[])
             if not items_in_rarity: continue
-            # Rarity divider header
+            colour = self._RARITY_COLORS.get(rarity)
+            # Rarity divider header (its bar shows the colour that follows)
             hdr = QListWidgetItem(f"── {rarity} ({len(items_in_rarity)}) ──")
-            hdr.setForeground(QColor(self._RARITY_COLORS[rarity]))
+            hdr.setForeground(QColor(TEXT2))
+            if colour:
+                hdr.setData(RARITY_ROLE, colour)
             f = QFont(); f.setBold(True); f.setPointSize(9)
             hdr.setFont(f)
             hdr.setFlags(Qt.NoItemFlags)  # not selectable
             hdr.setData(Qt.UserRole, None)
             self._mi_browser.addItem(hdr)
             # Items in this rarity
-            for item in sorted(items_in_rarity, key=lambda i: i["name"]):
+            for item in sorted(items_in_rarity, key=lambda i: i["name"].casefold()):
                 attune_tag = " ◆" if item.get("attunement") else ""
                 desc = item.get("desc","")
                 label = f"  {item['name']}{attune_tag}"
                 li = QListWidgetItem(label)
-                li.setForeground(QColor(self._RARITY_COLORS[rarity]))
+                if colour:
+                    li.setData(RARITY_ROLE, colour)
                 li.setData(Qt.UserRole, item["name"])
                 if desc:
                     li.setToolTip(f"<b>{item['name']}</b> [{rarity}]<br><br>{desc[:300]}{'…' if len(desc)>300 else ''}")
@@ -708,12 +723,15 @@ class GearMixin:
                 from dnd_app.data.phbCommon.spells import SPELLS_BY_LEVEL
                 lvl = 0 if m.group(1) == "Cantrip" else int(_re.match(r'\d+', m.group(1)).group())
                 choices = sorted(s["name"] for s in SPELLS_BY_LEVEL.get(lvl, []))
-                if choices:
-                    spell_choice, ok = QInputDialog.getItem(
-                        self, "Spell Scroll", f"Which spell is inscribed on this {name}?",
-                        choices, 0, False)
-                    if ok and spell_choice:
-                        name = f"{name} — {spell_choice}"
+                # every scroll carries a spell -- cancelling adds nothing
+                if not choices:
+                    return
+                spell_choice, ok = QInputDialog.getItem(
+                    self, "Spell Scroll", f"Which spell is inscribed on this {name}?",
+                    choices, 0, False)
+                if not ok or not spell_choice:
+                    return
+                name = f"{name} — {spell_choice}"
             existing = next((e for e in eq if isinstance(e,dict) and e.get("name")==name), None)
             if existing:
                 existing["qty"] = existing.get("qty", 1) + 1   # stack
@@ -722,13 +740,10 @@ class GearMixin:
                            "magic": True, "rarity": catalog.get("rarity",""),
                            "desc": catalog.get("desc","")})
             self._refresh_gear_equipment(); self._mark_dirty(); return
-        # All other magic items (attunable or not) → magic items section
-        items = self.char.setdefault("magic_items", [])
-        # Deduplicate: don't add if already present
-        existing_names = {(i.get("name") if isinstance(i,dict) else i) for i in items}
-        if name not in existing_names:
-            items.append({"name": name, "attunement": needs_attune,
-                          "equipped": True, "notes": ""})
+        # All other magic items (attunable or not) → magic items section.
+        # Every copy is its own entry; only magic ammunition stacks.
+        from dnd_app.core.magic_items import add_owned_magic_item
+        add_owned_magic_item(self.char, name)
         self.ctrl.refresh()
         self._refresh_magic_items()
         self._mark_dirty()
@@ -749,8 +764,8 @@ class GearMixin:
             self._mi_title_lbl.setText(f"MAGIC ITEMS  (max {att_max_display} attuned)")
         self._magic_items_tree.clear()
         self._magic_item_rows = []
-        attuned = set(self.char.get("attuned_items", []))
-        owned = self.char.get("magic_items", [])
+        from dnd_app.core.magic_items import owned_magic_items, is_magic_ammunition, can_study_manual
+        owned = owned_magic_items(self.char)
         if not owned:
             placeholder = QTreeWidgetItem(["No magic items. Browse & add →", "", "", "", ""])
             placeholder.setForeground(0, QColor(TEXT3))
@@ -758,30 +773,45 @@ class GearMixin:
             return
 
         from dnd_app.data.phbCommon.magic_items import get_magic_item, get_item_effect as _gie
-        for entry in owned:
-            if isinstance(entry, str):
-                entry = {"name": entry, "attunement": False, "equipped": True, "notes": ""}
+
+        # rarity first (Common -> Artifact), then name
+        def _owned_key(entry):
+            n = entry.get("name", "") if isinstance(entry, dict) else entry
+            r = (get_magic_item(n) or {}).get("rarity", "")
+            rank = self._RARITY_ORDER.index(r) if r in self._RARITY_ORDER else len(self._RARITY_ORDER)
+            return (rank, n.casefold())
+
+        for entry in sorted(owned, key=_owned_key):
             name = entry.get("name","?")
+            uid = entry["uid"]
             catalog = get_magic_item(name) or {}
             rarity  = catalog.get("rarity","")
-            rarity_color = self._RARITY_COLORS.get(rarity, TEXT2)
+            rarity_color = self._RARITY_COLORS.get(rarity)
             needs_attune = bool(catalog.get("attunement"))
             itype_local = catalog.get("type","Wondrous")
             desc = catalog.get("desc","")
 
-            item = QTreeWidgetItem([name, rarity, "", "", ""])
+            label = name
+            if is_magic_ammunition(name):
+                label = f"{entry.get('qty', 1)}× {name}"
+            if entry.get("studied"):
+                label += "  (studied)"
+            item = QTreeWidgetItem([label, rarity, "", "", ""])
             if has_item_effect(name):
                 item.setIcon(0, _icons.icon("bolt"))
             item.setForeground(0, QColor(TEXT))
-            item.setForeground(1, QColor(rarity_color))
+            item.setForeground(1, QColor(TEXT2))
+            if rarity_color:
+                item.setData(0, RARITY_ROLE, rarity_color)
 
             tip_parts = [f"<b>{name}</b>"]
             if rarity: tip_parts.append(f"<i>{rarity} {itype_local}</i>")
             if needs_attune: tip_parts.append("<b>Requires Attunement</b>")
+            if entry.get("studied"): tip_parts.append("<i>Studied -- its magic is spent.</i>")
             if desc: tip_parts.append(desc[:600] + ("…" if len(desc)>600 else ""))
             tip = "<br>".join(tip_parts)
             item.setToolTip(0, tip)
-            item.setData(0, Qt.UserRole, (name, entry, tip))
+            item.setData(0, Qt.UserRole, (name, entry, tip, uid))
 
             self._magic_items_tree.addTopLevelItem(item)
 
@@ -815,8 +845,8 @@ class GearMixin:
                 att_cb.setStyleSheet(f"QCheckBox::indicator{{width:14px;height:14px;border-radius:3px;"
                                       f"border:1px solid {PURP2};background:{SURF2};}}"
                                       f"QCheckBox::indicator:checked{{background:{PURP2};}}")
-                att_cb.blockSignals(True); att_cb.setChecked(name in attuned); att_cb.blockSignals(False)
-                att_cb.stateChanged.connect(lambda s,n=name: self._toggle_attunement(n, bool(s)))
+                att_cb.blockSignals(True); att_cb.setChecked(bool(entry.get("attuned"))); att_cb.blockSignals(False)
+                att_cb.stateChanged.connect(lambda s,u=uid: self._toggle_attunement(u, bool(s)))
                 self._magic_items_tree.setItemWidget(item, 2, att_cb)
 
             # Equipped checkbox (col 3)
@@ -826,14 +856,14 @@ class GearMixin:
                                  f"border:1px solid {TEAL};background:{SURF2};}}"
                                  f"QCheckBox::indicator:checked{{background:{TEAL};}}")
             eq_cb.blockSignals(True); eq_cb.setChecked(entry.get("equipped",True)); eq_cb.blockSignals(False)
-            eq_cb.stateChanged.connect(lambda s,n=name: self._toggle_equipped(n, bool(s)))
+            eq_cb.stateChanged.connect(lambda s,u=uid: self._toggle_equipped(u, bool(s)))
             self._magic_items_tree.setItemWidget(item, 3, eq_cb)
 
             # Remove button (col 4)
             rm = _btn("✕", CRIMSON, variant="danger", width=20, height=20, radius=4,
                        border_width=1, bg_alpha=0x44, text_color=CRIM2,
                        hover_text="white", font_size=11, padding="0px")
-            rm.clicked.connect(lambda checked=False, n=name: self._remove_magic_item(n))
+            rm.clicked.connect(lambda checked=False, u=uid: self._remove_magic_item(u))
             self._magic_items_tree.setItemWidget(item, 4, rm)
             self._magic_item_rows.append(item)
 
@@ -849,17 +879,19 @@ class GearMixin:
             if not it: return
             data = it.data(0, Qt.UserRole)
             if not data: return
-            _name, _entry, _tip = data
+            _name, _entry, _tip, _uid = data
             from PySide6.QtWidgets import QMenu
             menu = QMenu(self._magic_items_tree)
             act = menu.addAction(_icons.icon("features"), f"Details: {_name[:36]}")
             act.triggered.connect(lambda: QMessageBox.information(self, _name, _tip))
-            from dnd_app.core.magic_items import ABILITY_SCORE_MANUALS
-            if _name in ABILITY_SCORE_MANUALS:
+            if can_study_manual(_entry):
                 study_act = menu.addAction(_icons.icon("magic"), f"Study {_name[:36]} (48 hrs over 6 days)")
-                study_act.triggered.connect(lambda checked=False, n=_name: self._study_manual(n))
+                study_act.triggered.connect(lambda checked=False, u=_uid: self._study_manual(u))
+            if is_magic_ammunition(_name):
+                qty_act = menu.addAction(_icons.icon("ammo"), "Set quantity…")
+                qty_act.triggered.connect(lambda checked=False, u=_uid, e=_entry: self._set_magic_ammo_qty(u, e))
             rm_act = menu.addAction(f"✕  Remove {_name[:36]}")
-            rm_act.triggered.connect(lambda: self._remove_magic_item(_name))
+            rm_act.triggered.connect(lambda: self._remove_magic_item(_uid))
             menu.exec(self._magic_items_tree.viewport().mapToGlobal(pos))
         self._magic_items_tree.customContextMenuRequested.connect(_mi_ctx_menu)
         self._mi_tree_ctx_handler = _mi_ctx_menu
@@ -877,35 +909,14 @@ class GearMixin:
         self.ctrl.refresh()
         self._refresh_combat()
 
-    def _toggle_attunement(self, name: str, on: bool):
-        att = self.char.setdefault("attuned_items", [])
-        if on:
-            if name not in att:
-                from dnd_app.core.magic_items import attunement_prereq_met
-                met, reason = attunement_prereq_met(self.char, name)
-                if not met:
-                    QMessageBox.warning(self, "Attunement",
-                        f"{name} requires attunement by {reason} — this character doesn't qualify.\n\n"
-                        "(Disable this check under Optional Rules if your table allows it anyway.)")
-                    self._refresh_magic_items(); return
-                # Artificer attunement scaling: 4 at 10th (Magic Item
-                # Adept), 5 at 14th (Magic Item Savant), 6 at 18th (Magic
-                # Item Master).
-                from dnd_app.core.calculator import class_levels as _cl
-                art_lvl = _cl(self.char).get("Artificer", 0)
-                att_max = 6 if art_lvl >= 18 else 5 if art_lvl >= 14 else 4 if art_lvl >= 10 else 3
-                if "Mystic Conflux" in self.char.get("feats", []):
-                    att_max = max(att_max, 4)
-                if len(att) >= att_max:
-                    QMessageBox.warning(self, "Attunement",
-                        f"Maximum {att_max} attuned items (PHB p.138).")
-                    self._refresh_magic_items(); return
-                att.append(name)
-        else:
-            if name in att: att.remove(name)
-        for entry in self.char.get("magic_items",[]):
-            if isinstance(entry,dict) and entry.get("name")==name:
-                entry["attunement"] = on
+    def _toggle_attunement(self, uid: str, on: bool):
+        from dnd_app.core.magic_items import set_owned_magic_item_attuned
+        why = set_owned_magic_item_attuned(self.char, uid, on)
+        if why:
+            if "doesn't qualify" in why:
+                why += "\n\n(Disable this check under Optional Rules if your table allows it anyway.)"
+            QMessageBox.warning(self, "Attunement", why)
+            self._refresh_magic_items(); return
         # Deferred: self.ctrl.refresh() -> _on_char_updated() ->
         # _refresh_magic_items() clears and rebuilds the whole tree,
         # including this very checkbox — destroying it while its own
@@ -915,32 +926,13 @@ class GearMixin:
         from PySide6.QtCore import QTimer
         QTimer.singleShot(0, self.ctrl.refresh)
 
-    def _toggle_equipped(self, name: str, on: bool):
-        for entry in self.char.get("magic_items",[]):
-            if isinstance(entry,dict) and entry.get("name")==name:
-                entry["equipped"] = on
+    def _toggle_equipped(self, uid: str, on: bool):
         # Syncs equipped_weapons/armor_worn/shield in addition to the
         # item's own bookkeeping flag, so a magic weapon like Armblade
         # or Sun Blade shows up as an attackable weapon in the Combat
         # tab as soon as it's checked "Equipped".
-        from dnd_app.data.phbCommon.magic_items import get_magic_item
-        catalog = get_magic_item(name) or {}
-        itype = catalog.get("type", "")
-        if itype == "Weapon":
-            equipped_wpns = self.char.setdefault("equipped_weapons", [])
-            if on:
-                if name not in equipped_wpns:
-                    equipped_wpns.append(name)
-            else:
-                if name in equipped_wpns:
-                    equipped_wpns.remove(name)
-        elif itype == "Armor":
-            if on:
-                self.char["armor_worn"] = name
-            elif self.char.get("armor_worn") == name:
-                self.char["armor_worn"] = "No Armor"
-        elif itype == "Shield":
-            self.char["shield"] = on
+        from dnd_app.core.magic_items import set_owned_magic_item_equipped
+        set_owned_magic_item_equipped(self.char, uid, on)
         # Same deferred-refresh fix as _toggle_attunement above, and for
         # the same reason — this checkbox also lives in the tree that
         # _refresh_magic_items() clears and rebuilds.
@@ -948,12 +940,16 @@ class GearMixin:
         QTimer.singleShot(0, self.ctrl.refresh)
         self._mark_dirty()
 
-    def _remove_magic_item(self, name: str):
-        from dnd_app.core.magic_items import parse_magic_suffix
-        self.char["magic_items"] = [i for i in self.char.get("magic_items",[])
-            if (i.get("name") if isinstance(i,dict) else i) != name]
-        att = self.char.get("attuned_items",[])
-        if name in att: att.remove(name)
+    def _remove_magic_item(self, uid: str):
+        from dnd_app.core.magic_items import parse_magic_suffix, remove_owned_magic_item
+        removed = remove_owned_magic_item(self.char, uid)
+        if not removed:
+            return
+        name = removed.get("name", "")
+        if any(e.get("name") == name for e in self.char.get("magic_items", [])):
+            # another copy is still owned -- leave the enchanted gear as is
+            self.ctrl.refresh(); self._refresh_combat(); self._refresh_magic_items()
+            return
 
         # If this was a "+N" enchantment applied to one of the player's own
         # weapon/armor/shield, revert that item back to its mundane form.
@@ -974,21 +970,32 @@ class GearMixin:
         self.ctrl.refresh(); self._refresh_combat(); self._refresh_magic_items()
         if hasattr(self, "_refresh_gear_equipment"): self._refresh_gear_equipment()
 
-    def _study_manual(self, name: str):
+    def _study_manual(self, uid: str):
         """Study one of the 6 classic ability-score manuals/tomes: permanently
         raises the named ability score by 2 (real 5e rule -- no hard cap on
-        this kind of magical increase) and consumes the book. Equip-based
-        MAGIC_ITEM_EFFECTS can't represent a one-time permanent change, so
-        this writes directly to char["abilities"]."""
-        from dnd_app.core.magic_items import ABILITY_SCORE_MANUALS
-        ability = ABILITY_SCORE_MANUALS.get(name)
-        if not ability:
+        this kind of magical increase). The book stays, marked studied --
+        each copy works once. Equip-based MAGIC_ITEM_EFFECTS can't represent
+        a one-time permanent change, so this writes to char["abilities"]."""
+        from dnd_app.core.magic_items import find_magic_item, study_owned_manual
+        entry = find_magic_item(self.char, uid)
+        done = study_owned_manual(self.char, uid)
+        if not done:
+            self._toast("You've already studied this book — its magic is spent.")
             return
-        abilities = self.char.setdefault("abilities", {})
-        abilities[ability] = abilities.get(ability, 10) + 2
-        self._remove_magic_item(name)
-        self._toast(f"{name} — your {ability} score permanently increases by 2 (now {abilities[ability]})")
+        ability, score = done
+        self._toast(f"{entry['name']} — your {ability} score permanently increases by 2 (now {score})")
         self.ctrl.refresh()
+        self._refresh_magic_items()
+        self._mark_dirty()
+
+    def _set_magic_ammo_qty(self, uid: str, entry: dict):
+        from dnd_app.core.magic_items import set_owned_magic_item_qty
+        n, ok = QInputDialog.getInt(self, "Quantity", f"How many {entry.get('name', '')}? (0 removes them)",
+                                    entry.get("qty", 1), 0, 9999)
+        if not ok:
+            return
+        set_owned_magic_item_qty(self.char, uid, n)
+        self.ctrl.refresh(); self._refresh_magic_items()
         self._mark_dirty()
 
     def _add_equipment_dialog(self):
@@ -1041,7 +1048,7 @@ class GearMixin:
             itype  = cat.get("type","Wondrous") if cat else "Wondrous"
             desc   = cat.get("desc","") if cat else ""
             items.append({
-                "name": mname, "qty": 1, "weight": 0,
+                "name": mname, "qty": mi.get("qty", 1) if isinstance(mi, dict) else 1, "weight": 0,
                 "magic": True, "rarity": rarity, "type": itype, "desc": desc,
                 "_mi_only": True,   # flag: shown in equipment for reference only
             })
@@ -1081,7 +1088,15 @@ class GearMixin:
                 return True
             return ARMOR_DICT.get(n, {}).get("type") == "shield" and bool(self.char.get("shield"))
 
-        items.sort(key=lambda e: (_group_of(e), not _is_equipped(e), e.get("name", "").lower()))
+        def _sort_key(e):
+            g = _group_of(e)
+            if g == 2 or e.get("magic"):   # magic: rarity first (Common -> Artifact), then name
+                r = e.get("rarity", "")
+                rank = self._RARITY_ORDER.index(r) if r in self._RARITY_ORDER else len(self._RARITY_ORDER)
+                return (g, 1, rank, e.get("name", "").lower())
+            return (g, 0, not _is_equipped(e), e.get("name", "").lower())
+
+        items.sort(key=_sort_key)
         _counts = {}
         for e in items:
             _counts[_group_of(e)] = _counts.get(_group_of(e), 0) + 1
@@ -1106,9 +1121,10 @@ class GearMixin:
                          or _mi_type == "Weapon")
             is_armor  = ((name in ARMOR_DICT and name not in ("No Armor","Mage Armor (spell)"))
                          or _mi_type == "Armor")
-            rarity_color = self._RARITY_COLORS.get(eq.get("rarity",""), TEXT2) if is_magic else None
-            accent = rarity_color if rarity_color else (
-                TEAL2 if is_weapon else (GOLD2 if is_armor else TEXT2))
+            rarity_color = self._RARITY_COLORS.get(eq.get("rarity", "")) if is_magic else None
+            # text stays the plain text colour; a magic item's rarity is the
+            # coloured bar on the left of its row (RarityBarDelegate)
+            accent = TEXT if (is_weapon or is_armor or is_magic) else TEXT2
             _ln = name.lower()
             icon = ("combat" if is_weapon else "shield" if is_armor else "magic" if is_magic
                     else "potion" if "potion" in _ln else "file" if is_scroll_name(name)
@@ -1127,6 +1143,8 @@ class GearMixin:
             item.setForeground(0, QColor(accent))
             item.setForeground(3, QColor(TEXT3))
             item.setForeground(4, QColor(TEXT3))
+            if rarity_color:
+                item.setData(0, RARITY_ROLE, rarity_color)
 
             # Tooltip with full item description
             if is_magic and eq.get("desc"):
@@ -1179,6 +1197,16 @@ class GearMixin:
                                      f"QCheckBox::indicator:checked{{background:{GOLD};border-color:{GOLD2};}}")
                 eq_cb.stateChanged.connect(lambda s,n=name: self._toggle_armor_worn(n, bool(s)))
                 self._gear_equip_tree.setItemWidget(item, 1, eq_cb)
+            elif is_scroll_name(name):
+                # Use: a spell scroll casts its spell (a blank one asks which)
+                use_btn = QPushButton("Use"); use_btn.setFixedHeight(20)
+                use_btn.setToolTip("Read the scroll and cast its spell")
+                use_btn.setStyleSheet(
+                    f"QPushButton{{background:{SURF2};border:1px solid {BORDER2};border-radius:4px;"
+                    f"color:{TEXT};font-size:{FS_TINY}px;font-weight:700;padding:0 6px;}}"
+                    f"QPushButton:hover{{background:{SURF3};}}")
+                use_btn.clicked.connect(lambda checked=False, n=name: self._use_scroll(n))
+                self._gear_equip_tree.setItemWidget(item, 1, use_btn)
 
             # Quantity spin (col 2)
             qty_spin = QSpinBox()
@@ -1271,7 +1299,11 @@ class GearMixin:
                 drink_act = menu.addAction(_icons.icon("potion"), f"Drink {_name[:36]}")
                 drink_act.triggered.connect(lambda checked=False, n=_name: self._use_potion(n))
             if is_scroll_name(_name):
-                read_act = menu.addAction(_icons.icon("file"), f"Read {_name[:36]}")
+                from dnd_app.core.spell_scrolls import parse_spell_scroll
+                _scroll = parse_spell_scroll(_name)
+                label = (f"Use: cast {_scroll[1]}" if _scroll and _scroll[1]
+                         else "Use (choose its spell)" if _scroll else f"Read {_name[:36]}")
+                read_act = menu.addAction(_icons.icon("file"), label)
                 read_act.triggered.connect(lambda checked=False, n=_name: self._use_scroll(n))
             rm_act = menu.addAction(f"✕  Remove {_name[:36]}")
             rm_act.triggered.connect(lambda: self._remove_equipment(_name))
@@ -1434,16 +1466,54 @@ class GearMixin:
         self._apply_turn_state()
         self._mark_dirty()
 
+    def _use_spell_scroll(self, name: str):
+        """Cast the spell on one spell scroll (core/spell_scrolls.py: the
+        class-list rule, the DC 10 + level check, the scroll's own save DC
+        and attack). A blank scroll asks which spell is on it first."""
+        from dnd_app.core.spell_scrolls import (parse_spell_scroll, use_spell_scroll,
+                                                bind_spell_scroll, spell_for_scroll_level)
+        from dnd_app.data.phbCommon.spells import get_spell
+        from dnd_app.core.magic_items import start_concentration
+        level, spell_name = parse_spell_scroll(name)
+        if not spell_name:
+            choices = spell_for_scroll_level(level)
+            spell_name, ok = QInputDialog.getItem(self, "Spell Scroll", "Which spell is on this scroll?",
+                                                  choices, 0, False)
+            if not ok or not spell_name:
+                return
+            name = bind_spell_scroll(self.char, name, spell_name)
+            if not name:
+                return
+        spell = get_spell(spell_name) or {}
+        if self.char.get("_wildshape_active") and not self._has_beast_spells():
+            self._toast("Can't read a scroll while Wild Shaped — revert to your normal form first")
+            return
+        res = use_spell_scroll(self.char, name)
+        if res["status"] == "cast" and spell:
+            if spell.get("concentration"):
+                start_concentration(self.char, spell_name)
+                self.ctrl.update("concentration", self.char["concentration"], rebuild_char=False)
+                self._refresh_concentration()
+            self._apply_spell_active_effect(spell)
+            self._mark_spell_cast_time(spell)
+        elif res["status"] == "failed" and spell:
+            self._mark_spell_cast_time(spell)
+        self._toast(res["message"])
+        self.ctrl.refresh()
+        self._refresh_gear_equipment()
+        self._apply_turn_state()
+        self._mark_dirty()
+
     def _use_scroll(self, name: str):
-        """Read one scroll: consumes it from inventory and, if it has a
-        lasting effect (EFFECT_TABLE entry, e.g. the Scroll of Protection
-        family), adds it to active_effects the same way potions do.
-        Generic "Spell Scroll (Nth level)" entries don't record which
-        specific spell is written on this copy, so reading one just
-        confirms the scroll was used rather than auto-applying a spell
-        effect — casting any known spell already works the same way
-        everywhere else in this app (no spell has automatic mechanical
-        application from a spellbook either)."""
+        """Read one scroll. A spell scroll casts its spell (see
+        _use_spell_scroll); any other scroll (the Scroll of Protection
+        family...) is used up and, if it has a lasting effect
+        (EFFECT_TABLE entry), added to active_effects the same way
+        potions are."""
+        from dnd_app.core.spell_scrolls import parse_spell_scroll
+        if parse_spell_scroll(name):
+            self._use_spell_scroll(name)
+            return
         eq = self.char.get("equipment", [])
         entry = next((e for e in eq if e.get("name") == name), None)
         if not entry:

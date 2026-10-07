@@ -71,6 +71,22 @@ QtObject {
 
     readonly property var themeNames: Object.keys(_palettes)
 
+    // Magic item rarity colours -- card borders and their dialogs. Fixed
+    // across themes so a rarity always reads the same. The same values as
+    // RARITY_COLORS in data/phbCommon/magic_items.py (the desktop's) --
+    // change both together.
+    function rarityColor(rarity) {
+        switch (String(rarity || "").toLowerCase()) {
+        case "common":    return "#6e6e6e"   // dark grey
+        case "uncommon":  return "#2ea854"   // green
+        case "rare":      return "#3fa0f0"   // blue
+        case "very rare": return "#a064ea"   // purple
+        case "legendary": return "#e89828"   // amber
+        case "artifact":  return "#e24f5d"   // crimson
+        default:          return border
+        }
+    }
+
     function applyTheme(name) {
         var p = _palettes[name]
         if (!p) return

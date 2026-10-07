@@ -121,6 +121,18 @@ def _tip(x, y, dx, dy, size=3.0, spread=40):
     return poly(pts[0], (x, y), pts[1], closed=False)
 
 
+def _capsule(x0, y0, x1, y1, w):
+    """Solid bar from (x0, y0) to (x1, y1), half-width w, with round ends
+    (for ICON_FILLS -- a handle thicker than the line stroke)."""
+    ang = math.degrees(math.atan2(y1 - y0, x1 - x0))
+    nx, ny = -math.sin(math.radians(ang)), math.cos(math.radians(ang))
+    a_n = ang + 90
+    return (f"M {_pt(x0 + nx * w, y0 + ny * w)} L {_pt(x1 + nx * w, y1 + ny * w)} "
+            + arc(x1, y1, w, w, a_n, a_n - 180, move=False)
+            + f" L {_pt(x0 - nx * w, y0 - ny * w)} "
+            + arc(x0, y0, w, w, a_n - 180, a_n - 360, move=False) + " Z")
+
+
 def _hex_pts(cx, cy, radii):
     return [(cx + r * math.cos(math.radians(-90 + 60 * i)), cy + r * math.sin(math.radians(-90 + 60 * i)))
             for i, r in enumerate(radii)]
@@ -524,7 +536,9 @@ ICON_PATHS = {
                   poly((10, 20), (10, 15), (14, 15), (14, 20), closed=False)),
     "pencil": _join("M 4.5 19.5 L 5.4 15.1 L 15.4 5.1 Q 16.8 3.7 18.2 5.1 L 18.9 5.8 Q 20.3 7.2 18.9 8.6 "
                     "L 8.9 18.6 Z", line(13.8, 6.7, 17.3, 10.2)),
-    "search": _join(circle(10.5, 10.5, 6.2), line(15.1, 15.1, 20, 20)),
+    # View / search: a lens with a glint (like the orb's); the solid handle
+    # is in ICON_FILLS, the band round it in ICON_CUTS
+    "search": _join(circle(10, 10, 6.3), arc(10, 10, 3.8, 3.8, 195, 255)),
     "info": _join(circle(12, 12, 9), line(12, 10.8, 12, 16.8)),
     "credits": _join(circle(12, 12, 9), arc(12, 12, 4.3, 4.3, 45, 315)),
     "arrow_left": _join(line(19, 12, 5, 12), poly((10.5, 6.5), (5, 12), (10.5, 17.5), closed=False)),
@@ -697,6 +711,7 @@ ICON_FILLS = {
     "paw": _join(ellipse(12, 16.4, 4.05, 3.45), ellipse(5.9, 10.9, 1.9, 2.3), ellipse(9.4, 7, 1.9, 2.35),
                  ellipse(14.6, 7, 1.9, 2.35), ellipse(18.1, 10.9, 1.9, 2.3)),
     "info": circle(12, 7.3, 1.4),
+    "search": _capsule(15.4, 15.4, 20.3, 20.3, 1.75),
     "skull": _join(circle(9, 10.8, 2.3), circle(15, 10.8, 2.3)),
     "bolt": poly((13.9, 2.4), (5.6, 14), (11.2, 14), (10.1, 21.6), (18.4, 10), (12.8, 10)),
     "passive": _join(circle(8, 12, 1.45), circle(12, 12, 1.45), circle(16, 12, 1.45)),
@@ -743,6 +758,8 @@ ICON_CUTS = {
         "M 11.80 7.00 Q 10.69 7.51 10.28 7.91 Q 9.88 8.32 9.68 8.62 Q 9.48 8.92 9.68 9.02 Q 9.88 9.12 9.83 9.33 Q 9.78 9.53 9.53 9.58 Q 9.27 9.63 9.12 9.83 Q 8.97 10.03 8.82 10.64 Q 8.67 11.24 8.67 11.95 Q 8.67 12.66 8.82 12.76 Q 8.97 12.86 8.97 13.16 Q 8.97 13.46 8.87 13.51 Q 8.77 13.56 8.87 13.82 Q 8.97 14.07 8.21 13.87 Q 7.46 13.67 7.00 13.72 Q 6.55 13.77 5.79 14.07 Q 5.04 14.37 4.73 14.78",
         "M 4.73 14.78 Q 5.94 13.97 6.80 13.87 Q 7.66 13.77 8.32 13.92 Q 8.97 14.07 9.17 14.42 Q 9.38 14.78 9.48 15.58",
         "M 3.42 14.88  Q 2.61 12.86 2.71 11.04"),
+    # the band where the magnifying glass's handle meets the lens
+    "search": line(16.9, 15.5, 15.5, 16.9),
 }
 
 

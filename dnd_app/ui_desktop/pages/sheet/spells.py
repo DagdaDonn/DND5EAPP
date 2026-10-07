@@ -516,7 +516,7 @@ class SpellsMixin:
             lvl = sp.get("level", 0) if sp else 0
             cn = spell_to_class.get(name, "")
             cls_idx = class_order.index(cn) if cn in class_order else len(class_order)
-            return (cls_idx, lvl, name)
+            return (cls_idx, lvl, name.casefold())   # each class's spells: level, then name
         for name in sorted(self.char.get("spells_known", []), key=_sort_key):
             sp = _gs(name)
             if sp:
@@ -625,7 +625,8 @@ class SpellsMixin:
 
     def _populate_spell_browser(self):
         self._sp_browser.clear()
-        for s in ALL_SPELLS:
+        # level (cantrips first), then name
+        for s in sorted(ALL_SPELLS, key=lambda s: (s["level"], s["name"].casefold())):
             lvl_txt = "Ctrp" if s["level"]==0 else f"L{s['level']}"
             conc = " ©" if s.get("concentration") else ""
             rit  = " ®" if s.get("ritual") else ""
@@ -1482,6 +1483,11 @@ class SpellsMixin:
             self._toast(f"Can't cast {spell['name']} — {block_reason}")
             return
         base_time = spell.get("casting_time", spell.get("cast_time", "1 action"))
+        # a ritual casting still needs concentration (Detect Magic, ...)
+        if spell.get("concentration"):
+            start_concentration(self.char, spell["name"])
+            self.ctrl.update("concentration", self.char["concentration"], rebuild_char=False)
+            self._refresh_concentration()
         self._toast(f"Cast {spell['name']} as a ritual — no spell slot used, "
                     f"but casting time is {base_time} + 10 minutes.")
         self._mark_dirty()

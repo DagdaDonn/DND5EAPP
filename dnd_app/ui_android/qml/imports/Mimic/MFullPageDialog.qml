@@ -22,6 +22,8 @@ Popup {
     // built the first time the dialog opens and kept afterwards, so a
     // dialog nobody has opened yet costs nothing at startup.
     property url contentSource: ""
+    // Optional frame colour (a magic item's rarity); transparent = none.
+    property color accent: "transparent"
     onAboutToShow: if (contentSource.toString() !== "") lazyContent.active = true
 
     modal: true
@@ -30,9 +32,13 @@ Popup {
     y: 0
     width: parent ? parent.width : 400
     height: parent ? parent.height : 800
-    padding: 0
+    padding: accent.a > 0 ? 3 : 0
 
-    background: Rectangle { color: Theme.bg }
+    background: Rectangle {
+        color: Theme.bg
+        border.color: root.accent
+        border.width: root.accent.a > 0 ? 3 : 0
+    }
     Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.8) }
 
     enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 120 } }

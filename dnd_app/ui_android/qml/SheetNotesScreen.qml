@@ -222,39 +222,81 @@ Page {
         }
     }
 
-    Dialog {
-        id: addPageDialog
-        title: "New Notes Page"
+    // New / rename page -- same themed shape as the other small dialogs
+    // (MButton actions rather than Dialog's plain standard buttons).
+    component PageNameDialog: Dialog {
+        id: dlg
+        property string heading: ""
+        property alias fieldText: nameField.text
+        signal confirmed(string text)
+        parent: Overlay.overlay
         anchors.centerIn: parent
         modal: true
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        onAccepted: {
+        width: Math.min(parent ? parent.width - 32 : 340, 340)
+        padding: 16
+        background: Rectangle { color: Theme.surf; radius: 12; border.color: Theme.border }
+        Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.8) }
+        onOpened: nameField.forceActiveFocus()
+
+        contentItem: ColumnLayout {
+            spacing: 12
+            Label {
+                text: dlg.heading
+                color: Theme.gold2
+                font.pixelSize: Theme.fsHead
+                font.bold: true
+                Layout.fillWidth: true
+            }
+            MTextField {
+                id: nameField
+                objectName: "pageNameField"
+                Layout.fillWidth: true
+                placeholderText: "Page name"
+                onAccepted: okButton.clicked()
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                MButton {
+                    Layout.fillWidth: true
+                    primary: false
+                    text: "Cancel"
+                    onClicked: dlg.close()
+                }
+                MButton {
+                    id: okButton
+                    objectName: "pageNameOk"
+                    Layout.fillWidth: true
+                    text: "OK"
+                    onClicked: {
+                        var t = nameField.text
+                        dlg.close()
+                        dlg.confirmed(t)
+                    }
+                }
+            }
+        }
+    }
+
+    PageNameDialog {
+        id: addPageDialog
+        objectName: "addPageDialog"
+        heading: "New Notes Page"
+        onAboutToShow: fieldText = ""
+        onConfirmed: (text) => {
             var before = sheetBridge.notesPages.length
-            sheetBridge.addNotesPage(newPageField.text)
-            newPageField.text = ""
+            sheetBridge.addNotesPage(text)
             // open the page just made
             if (sheetBridge.notesPages.length > before)
                 root.currentPageIndex = sheetBridge.notesPages.length
         }
-        MTextField {
-            id: newPageField
-            width: 240
-            placeholderText: "Page name"
-        }
     }
 
-    Dialog {
+    PageNameDialog {
         id: renamePageDialog
-        title: "Rename Notes Page"
-        anchors.centerIn: parent
-        modal: true
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        onOpened: renameField.text = (sheetBridge.notesPages[root.currentPageIndex - 1] || {}).title || ""
-        onAccepted: sheetBridge.renameNotesPage(root.currentPageIndex - 1, renameField.text)
-        MTextField {
-            id: renameField
-            width: 240
-            placeholderText: "Page name"
-        }
+        objectName: "renamePageDialog"
+        heading: "Rename Notes Page"
+        onAboutToShow: fieldText = (sheetBridge.notesPages[root.currentPageIndex - 1] || {}).title || ""
+        onConfirmed: (text) => sheetBridge.renameNotesPage(root.currentPageIndex - 1, text)
     }
 }

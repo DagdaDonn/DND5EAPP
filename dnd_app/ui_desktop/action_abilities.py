@@ -2574,7 +2574,9 @@ def build_action_abilities(char):
         my_prepare_classes = char_classes & PREPARE_CLASSES
         pinned = set(char.get('quick_spells', []))
         seen = set()
-        for sp_name in known + [p for p in pinned if p not in known]:
+        # spell cards in level order (cantrips first), then by name
+        _order = lambda n: ((spell_cat.get(n) or {}).get('level', 0), n.casefold())
+        for sp_name in sorted(known + [p for p in pinned if p not in known], key=_order):
             if sp_name in seen: continue
             seen.add(sp_name)
             sp = spell_cat.get(sp_name)

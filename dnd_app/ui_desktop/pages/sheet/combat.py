@@ -476,7 +476,7 @@ class CombatMixin:
                 label_row = QHBoxLayout(); label_row.setSpacing(2); label_row.setContentsMargins(0,0,0,0)
                 label_row.addWidget(_lbl(label, TEXT2, FS_TINY, bold=True, align=Qt.AlignCenter), 1)
                 reset_max = QPushButton("↺")
-                reset_max.setFixedSize(14, 14)
+                reset_max.setFixedSize(18, 18)
                 reset_max.setToolTip("Reset Max HP to the auto-calculated value "
                                      "(class Hit Dice + CON)")
                 reset_max.setStyleSheet(
@@ -553,6 +553,8 @@ class CombatMixin:
                          text_color=GREEN2, hover_text="white", font_size=FS_SMALL, padding="0px")
         heal_btn.setAccessibleName("Heal hit points")
         heal_btn.clicked.connect(self._do_heal)
+        # padding:0 above sizes these to their bare text -- give them room
+        dmg_btn.setMinimumWidth(84); heal_btn.setMinimumWidth(64)
         ctrl_row.addWidget(self._hp_amt); ctrl_row.addWidget(dmg_btn); ctrl_row.addWidget(heal_btn)
         ctrl_row.addStretch()
         hpcl.addLayout(ctrl_row)

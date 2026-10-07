@@ -367,7 +367,10 @@ Page {
                                                             Layout.alignment: Qt.AlignVCenter
                                                             height: 28
                                                             primary: false
-                                                            text: "View"
+                                                            implicitWidth: 40
+                                                            iconName: "search"   // View -- a magnifying glass
+                                                            iconSize: 22
+                                                            Accessible.name: "View"
                                                             onClicked: {
                                                                 Window.window.pendingFeatDetail = modelData
                                                                 featDetailDialog.open()
@@ -437,6 +440,9 @@ Page {
                                     Repeater {
                                         model: subCard.poolData
                                         delegate: MButton {
+                                            // never wider than the row; long option text wraps
+                                            width: Math.min(implicitWidth, parent ? parent.width : implicitWidth)
+                                            wrapText: true
                                             primary: false
                                             text: modelData
                                             onClicked: sheetBridge.applySubclassLevelUpChoice(subCard.choiceId, modelData)
@@ -548,12 +554,14 @@ Page {
                                         GridLayout {
                                             id: poolGrid
                                             width: parent.width
-                                            columns: 2
+                                            // one column when options carry descriptions
+                                            columns: genCard.poolData.some(function(t) { return String(t).length > 24 }) ? 1 : 2
                                             columnSpacing: 8
                                             rowSpacing: 8
                                             Repeater {
                                                 model: genCard.poolData
                                                 delegate: MButton {
+                                                    wrapText: true
                                                     Layout.fillWidth: true
                                                     primary: genCard.newSelections.indexOf(modelData) >= 0
                                                     text: modelData
@@ -636,6 +644,9 @@ Page {
                                 Repeater {
                                     model: pbCard.pb.pool || []
                                     delegate: MButton {
+                                        // never wider than the row; long option text wraps
+                                        width: Math.min(implicitWidth, parent ? parent.width : implicitWidth)
+                                        wrapText: true
                                         primary: modelData === pbCard.newSel
                                         text: modelData.split(" (")[0]
                                         onClicked: pbCard.newSel = modelData
@@ -694,6 +705,9 @@ Page {
                                     Repeater {
                                         model: arcUnitCard.newPool
                                         delegate: MButton {
+                                            // never wider than the row; long option text wraps
+                                            width: Math.min(implicitWidth, parent ? parent.width : implicitWidth)
+                                            wrapText: true
                                             primary: modelData === arcUnitCard.newSel
                                             text: modelData
                                             onClicked: arcUnitCard.newSel = modelData
@@ -751,6 +765,9 @@ Page {
                                 Repeater {
                                     model: fsCard.fs.current || []
                                     delegate: MButton {
+                                        // never wider than the row; long option text wraps
+                                        width: Math.min(implicitWidth, parent ? parent.width : implicitWidth)
+                                        wrapText: true
                                         primary: modelData === fsCard.oldSel
                                         text: modelData.split(" (")[0]
                                         onClicked: fsCard.oldSel = modelData
@@ -768,6 +785,9 @@ Page {
                                 Repeater {
                                     model: fsCard.fs.pool || []
                                     delegate: MButton {
+                                        // never wider than the row; long option text wraps
+                                        width: Math.min(implicitWidth, parent ? parent.width : implicitWidth)
+                                        wrapText: true
                                         primary: modelData === fsCard.newSel
                                         // .split(" (")[0]: these pool entries carry
                                         // a full mechanical description in
@@ -829,6 +849,9 @@ Page {
                                 Repeater {
                                     model: manCard.man.current || []
                                     delegate: MButton {
+                                        // never wider than the row; long option text wraps
+                                        width: Math.min(implicitWidth, parent ? parent.width : implicitWidth)
+                                        wrapText: true
                                         primary: modelData === manCard.oldSel
                                         text: modelData.split(" – ")[0]
                                         onClicked: manCard.oldSel = modelData
@@ -846,6 +869,9 @@ Page {
                                 Repeater {
                                     model: manCard.man.pool || []
                                     delegate: MButton {
+                                        // never wider than the row; long option text wraps
+                                        width: Math.min(implicitWidth, parent ? parent.width : implicitWidth)
+                                        wrapText: true
                                         primary: modelData === manCard.newSel
                                         text: modelData.split(" – ")[0]
                                         onClicked: manCard.newSel = modelData
@@ -901,6 +927,9 @@ Page {
                                 Repeater {
                                     model: expCard.exp.from || []
                                     delegate: MButton {
+                                        // never wider than the row; long option text wraps
+                                        width: Math.min(implicitWidth, parent ? parent.width : implicitWidth)
+                                        wrapText: true
                                         primary: modelData === expCard.oldSel
                                         text: modelData
                                         onClicked: expCard.oldSel = modelData
@@ -918,6 +947,9 @@ Page {
                                 Repeater {
                                     model: expCard.exp.to || []
                                     delegate: MButton {
+                                        // never wider than the row; long option text wraps
+                                        width: Math.min(implicitWidth, parent ? parent.width : implicitWidth)
+                                        wrapText: true
                                         primary: modelData === expCard.newSel
                                         text: modelData
                                         onClicked: expCard.newSel = modelData
@@ -973,6 +1005,9 @@ Page {
                                 Repeater {
                                     model: mmCard.mm.current || []
                                     delegate: MButton {
+                                        // never wider than the row; long option text wraps
+                                        width: Math.min(implicitWidth, parent ? parent.width : implicitWidth)
+                                        wrapText: true
                                         primary: modelData === mmCard.oldSel
                                         text: modelData.split(" – ")[0]
                                         onClicked: mmCard.oldSel = modelData
@@ -990,6 +1025,9 @@ Page {
                                 Repeater {
                                     model: mmCard.mm.pool || []
                                     delegate: MButton {
+                                        // never wider than the row; long option text wraps
+                                        width: Math.min(implicitWidth, parent ? parent.width : implicitWidth)
+                                        wrapText: true
                                         primary: modelData === mmCard.newSel
                                         text: modelData.split(" – ")[0]
                                         onClicked: mmCard.newSel = modelData

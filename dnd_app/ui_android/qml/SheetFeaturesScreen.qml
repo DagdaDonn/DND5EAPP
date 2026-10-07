@@ -172,7 +172,7 @@ Page {
             // Features tab equivalent card.
             Label { text: "Bonus Feature Browser -- DM Rewards"; color: Theme.gold; font.pixelSize: Theme.fsSmall; font.bold: true; Layout.topMargin: 6 }
             Label {
-                text: "Grant a feat or DM-awarded bonus feature outside normal class progression. Tap View for details."
+                text: "Grant a feat or DM-awarded bonus feature outside normal class progression. Tap the magnifying glass for details."
                 color: Theme.text3
                 font.pixelSize: Theme.fsSmall
                 wrapMode: Text.WordWrap
@@ -264,8 +264,10 @@ Page {
                             MButton {
                                 primary: false
                                 height: 32
-                                Layout.preferredWidth: 64
-                                text: "View"
+                                Layout.preferredWidth: 40
+                                iconName: "search"   // View -- a magnifying glass
+                                iconSize: 22
+                                Accessible.name: "View"
                                 onClicked: {
                                     Window.window.pendingDmRewardDetail = modelData
                                     dmDetail.open()

@@ -45,7 +45,30 @@ Working and shipping. What's here:
   same icons. Regenerate with `python3 -m dnd_app.ui_desktop.icon_data`
   (the Android clean build does this automatically).
 
-Saving: the in-app list lives in the app's private Documents folder;
-characters auto-save on creation, level up/down and confirmed choices;
-Export writes a copy anywhere through the system save picker, plus
-plain-text and PDF exports. The file format is the desktop's.
+Conventions every screen follows:
+
+- **Buttons for what you do often** (Cast, Equip, Drink, Use), a
+  **magnifying glass** for details, and **press-and-hold** for the rare
+  actions -- a small menu (`MOptionsDialog`) to prepare/favourite/remove
+  a spell, attune/study/remove a magic item, or set how many of an item
+  you have. Browsers (adding spells/items) keep explicit View + Add.
+- **Stacks show their count as a button** beside View; it opens the
+  amount dialog (`MSpinBox` with typing, and `holdStep: 5` so holding
+  − / + moves in fives). 0 removes the item.
+- **Colour means rarity** on magic items (`Theme.rarityColor()`), never
+  "equipped" -- equipped rows show a bright icon, bold name and an
+  "Equipped" tag instead. The colour goes on a border or a small bar,
+  never on text (coloured text, navy on dark especially, is hard to read).
+- **Every dialog darkens what's behind it** (`Overlay.modal`), and
+  button icons/text are centred on the whole button.
+
+Saving: characters are saved in the shared Documents/MIMIC Characters
+folder (the app's private one if shared storage can't be written; saves
+from before are copied across once), or a folder picked in Settings
+(inside Documents or Download -- the only places Android lets apps
+write). They auto-save on creation, level up/down and confirmed choices.
+Exports (character file, text summary, PDF sheet) go into a folder per
+character beside the saves, so a character's sheet and file stay
+together; "Open folder" on Save & Export opens it in the Files app, and
+"Save elsewhere…" puts a copy anywhere through the system picker. The
+file format is the desktop's.

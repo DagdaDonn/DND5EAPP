@@ -1177,6 +1177,10 @@ class Step3Class(QWidget):
         if not name:
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "Name Required", "Please enter a character name."); return False
+        from dnd_app.core.save_load import name_in_use, NAME_IN_USE_MESSAGE
+        if name_in_use(name):
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Name Already Used", NAME_IN_USE_MESSAGE); return False
         _cur_bg = self._bg_combo.currentItem() if hasattr(self._bg_combo,'currentItem') else None
         bg_name = _cur_bg.text() if _cur_bg else (self._bg_combo.currentText() if hasattr(self._bg_combo,'currentText') else "")
         if not bg_name or bg_name.startswith("—"):

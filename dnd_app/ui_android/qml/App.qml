@@ -264,19 +264,23 @@ ApplicationWindow {
         // confirmClass()/etc. all require a valid state to save at
         // all), so loading one goes straight to the sheet rather than
         // back through the wizard.
-        if (saveLoadBridge.loadCharacterFrom(filepath)) {
-            sheetBridge.refresh()
-            // A save from before "theme" existed (or one that
-            // otherwise never went through finishCharacterCreation's
-            // stamp below) has no theme of its own recorded yet --
-            // stamp whatever's currently active rather than silently
-            // adopting a later app-level default change next time.
-            sheetBridge.stampThemeIfMissing(Theme.currentThemeName)
-            Theme.applyTheme(sheetBridge.theme)
-            Theme.applyFontScale(sheetBridge.fontScale)
-            characterActive = true
-            stackView.replace(screenComp(sheetComp))
-        }
+        if (saveLoadBridge.loadCharacterFrom(filepath))
+            showLoadedCharacter()
+    }
+    // After a character is loaded (a save, an imported file or PDF sheet):
+    // straight to its sheet, in its own theme.
+    function showLoadedCharacter() {
+        sheetBridge.refresh()
+        // A save from before "theme" existed (or one that
+        // otherwise never went through finishCharacterCreation's
+        // stamp below) has no theme of its own recorded yet --
+        // stamp whatever's currently active rather than silently
+        // adopting a later app-level default change next time.
+        sheetBridge.stampThemeIfMissing(Theme.currentThemeName)
+        Theme.applyTheme(sheetBridge.theme)
+        Theme.applyFontScale(sheetBridge.fontScale)
+        characterActive = true
+        stackView.replace(screenComp(sheetComp))
     }
     function finishCharacterCreation() {
         if (equipmentBridge.confirmEquipment()) {

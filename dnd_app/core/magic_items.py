@@ -583,3 +583,211 @@ def drop_concentration(char: dict) -> None:
     conc = char.setdefault("concentration", {"spell": None, "since_round": 0})
     conc["spell"] = None
     conc["since_round"] = 0
+
+
+# ── Owned magic items: one entry per copy ──────────────────────────────
+# Each copy you own is its own entry in char["magic_items"] with a short
+# "uid", so two Manuals of Bodily Health are two books (each studied once)
+# and removing one copy leaves the other. Only magic ammunition stacks,
+# as a "qty" on a single entry.
+import uuid as _uuid
+
+_AMMO_RE = _re.compile(r"\b(ammunition|arrows?|bolts?|bullets?|needles?)\b", _re.I)
+
+
+def is_magic_ammunition(name: str) -> bool:
+    """+1 Ammunition, Arrow of Slaying, Walloping Ammunition... -- the
+    magic items that come (and stack) by the handful."""
+    catalog = get_magic_item(name) or {}
+    return catalog.get("type") == "Weapon" and bool(_AMMO_RE.search(name or ""))
+
+
+def owned_magic_items(char: dict) -> list[dict]:
+    """char["magic_items"] as dicts, each with a uid and its own "attuned"
+    flag. Older saves (plain names, no uids, attunement only in
+    attuned_items) are upgraded in place; safe to call repeatedly.
+
+      1. every entry becomes a dict (an old save might hold a bare name)
+      2. every entry gets a uid if it hasn't one -- that's what the UIs
+         use to say WHICH copy to equip/attune/study/remove
+      3. attunement: attuned_items (names) is the source of truth, and
+         only one copy of a name can be attuned. A copy keeps its
+         "attuned" flag only if its name is still attuned and no earlier
+         copy already has it; an attuned name with no flagged copy (an
+         older save) is given to its first copy."""
+    items = []
+    for e in char.get("magic_items", []):
+        if not isinstance(e, dict):
+            e = {"name": str(e), "attunement": False, "equipped": True, "notes": ""}
+        if not e.get("uid"):
+            e["uid"] = _uuid.uuid4().hex[:10]
+        items.append(e)
+    char["magic_items"] = items
+    # attunement belongs to one copy: keep a copy's flag only while its name
+    # is attuned, then give any attuned name without a flagged copy to its
+    # first copy
+    attuned = set(char.get("attuned_items", []))
+    flagged = set()
+    for e in items:
+        n = e.get("name", "")
+        if e.get("attuned") and (n not in attuned or n in flagged):
+            e["attuned"] = False
+        if e.get("attuned"):
+            flagged.add(n)
+    for e in items:
+        n = e.get("name", "")
+        if n in attuned and n not in flagged:
+            e["attuned"] = True
+            flagged.add(n)
+    return items
+
+
+def find_magic_item(char: dict, uid: str) -> dict | None:
+    return next((e for e in owned_magic_items(char) if e.get("uid") == uid), None)
+
+
+def add_owned_magic_item(char: dict, name: str, qty: int = 1) -> dict:
+    """Add a copy (or, for ammunition, `qty` more of an existing stack)."""
+    items = owned_magic_items(char)
+    if is_magic_ammunition(name):
+        stack = next((e for e in items if e.get("name") == name), None)
+        if stack:
+            stack["qty"] = stack.get("qty", 1) + qty
+            return stack
+    entry = {"name": name, "attunement": False, "equipped": True, "notes": "",
+             "uid": _uuid.uuid4().hex[:10]}
+    if is_magic_ammunition(name):
+        entry["qty"] = max(1, qty)
+    items.append(entry)
+    return entry
+
+
+def _copies_left(char: dict, name: str) -> list[dict]:
+    return [e for e in owned_magic_items(char) if e.get("name") == name]
+
+
+def remove_owned_magic_item(char: dict, uid: str) -> dict | None:
+    """Remove one copy. Returns it (None if not found). Attunement and the
+    equipped-weapon/armor slot only go if no other copy keeps them."""
+    entry = find_magic_item(char, uid)
+    if not entry:
+        return None
+    char["magic_items"] = [e for e in char["magic_items"] if e.get("uid") != uid]
+    name = entry.get("name", "")
+    if entry.get("attuned"):
+        attuned = char.get("attuned_items", [])
+        while name in attuned:
+            attuned.remove(name)
+    if entry.get("equipped") and not any(e.get("equipped") for e in _copies_left(char, name)):
+        _unequip_slot(char, name)
+    return entry
+
+
+def set_owned_magic_item_qty(char: dict, uid: str, qty: int):
+    """Ammunition stacks: set how many; 0 removes the stack."""
+    entry = find_magic_item(char, uid)
+    if not entry:
+        return
+    if qty <= 0:
+        remove_owned_magic_item(char, uid)
+    else:
+        entry["qty"] = qty
+
+
+def _unequip_slot(char: dict, name: str):
+    itype = (get_magic_item(name) or {}).get("type", "")
+    if itype == "Weapon":
+        wpns = char.get("equipped_weapons", [])
+        if name in wpns:
+            wpns.remove(name)
+    elif itype == "Armor":
+        if char.get("armor_worn") == name:
+            char["armor_worn"] = "No Armor"
+    elif itype == "Shield":
+        char["shield"] = False
+
+
+def set_owned_magic_item_equipped(char: dict, uid: str, on: bool):
+    """Equip/unequip one copy, syncing equipped_weapons / armor_worn /
+    shield (a weapon stays in hand while any copy of it is equipped)."""
+    entry = find_magic_item(char, uid)
+    if not entry:
+        return
+    entry["equipped"] = on
+    name = entry.get("name", "")
+    itype = (get_magic_item(name) or {}).get("type", "")
+    if on:
+        if itype == "Weapon":
+            wpns = char.setdefault("equipped_weapons", [])
+            if name not in wpns:
+                wpns.append(name)
+        elif itype == "Armor":
+            char["armor_worn"] = name
+        elif itype == "Shield":
+            char["shield"] = True
+    elif not any(e.get("equipped") for e in _copies_left(char, name)):
+        _unequip_slot(char, name)
+
+
+def attunement_limit(char: dict) -> int:
+    from dnd_app.core.calculator import class_levels
+    art_lvl = class_levels(char).get("Artificer", 0)
+    limit = 6 if art_lvl >= 18 else 5 if art_lvl >= 14 else 4 if art_lvl >= 10 else 3
+    if "Mystic Conflux" in char.get("feats", []):
+        limit = max(limit, 4)
+    return limit
+
+
+def set_owned_magic_item_attuned(char: dict, uid: str, on: bool) -> str:
+    """Attune/end attunement for one copy. Returns "" on success, else the
+    reason it can't (you can't attune to two copies of the same item --
+    XGtE p.136 -- plus the prerequisite and the attunement limit)."""
+    entry = find_magic_item(char, uid)
+    if not entry:
+        return ""
+    name = entry.get("name", "")
+    attuned = char.setdefault("attuned_items", [])
+    if on:
+        if entry.get("attuned"):
+            return ""
+        if name in attuned:
+            return f"You're already attuned to another {name} -- you can't attune to two of the same item."
+        met, reason = attunement_prereq_met(char, name)
+        if not met:
+            return f"{name} requires attunement by {reason} -- this character doesn't qualify."
+        limit = attunement_limit(char)
+        if len(attuned) >= limit:
+            return f"Maximum {limit} attuned items (PHB p.138)."
+        attuned.append(name)
+        entry["attuned"] = True
+    else:
+        entry["attuned"] = False
+        while name in attuned:
+            attuned.remove(name)
+    entry["attunement"] = bool(entry.get("attuned"))
+    return ""
+
+
+def can_study_manual(entry: dict) -> bool:
+    """A manual or tome works once: after its 48 hours of study it's spent
+    (DMG: its magic is gone for a century)."""
+    return bool(entry) and entry.get("name") in ABILITY_SCORE_MANUALS and not entry.get("studied")
+
+
+def study_owned_manual(char: dict, uid: str) -> tuple[str, int] | None:
+    """Study one copy: +2 to its ability score, and that book is marked
+    studied (kept, but it can't be studied again). Returns (ability, new
+    score), or None if this copy can't be studied."""
+    entry = find_magic_item(char, uid)
+    if not can_study_manual(entry):
+        return None
+    ability = ABILITY_SCORE_MANUALS[entry["name"]]
+    abilities = char.setdefault("abilities", {})
+    abilities[ability] = abilities.get(ability, 10) + 2
+    # "...increases by 2, as does your maximum for that score" -- the
+    # builder's 20 (or 24) cap reads this, so the +2 survives a rebuild
+    max_bonus = char.setdefault("ability_max_bonus", {})
+    max_bonus[ability] = max_bonus.get(ability, 0) + 2
+    entry["studied"] = True
+    entry["equipped"] = False
+    return ability, abilities[ability]

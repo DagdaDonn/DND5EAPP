@@ -6,6 +6,7 @@ MCheese 1.0 MCheese.qml
 MCheckBox 1.0 MCheckBox.qml
 MFullPageDialog 1.0 MFullPageDialog.qml
 MIcon 1.0 MIcon.qml
+MOptionsDialog 1.0 MOptionsDialog.qml
 MPickerDialog 1.0 MPickerDialog.qml
 MPulseDot 1.0 MPulseDot.qml
 MToggleButton 1.0 MToggleButton.qml

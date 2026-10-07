@@ -10,23 +10,15 @@ output can never drift apart between them. What's platform-specific
 resolution, native file pickers, content:// URI handling -- which is
 exactly the split already in place, not something to unify further.
 
-Where this differs from the desktop app: desktop always saves under
-SAVE_DIR (~/.dnd_characters), a fixed path that makes sense for a
-single-user desktop install. Android has no equivalent stable home
-directory, and more importantly no runtime "storage permission" to
-request for it -- Qt's cross-platform permission types cover
-Bluetooth/Camera/Microphone/Location/Contacts/Calendar, but there is no
-generic file-storage permission, because modern Android's scoped
-storage model doesn't require one for an app writing to its own
-Documents-equivalent directory (QStandardPaths.DocumentsLocation). That
-directory is sandboxed to this app -- not the same shared folder the
-system Files app shows for "Documents" -- but it needs no permission
-dialog and is the correct, working answer for "save to a Documents
-folder" today. Making saves visible/pickable from the shared system
-Documents folder (so e.g. a file manager or another app can see them
-directly) is a real, separate feature: it needs the Storage Access
-Framework, which requires Java/JNI code Qt doesn't wrap directly --
-out of scope here, flagged the same way in packaging/android/README.md.
+Where characters live: both apps save to a "MIMIC Characters" folder in
+the shared Documents folder by default (core.save_load.get_save_dir), or
+a folder picked in Settings. On Android that's shared storage
+(/storage/emulated/0/Documents/...), which the Files app can browse and
+the app can write without a permission on Android 11+; older versions
+fall back to the app's private Documents folder, where saves used to
+live -- those are copied across once on first launch. Exports go into a
+folder per character beside the saves. A folder picked in Settings has
+to be one Android lets apps write to (Documents or Download).
 
 Loading FROM elsewhere (e.g. a file the player downloaded into their
 phone's Downloads folder) goes through loadCharacterFromUrl() below,
@@ -43,8 +35,10 @@ plain local path and that branch never runs.
 """
 import json
 import os
+import urllib.parse
 
 from PySide6.QtCore import QObject, QFile, QIODevice, QStandardPaths, QUrl, Signal, Slot, Property
+from PySide6.QtGui import QDesktopServices
 
 from dnd_app.core.character import new_character
 from dnd_app.core.save_load import (
@@ -52,23 +46,118 @@ from dnd_app.core.save_load import (
     delete_character, validate_character, migrate_character,
     export_character_text, list_character_folders, set_character_folder, character_json,
     rename_character_folder, delete_character_folder,
+    SAVES_SUBDIR, get_save_dir, set_default_save_dir, is_writable_dir,
+    character_folder_name, character_export_dir, copy_saved_characters, migrate_saves_once,
+    name_in_use, unique_character_name, NAME_IN_USE_MESSAGE,
 )
+from dnd_app.core.app_settings import set_custom_save_dir, get_custom_save_dir
 from dnd_app.core.pdf_export import export_official_pdf, TEMPLATE_PATH
 
-_SUBDIR = "MIMIC Characters"
+_SUBDIR = SAVES_SUBDIR
+
+
+def _on_android() -> bool:
+    # python-for-android sets these for the app process
+    return "ANDROID_PRIVATE" in os.environ or "ANDROID_ARGUMENT" in os.environ
+
+
+def _android_storage_root() -> str:
+    return os.environ.get("EXTERNAL_STORAGE") or "/storage/emulated/0"
+
+
+def _private_documents_dir() -> str:
+    """Qt's Documents location + MIMIC Characters: on Android the app's
+    own private folder (Android/data/...), where saves used to live."""
+    base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
+    if not base:
+        base = os.path.expanduser("~")
+    return os.path.join(base, _SUBDIR)
+
+
+def _platform_default_save_dir() -> str:
+    """Android: the shared Documents/MIMIC Characters folder, which the
+    Files app (and the desktop, over USB) can reach -- the private one
+    can't be browsed on Android 11+. Falls back to the private folder
+    when shared storage can't be written (older Android versions without
+    storage permission). Elsewhere, Qt's Documents location."""
+    if _on_android():
+        shared = os.path.join(_android_storage_root(), "Documents", _SUBDIR)
+        if is_writable_dir(shared):
+            return shared
+    return _private_documents_dir()
+
+
+set_default_save_dir(_platform_default_save_dir())
 
 
 def _documents_dir() -> str:
-    base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
-    if not base:
-        # No platform Documents location resolved at all (seen on some
-        # minimal/headless environments) -- fall back to a directory
-        # next to wherever HOME resolves, same as desktop's SAVE_DIR
-        # pattern, rather than crashing on save.
-        base = os.path.expanduser("~")
-    path = os.path.join(base, _SUBDIR)
-    os.makedirs(path, exist_ok=True)
-    return path
+    """Where characters are saved: the folder picked in Settings, else the
+    default above (see core.save_load.get_save_dir)."""
+    return get_save_dir()
+
+
+def _export_dir() -> str:
+    """Exports live alongside the saves, in a folder per character."""
+    return _documents_dir()
+
+
+def _character_folder_name(char: dict) -> str:
+    return character_folder_name(char)
+
+
+def _character_export_dir(char: dict) -> str:
+    return character_export_dir(char, _documents_dir())
+
+
+def _path_from_folder_url(url: str) -> str:
+    """A picked folder as a file system path. Android's folder picker
+    returns a storage tree URI (content://com.android.externalstorage.
+    documents/tree/primary%3ADocuments%2FCampaigns) -- primary storage maps
+    to /storage/emulated/0/..., an SD card id to /storage/<id>/...."""
+    qurl = QUrl(url)
+    if qurl.isLocalFile():
+        return qurl.toLocalFile()
+    text = urllib.parse.unquote(url)
+    marker = "com.android.externalstorage.documents/tree/"
+    if marker in text:
+        doc_id = text.split(marker, 1)[1].split("/document/")[0]
+        volume, _, rel = doc_id.partition(":")
+        root = _android_storage_root() if volume == "primary" else f"/storage/{volume}"
+        return os.path.join(root, rel) if rel else root
+    return ""
+
+
+def _write_export(filepath: str, write) -> str:
+    """Run write(path); if Android refuses because an older copy there
+    belongs to a previous install of the app, write "name (2).ext"
+    alongside it instead. Returns the path actually written."""
+    try:
+        write(filepath)
+        return filepath
+    except PermissionError:
+        stem, ext = os.path.splitext(filepath)
+        for n in range(2, 100):
+            alt = f"{stem} ({n}){ext}"
+            try:
+                write(alt)
+                return alt
+            except PermissionError:
+                continue
+        raise
+
+
+def _folder_url(path: str) -> QUrl:
+    """A URL the system can open as a folder. On Android a file:// folder
+    URL can't be handed to another app, so a folder in shared storage is
+    addressed through the system's storage document provider instead,
+    which the Files app opens."""
+    root = _android_storage_root().rstrip("/")
+    if _on_android() and (path + "/").startswith(root + "/"):
+        rel = os.path.relpath(path, root)
+        doc_id = urllib.parse.quote("primary:" + rel, safe="")
+        return QUrl.fromEncoded(
+            f"content://com.android.externalstorage.documents/document/{doc_id}".encode())
+    return QUrl.fromLocalFile(path)
 
 
 def _safe_filename(name: str) -> str:
@@ -88,7 +177,11 @@ class SaveLoadBridge(QObject):
         self.char = char
         self._error = ""
         self._last_saved_path = ""
+        self._renamed_on_load = ""
         self._clean_snapshot = self._serialize()
+        # Saves used to live in the app's private folder -- copied into the
+        # shared one once (originals left where they were).
+        migrate_saves_once(_private_documents_dir(), "migrated_android_private_saves")
 
     def _serialize(self) -> str:
         # A full JSON snapshot rather than a per-field "dirty" flag
@@ -104,9 +197,91 @@ class SaveLoadBridge(QObject):
     def hasUnsavedChanges(self) -> bool:
         return self._serialize() != self._clean_snapshot
 
-    @Property(str, constant=True)
+    @Property(str, notify=savedListChanged)
     def documentsDir(self):
         return _documents_dir()
+
+    # ── Where characters are saved (Settings) ───────────────────────────
+    @Property(bool, notify=savedListChanged)
+    def saveDirIsDefault(self):
+        return not get_custom_save_dir()
+
+    def _switch_save_dir(self, new_dir: str) -> bool:
+        """Use new_dir ("" = the default), copying the characters saved in
+        the current folder across (originals stay where they were)."""
+        from dnd_app.core.save_load import default_save_dir
+        old_dir = _documents_dir()
+        target = new_dir or default_save_dir()
+        if not is_writable_dir(target):
+            self.toastRequested.emit(
+                "MIMIC can't save there -- pick a folder inside Documents or Download")
+            return False
+        copied = copy_saved_characters(old_dir, target)
+        set_custom_save_dir(new_dir)
+        self.savedListChanged.emit()
+        msg = "Characters are now saved in " + target
+        if copied:
+            msg += f" ({copied} copied across)"
+        self.toastRequested.emit(msg)
+        return True
+
+    @Slot(str, result=bool)
+    def setSaveDirFromUrl(self, url: str) -> bool:
+        """A folder picked in Settings (a file:// URL, or on Android a
+        storage tree URI)."""
+        path = _path_from_folder_url(url)
+        if not path:
+            self.toastRequested.emit("That folder can't be used -- pick one inside Documents or Download")
+            return False
+        return self._switch_save_dir(path)
+
+    @Slot(result=bool)
+    def resetSaveDir(self) -> bool:
+        return self._switch_save_dir("")
+
+    @Slot(result=bool)
+    def openSaveFolder(self) -> bool:
+        path = _documents_dir()
+        if QDesktopServices.openUrl(_folder_url(path)):
+            return True
+        self.toastRequested.emit(f"Couldn't open the folder -- characters are saved in {path}")
+        return False
+
+    def _has_character(self) -> bool:
+        return bool(self.char.get("classes"))
+
+    # Refreshed whenever Save & Export opens (refresh()), so a rename on
+    # the sheet shows up here too.
+    @Property(str, notify=savedListChanged)
+    def exportDir(self):
+        """This character's own export folder, or the folder holding every
+        character's folder when none is open."""
+        if self._has_character():
+            return os.path.join(_export_dir(), _character_folder_name(self.char))
+        return _export_dir()
+
+    @Slot(result=bool)
+    def openExportFolder(self) -> bool:
+        """Open this character's export folder (or the parent folder when
+        no character is open) in the system's file manager -- the Files
+        app on Android."""
+        path = _character_export_dir(self.char) if self._has_character() else _export_dir()
+        if QDesktopServices.openUrl(_folder_url(path)):
+            return True
+        self.toastRequested.emit(f"Couldn't open the folder -- your exports are in {path}")
+        return False
+
+    # What a PDF sheet import does and can't do -- shown before the picker
+    # (the same text as the desktop's, from core/pdf_import.py)
+    @Property(str, constant=True)
+    def pdfImportIntro(self):
+        from dnd_app.core.pdf_import import PDF_IMPORT_INTRO
+        return PDF_IMPORT_INTRO
+
+    @Property(list, constant=True)
+    def pdfImportLimits(self):
+        from dnd_app.core.pdf_import import PDF_IMPORT_LIMITS
+        return list(PDF_IMPORT_LIMITS)
 
     @Property(str, constant=True)
     def downloadsDir(self):
@@ -229,6 +404,12 @@ class SaveLoadBridge(QObject):
         else:
             filename = _safe_filename(self.char.get("name", "")) + ".json"
             filepath = os.path.join(directory, filename)
+            # A new file -- never on top of another character's
+            if os.path.exists(filepath) or name_in_use(self.char.get("name", ""), directory=directory):
+                if not quiet:
+                    self._set_error(NAME_IN_USE_MESSAGE)
+                    self.toastRequested.emit(NAME_IN_USE_MESSAGE)
+                return False
         try:
             self._last_saved_path = save_character(self.char, filepath=filepath)
         except OSError as e:
@@ -248,13 +429,20 @@ class SaveLoadBridge(QObject):
     # ── Load ───────────────────────────────────────────────────────────
     @Slot(str, result=bool)
     def loadCharacterFrom(self, filepath: str) -> bool:
+        if filepath.lower().endswith(".pdf"):
+            try:
+                with open(filepath, "rb") as fh:
+                    return self._import_pdf(fh.read())
+            except OSError as e:
+                self._set_error(f"Couldn't open: {e}")
+                return False
         try:
             data = load_character(filepath)
         except (OSError, ValueError) as e:
             self._set_error(f"Couldn't load: {e}")
             return False
         self._apply_loaded(data, loaded_path=filepath)
-        self.toastRequested.emit(f"Loaded {os.path.basename(filepath)}")
+        self.toastRequested.emit(self._renamed_on_load or f"Loaded {os.path.basename(filepath)}")
         return True
 
     @Slot(str, result=bool)
@@ -274,20 +462,51 @@ class SaveLoadBridge(QObject):
         # (open -> json.load -> migrate_character) with QFile standing
         # in for the plain open().
         qfile = QFile(qurl.toString())
-        if not qfile.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
+        if not qfile.open(QIODevice.OpenModeFlag.ReadOnly):
             self._set_error(f"Couldn't open: {qfile.errorString()}")
             return False
         try:
-            raw = bytes(qfile.readAll()).decode("utf-8")
+            data_bytes = bytes(qfile.readAll())
         finally:
             qfile.close()
+        # a content:// link often has no file name to go by -- a PDF
+        # announces itself in its first bytes
+        if data_bytes.lstrip()[:5] == b"%PDF-":
+            return self._import_pdf(data_bytes)
         try:
+            raw = data_bytes.decode("utf-8-sig")
             data = migrate_character(json.loads(raw))
         except (ValueError, TypeError) as e:
             self._set_error(f"Couldn't load: {e}")
             return False
         self._apply_loaded(data)
-        self.toastRequested.emit("Character loaded")
+        self.toastRequested.emit(self._renamed_on_load or "Character loaded")
+        return True
+
+    def _import_pdf(self, data: bytes) -> bool:
+        """A filled-in official 5e character sheet PDF -> a new character
+        (see core/pdf_import.py), saved straight away like a new one.
+        Anything worth checking goes in a toast and on the character's
+        "Imported from PDF" notes page."""
+        import io
+        from dnd_app.core.pdf_import import import_character_pdf, SheetImportError
+        try:
+            char, notes = import_character_pdf(io.BytesIO(data))
+        except SheetImportError as e:
+            self._set_error(str(e))
+            self.toastRequested.emit(str(e))
+            return False
+        except Exception as e:
+            self._set_error(f"Couldn't import that sheet: {e}")
+            return False
+        if not char.get("name"):
+            char["name"] = "Imported Character"
+        self._apply_loaded(char)
+        self._save(quiet=True)
+        msg = self._renamed_on_load or f"Imported {self.char['name']} from the character sheet"
+        if notes:
+            msg += f" -- {len(notes)} thing{'s' if len(notes) != 1 else ''} to check on the Notes page"
+        self.toastRequested.emit(msg)
         return True
 
     # ── Start Menu: begin a brand-new character ─────────────────────
@@ -310,6 +529,18 @@ class SaveLoadBridge(QObject):
         self.char.clear()
         self.char.update(data)
         self._set_error("")
+        # A character brought in from outside the save folder whose name
+        # another saved character already uses gets a new one -- saving it
+        # under the same name would replace that other character's file.
+        self._renamed_on_load = ""
+        name = (data.get("name") or "").strip()
+        inside = bool(loaded_path) and (os.path.dirname(os.path.abspath(loaded_path))
+                                        == os.path.abspath(_documents_dir()))
+        if data.get("classes") and name and not inside and name_in_use(name):
+            new_name = unique_character_name(name)
+            self.char["name"] = new_name
+            self._renamed_on_load = (f'A character called "{name}" is already saved, '
+                                     f'so this one is now "{new_name}"')
         # Reset (or set) which file counts as "the one this character
         # came from" for saveCharacter() to overwrite -- must happen on
         # every load/new-character, not just loadCharacterFrom(), or a
@@ -361,6 +592,28 @@ class SaveLoadBridge(QObject):
         self.toastRequested.emit("Character file exported")
         return True
 
+    @Slot(result=bool)
+    def exportJsonToFolder(self) -> bool:
+        """Character file (.json) into this character's export folder,
+        next to its PDF and text exports."""
+        ok, errors = validate_character(self.char)
+        if not ok:
+            self._set_error("Can't export yet: " + "; ".join(errors))
+            return False
+        data = character_json(self.char)
+        filepath = os.path.join(_character_export_dir(self.char), self.exportFileName)
+        try:
+            def _write(path):
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(data)
+            filepath = _write_export(filepath, _write)
+        except OSError as e:
+            self._set_error(f"Couldn't export: {e}")
+            return False
+        self._set_error("")
+        self.toastRequested.emit(f"Exported {os.path.basename(filepath)}")
+        return True
+
     @Property(str, notify=characterSaved)
     def exportFileName(self):
         return _safe_filename(self.char.get("name", "")) + ".json"
@@ -368,15 +621,19 @@ class SaveLoadBridge(QObject):
     # ── Plain-text export ──────────────────────────────────────────────
     @Slot(result=bool)
     def exportText(self) -> bool:
-        """Human-readable summary (.txt) into the same folder as
-        everything else -- desktop's ui_desktop/pages/sheet/base.py
-        _export_text_dialog() equivalent, same core.save_load function."""
-        name = (self.char.get("name") or "Unknown").strip() or "Unknown"
-        filepath = os.path.join(_documents_dir(), f"{name} - Character Sheet.txt")
+        """Human-readable summary (.txt) into this character's export
+        folder (see _character_export_dir) -- desktop's ui_desktop/pages/
+        sheet/base.py _export_text_dialog() equivalent, same core.save_load
+        function."""
+        name = _character_folder_name(self.char)   # file-system-safe
+        filepath = os.path.join(_character_export_dir(self.char), f"{name} - Character Sheet.txt")
         try:
             text = export_character_text(self.char)
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write(text)
+
+            def _write(path):
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(text)
+            filepath = _write_export(filepath, _write)
         except OSError as e:
             self._set_error(f"Couldn't export text: {e}")
             return False
@@ -388,16 +645,15 @@ class SaveLoadBridge(QObject):
     @Slot(result=bool)
     def exportPdf(self) -> bool:
         """Fill the official WotC character sheet PDF and write it into
-        the SAME folder saves go to (documentsDir), matching desktop's
-        naming convention ("<name> - Character Sheet.pdf") so a saved
-        JSON and its exported PDF sit next to each other."""
+        this character's export folder (see _character_export_dir), with
+        desktop's naming convention ("<name> - Character Sheet.pdf")."""
         if not os.path.exists(TEMPLATE_PATH):
             self._set_error(f"The character sheet template is missing: {TEMPLATE_PATH}")
             return False
-        name = (self.char.get("name") or "Unknown").strip() or "Unknown"
-        filepath = os.path.join(_documents_dir(), f"{name} - Character Sheet.pdf")
+        name = _character_folder_name(self.char)   # file-system-safe
+        filepath = os.path.join(_character_export_dir(self.char), f"{name} - Character Sheet.pdf")
         try:
-            export_official_pdf(self.char, filepath)
+            filepath = _write_export(filepath, lambda path: export_official_pdf(self.char, path))
         except Exception as e:
             self._set_error(f"Couldn't export PDF: {e}")
             return False

@@ -234,119 +234,127 @@ Page {
             }
             Repeater {
                 model: sheetBridge.knownSpells
+                // Just the name, one line of details, and View / Cast. Press
+                // and hold the card to prepare, favourite or remove it (see
+                // spellOptionsDialog). Concentration starts by itself when
+                // cast; Cast asks "normally or as a ritual" only for spells
+                // this character can ritual-cast.
                 delegate: Rectangle {
+                    id: spellCard
                     Layout.fillWidth: true
-                    Layout.preferredHeight: knownCol.height + 16
+                    Layout.preferredHeight: knownCol.height + 20
                     radius: 10
-                    color: Theme.surf
-                    // teal = prepared; only for spells that are prepared at all
-                    border.color: modelData.preparable && modelData.prepared ? Theme.teal : Theme.border
+                    color: holdArea.pressed ? Theme.surf2 : Theme.surf
+                    border.color: Theme.border
 
-                    Column {
+                    // behind the buttons, so they keep their own taps
+                    MouseArea {
+                        id: holdArea
+                        objectName: "spellCardHold_" + modelData.name
+                        anchors.fill: parent
+                        pressAndHoldInterval: 450
+                        onPressAndHold: root.openSpellOptions(modelData)
+                    }
+
+                    ColumnLayout {
                         id: knownCol
-                        x: 10; y: 8
-                        width: parent.width - 20
-                        spacing: 4
+                        x: 12; y: 10
+                        width: parent.width - 24
+                        spacing: 8
 
                         RowLayout {
-                            width: parent.width
-                            Label {
-                                // Immersive Spells (DM Secrets optional
-                                // rule): a purely cosmetic title-only
-                                // override (Wild Shape beast noises,
-                                // Rage's "SMASH!", a blocked-component
-                                // redaction, or a patron/domain/Oath
-                                // flavor prefix) -- displayName is just
-                                // the real name unchanged when the rule
-                                // is off, computed the same way as
-                                // ui_desktop's compute_display_spell_title().
-                                text: modelData.displayName
-                                color: Theme.text
-                                font.pixelSize: Theme.fsBody
-                                font.bold: true
+                            Layout.fillWidth: true
+                            spacing: 8
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                wrapMode: Text.WordWrap
-                            }
-                            // View (same as the spell browser) and remove sit
-                            // in the title row, which leaves the action row
-                            // below room for Conc. + Ritual + Cast on one line
-                            MButton {
-                                primary: false
-                                implicitWidth: 64
-                                implicitHeight: 34
-                                text: "View"
-                                onClicked: {
-                                    Window.window.pendingSpellDetail = sheetBridge.getSpellDetail(modelData.name)
-                                    spellDetail.open()
+                                spacing: 2
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 6
+                                    Label {
+                                        // Immersive Spells (DM Secrets optional
+                                        // rule): a purely cosmetic title-only
+                                        // override -- displayName is just the
+                                        // real name when the rule is off, same
+                                        // as ui_desktop's compute_display_spell_title().
+                                        text: modelData.displayName
+                                        color: Theme.text
+                                        font.pixelSize: Theme.fsBody
+                                        font.bold: true
+                                        wrapMode: Text.WordWrap
+                                        Layout.maximumWidth: knownCol.width - 160
+                                    }
+                                    // Ritual spell: a circled R
+                                    Rectangle {
+                                        visible: modelData.ritual
+                                        implicitWidth: 18
+                                        implicitHeight: 18
+                                        radius: 9
+                                        color: "transparent"
+                                        border.color: Theme.teal2
+                                        border.width: 1.5
+                                        Label {
+                                            anchors.centerIn: parent
+                                            text: "R"
+                                            color: Theme.teal2
+                                            font.pixelSize: 10
+                                            font.bold: true
+                                        }
+                                    }
+                                    // Favourited (starred spells show on Combat/Actions)
+                                    MIcon {
+                                        visible: modelData.pinned
+                                        name: "star_solid"
+                                        size: 14
+                                        color: Theme.gold
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                }
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: modelData.levelText + "  ·  " + modelData.school
+                                          + (modelData.concentration ? "  ·  Concentration" : "")
+                                    color: Theme.text3
+                                    font.pixelSize: Theme.fsSmall
+                                    wrapMode: Text.WordWrap
+                                }
+                                Label {
+                                    visible: modelData.level > 0 && modelData.preparable && modelData.prepared
+                                    text: "Prepared"
+                                    color: Theme.teal2
+                                    font.pixelSize: Theme.fsSmall
+                                    font.bold: true
                                 }
                             }
                             MButton {
                                 primary: false
                                 implicitWidth: 40
                                 implicitHeight: 34
-                                iconName: "trash"
-                                iconSize: 16
-                                onClicked: sheetBridge.removeKnownSpell(modelData.name)
-                            }
-                        }
-                        Label {
-                            text: modelData.levelText + "  ·  " + modelData.school
-                                  + (modelData.concentration ? "  ·  Concentration" : "")
-                                  + (modelData.ritual ? "  ·  Ritual" : "")
-                            color: Theme.text3
-                            font.pixelSize: Theme.fsSmall
-                        }
-                        // One fixed layout for every card: toggles on the
-                        // left, actions on the right with Cast always last,
-                        // so the buttons line up from card to card.
-                        RowLayout {
-                            width: parent.width
-                            spacing: 6
-                            MCheckBox {
-                                // cantrips are never prepared, and neither is a spell
-                                // only a Warlock/Sorcerer/Bard/Ranger casts
-                                visible: modelData.level > 0 && modelData.preparable
-                                text: "Prepared"
-                                checked: modelData.prepared
-                                onToggled: sheetBridge.setSpellPrepared(modelData.name, checked)
-                            }
-                            // Quick spell (desktop's star): pinned spells show up
-                            // with Cast buttons on the Combat and Actions screens
-                            MButton {
-                                objectName: "pinButton_" + modelData.name
-                                primary: false
-                                implicitWidth: 40
-                                implicitHeight: 34
-                                iconName: modelData.pinned ? "star_solid" : "star"
-                                iconSize: 18
-                                onClicked: sheetBridge.toggleQuickSpell(modelData.name)
-                            }
-                            Item { Layout.fillWidth: true }
-                            MButton {
-                                visible: modelData.concentration && sheetBridge.concentratingSpell !== modelData.name
-                                primary: false
-                                implicitWidth: 58
-                                implicitHeight: 34
-                                text: "Conc."
-                                onClicked: sheetBridge.startConcentration(modelData.name)
+                                iconName: "search"   // View -- a magnifying glass
+                                iconSize: 22
+                                Accessible.name: "View"
+                                onClicked: {
+                                    Window.window.pendingSpellDetail = sheetBridge.getSpellDetail(modelData.name)
+                                    spellDetail.open()
+                                }
                             }
                             MButton {
-                                visible: modelData.ritual
-                                primary: false
-                                implicitWidth: 58
-                                implicitHeight: 34
-                                text: "Ritual"
-                                onClicked: sheetBridge.castSpellAsRitual(modelData.name)
-                            }
-                            MButton {
-                                implicitWidth: 60
+                                implicitWidth: 64
                                 implicitHeight: 34
                                 text: "Cast"
-                                onClicked: sheetBridge.castSpell(modelData.name)
+                                onClicked: root.castSpell(modelData)
                             }
                         }
                     }
                 }
+            }
+            Label {
+                visible: sheetBridge.knownSpells.length > 0
+                text: "Press and hold a spell to prepare, favourite or remove it."
+                color: Theme.text3
+                font.pixelSize: Theme.fsSmall
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
             }
 
             // ── Add a spell ───────────────────────────────────────────
@@ -364,7 +372,7 @@ Page {
             // narrow a multiclass character's browser to one class.
             Label { id: addSpellAnchor; text: "Add a Spell"; color: Theme.gold; font.pixelSize: Theme.fsSmall; font.bold: true; Layout.topMargin: 6 }
             Label {
-                text: "From your class's spell list. Tap View for a spell's details."
+                text: "From your class's spell list. Tap the magnifying glass for a spell's details."
                 color: Theme.text3
                 font.pixelSize: Theme.fsSmall
                 wrapMode: Text.WordWrap
@@ -475,9 +483,11 @@ Page {
                             }
                             MButton {
                                 primary: false
-                                implicitWidth: 64
+                                implicitWidth: 40
                                 height: 34
-                                text: "View"
+                                iconName: "search"   // View -- a magnifying glass
+                                iconSize: 22
+                                Accessible.name: "View"
                                 onClicked: {
                                     Window.window.pendingSpellDetail = sheetBridge.getSpellDetail(modelData.name)
                                     spellDetail.open()
@@ -501,6 +511,61 @@ Page {
                     }
                 }
             }
+        }
+    }
+
+    // ── Press-and-hold options for a known spell, and the cast choice
+    // for spells that can be cast as a ritual (both the shared menu) ──
+    property var optionsSpell: ({})
+    function openSpellOptions(sp) {
+        var opts = []
+        // cantrips are never prepared, and neither is a spell only a
+        // Warlock/Sorcerer/Bard/Ranger casts
+        if (sp.level > 0 && sp.preparable)
+            opts.push({ key: "prepare", text: sp.prepared ? "Unprepare" : "Prepare" })
+        opts.push({ key: "favourite", icon: sp.pinned ? "star" : "star_solid",
+                    text: sp.pinned ? "Remove from favourites" : "Add to favourites" })
+        opts.push({ key: "remove", icon: "trash", text: "Remove from spell list" })
+        root.optionsSpell = sp
+        spellOptionsDialog.heading = sp.displayName || sp.name
+        spellOptionsDialog.options = opts
+        spellOptionsDialog.open()
+    }
+    MOptionsDialog {
+        id: spellOptionsDialog
+        objectName: "spellOptionsDialog"
+        onPicked: (key) => {
+            var sp = root.optionsSpell
+            if (key === "prepare") sheetBridge.setSpellPrepared(sp.name, !sp.prepared)
+            else if (key === "favourite") sheetBridge.toggleQuickSpell(sp.name)
+            else if (key === "remove") sheetBridge.removeKnownSpell(sp.name)
+        }
+    }
+
+    // The card's Cast button:
+    //   a spell you can cast as a ritual -> ask: normally (a slot) or as a
+    //                                       ritual (no slot, +10 minutes)
+    //   anything else                    -> cast it (the bridge spends the
+    //       slot, starts concentration, applies its effect, uses the action)
+    function castSpell(sp) {
+        if (!sp.canRitual) {
+            sheetBridge.castSpell(sp.name)
+            return
+        }
+        root.optionsSpell = sp
+        castChoiceDialog.heading = "Cast " + (sp.displayName || sp.name)
+        castChoiceDialog.options = [
+            { key: "normal", text: "Cast normally (uses a spell slot)" },
+            { key: "ritual", text: "Cast as a ritual (no slot, +10 minutes)" },
+        ]
+        castChoiceDialog.open()
+    }
+    MOptionsDialog {
+        id: castChoiceDialog
+        objectName: "castChoiceDialog"
+        onPicked: (key) => {
+            if (key === "ritual") sheetBridge.castSpellAsRitual(root.optionsSpell.name)
+            else sheetBridge.castSpell(root.optionsSpell.name)
         }
     }
 
@@ -573,6 +638,7 @@ Page {
                     color: Theme.text3
                     font.pixelSize: Theme.fsSmall
                 }
+
             }
         }
     }

@@ -37,7 +37,7 @@ from dnd_app.core.calculator import (
     count_active_companion_instances, get_max_active_infusions,
     restore_hit_dice_pool, get_superiority_die, get_infusion_bonus, get_infusion_min_level,
     get_rage_damage, get_onhit_damage_bonuses, get_condition_attack_status,
-    spell_preparing_classes,
+    spell_preparing_classes, can_ritual_cast,
 )
 from dnd_app.data.phbCommon.feature_ui_interactions import TOOLS as SWAP_TOOLS_POOL
 from dnd_app.core.magic_items import (
@@ -79,6 +79,11 @@ from dnd_app.data.phbCommon.items import (
 )
 from dnd_app.data.phbCommon.magic_items import ALL_MAGIC_ITEMS, get_magic_item, get_item_effect
 from dnd_app.core.magic_items import attunement_prereq_met
+from dnd_app.core.spell_scrolls import parse_spell_scroll, use_spell_scroll, bind_spell_scroll
+from dnd_app.core.magic_items import (owned_magic_items, add_owned_magic_item, remove_owned_magic_item,
+                                      set_owned_magic_item_qty, set_owned_magic_item_equipped,
+                                      set_owned_magic_item_attuned, can_study_manual, study_owned_manual,
+                                      find_magic_item, is_magic_ammunition)
 from dnd_app.data.phbCommon.dm_rewards import ALL_DM_REWARDS, DM_REWARD_CATEGORIES, get_dm_reward
 
 _CURRENCY_ORDER = ["PP", "GP", "EP", "SP", "CP"]
@@ -102,6 +107,25 @@ _MI_SLOT_KEYWORDS = {
 }
 
 _MI_RARITY_ORDER = ["Common", "Uncommon", "Rare", "Very Rare", "Legendary", "Artifact"]
+
+
+def _mi_sort_key(rarity: str, name: str):
+    """Magic items list rarity first (Common -> Artifact, anything else
+    after), then by name."""
+    rank = _MI_RARITY_ORDER.index(rarity) if rarity in _MI_RARITY_ORDER else len(_MI_RARITY_ORDER)
+    return (rank, name.casefold())
+
+
+def _catalog_entry(name: str):
+    """The magic item catalogue entry for an owned item -- a bound spell
+    scroll ("Spell Scroll (3rd level) — Fireball") uses its level's entry."""
+    from dnd_app.core.spell_scrolls import parse_spell_scroll, scroll_base_name
+    entry = get_magic_item(name)
+    if entry is None:
+        scroll = parse_spell_scroll(name)
+        if scroll:
+            entry = get_magic_item(scroll_base_name(scroll[0]))
+    return entry
 
 
 def _magic_item_slot(item_name: str, itype: str) -> str:
@@ -251,6 +275,9 @@ class CharacterSheetBridge(QObject):
     # applySpellActiveEffect(name) only if the answer is "yourself".
     # Self-only effect spells are applied directly, no prompt needed.
     spellEffectPromptRequested = Signal(str)
+    # a blank spell scroll was used -- QML asks which spell is on it
+    # (scroll's equipment name, spell level), then calls bindScrollSpell()
+    scrollSpellNeeded = Signal(str, int)
 
     def __init__(self, char: dict, parent=None):
         super().__init__(parent)
@@ -854,6 +881,10 @@ class CharacterSheetBridge(QObject):
                 "cost": cost,
                 "equipKind": equip_kind,
                 "equipped": equipped,
+                # magic consumables (potions, scrolls) carry a rarity --
+                # their row is bordered in its colour, like magic item cards
+                "rarity": (e.get("rarity", "") or (_catalog_entry(name) or {}).get("rarity", ""))
+                          if e.get("magic") or parse_spell_scroll(name) else "",
             })
         return out
 
@@ -865,8 +896,11 @@ class CharacterSheetBridge(QObject):
         items = self.equipment
         out = []
         for group, icon in self._INVENTORY_GROUPS:
+            # equipped first; magic potions/scrolls by rarity (Common ->
+            # Artifact) then name, after the mundane ones
             members = sorted((i for i in items if i["category"] == group),
-                             key=lambda i: (not i["equipped"], i["name"].lower()))
+                             key=lambda i: (not i["equipped"],
+                                            _mi_sort_key(i["rarity"], i["name"]) if i["rarity"] else (-1, i["name"].casefold())))
             if members:
                 out.append({"group": group, "icon": icon, "items": members})
         return out
@@ -934,6 +968,12 @@ class CharacterSheetBridge(QObject):
 
     @Slot(str)
     def useScroll(self, name: str):
+        """Spell scrolls cast their spell (core/spell_scrolls.py: class
+        list, the DC 10 + level check, the scroll's own DC/attack); other
+        scrolls (Scroll of Protection...) apply their effect."""
+        if parse_spell_scroll(name):
+            self._use_spell_scroll(name)
+            return
         eq = self.char.get("equipment", [])
         entry = next((e for e in eq if e.get("name") == name), None)
         if not entry:
@@ -953,6 +993,43 @@ class CharacterSheetBridge(QObject):
             self.toastRequested.emit(f"Read {name}")
         self.ctrl.refresh()
         self.statsChanged.emit()
+
+    def _use_spell_scroll(self, name: str):
+        level, spell_name = parse_spell_scroll(name)
+        if not spell_name:
+            self.scrollSpellNeeded.emit(name, level)
+            return
+        spell = get_spell(spell_name)
+        if spell:
+            ct = (spell.get("cast_time") or "1 action").strip().lower()
+            bucket = {"1 action": "Action", "bonus action": "Bonus Action", "reaction": "Reaction"}.get(ct)
+            if bucket and self._turn_blocked(bucket):
+                return
+            if self.char.get("_wildshape_active") and not self._has_beast_spells():
+                self.toastRequested.emit("Can't read a scroll while Wild Shaped -- revert to your normal form first")
+                return
+        res = use_spell_scroll(self.char, name)
+        if res["status"] == "cast" and spell:
+            if spell.get("concentration"):
+                start_concentration(self.char, spell_name)
+            self._maybe_apply_spell_active_effect(spell)
+            self._mark_spell_cast_time(spell)
+        elif res["status"] == "failed" and spell:
+            self._mark_spell_cast_time(spell)
+        self.toastRequested.emit(res["message"])
+        self.ctrl.refresh()
+        self.statsChanged.emit()
+
+    @Slot(str, str)
+    def bindScrollSpell(self, name: str, spell_name: str):
+        """Write a spell onto one blank scroll, then read it (it was the Use
+        button that asked)."""
+        new_name = bind_spell_scroll(self.char, name, spell_name)
+        if not new_name:
+            self.toastRequested.emit(f"{spell_name} can't go on that scroll")
+            return
+        self.statsChanged.emit()
+        self._use_spell_scroll(new_name)
 
     @Property(list, notify=statsChanged)
     def currency(self):
@@ -1112,23 +1189,25 @@ class CharacterSheetBridge(QObject):
 
     # ── Ability Score Manuals/Tomes ("Study" action) ────────────────
     @Slot(str, result=bool)
-    def canStudyManual(self, name: str) -> bool:
-        return name in ABILITY_SCORE_MANUALS
+    def canStudyManual(self, uid: str) -> bool:
+        """A manual/tome copy you haven't studied yet (each works once)."""
+        return can_study_manual(find_magic_item(self.char, uid))
 
     @Slot(str)
-    def studyAbilityManual(self, name: str):
+    def studyAbilityManual(self, uid: str):
         """Matches desktop's _study_manual: permanently raises the
         matching ability score by 2 (no cap on this kind of magical
-        increase, PHB p.js -- Manual of Bodily Health etc.) and
-        consumes the book."""
-        ability = ABILITY_SCORE_MANUALS.get(name)
-        if not ability:
+        increase) -- the book stays, marked studied, and can't be
+        studied again."""
+        entry = find_magic_item(self.char, uid)
+        done = study_owned_manual(self.char, uid)
+        if not done:
+            self.toastRequested.emit("You've already studied this book -- its magic is spent.")
             return
-        abilities = self.char.setdefault("abilities", {})
-        abilities[ability] = abilities.get(ability, 10) + 2
-        self.removeMagicItem(name)
+        ability, score = done
+        self.ctrl.refresh()
         self.toastRequested.emit(
-            f"{name} -- your {ability} score permanently increases by 2 (now {abilities[ability]})")
+            f"{entry['name']} -- your {ability} score permanently increases by 2 (now {score})")
         self.statsChanged.emit()
 
     @Slot(str)
@@ -1137,7 +1216,22 @@ class CharacterSheetBridge(QObject):
         self.char["equipment"] = [e for e in eq if not (isinstance(e, dict) and e.get("name") == name)]
         self.statsChanged.emit()
 
+    @Slot(str, int)
+    def setEquipmentQuantity(self, name: str, qty: int):
+        """Set how many of an item you have -- 0 removes it."""
+        if qty <= 0:
+            self.removeEquipmentItem(name)
+            return
+        for e in self.char.get("equipment", []):
+            if isinstance(e, dict) and e.get("name") == name:
+                if e.get("qty", 1) != qty:
+                    e["qty"] = qty
+                    self.statsChanged.emit()
+                return
+
     # ── Magic items ──────────────────────────────────────────────────
+    # Each owned copy is its own entry with a "uid" (core/magic_items.py's
+    # owned-copy helpers), so the slots below take that uid, not a name.
     # Full port of ui_desktop's gear.py magic item browser + list:
     # search/add, attunement toggle, equip toggle (synced to
     # equipped_weapons/armor_worn/shield same as desktop's
@@ -1147,10 +1241,9 @@ class CharacterSheetBridge(QObject):
     # Tattoo, Orb of Shielding).
     @Property(list, notify=statsChanged)
     def magicItems(self):
-        attuned = set(self.char.get("attuned_items", []))
         out = []
-        for entry in self.char.get("magic_items", []):
-            name = entry.get("name", "") if isinstance(entry, dict) else entry
+        for entry in owned_magic_items(self.char):
+            name = entry.get("name", "")
             catalog = get_magic_item(name) or {}
             eff = get_item_effect(name)
             resistance_pool = list(eff.get("pool", [])) if isinstance(eff, dict) and eff.get("type") == "resistance_choice" else []
@@ -1159,36 +1252,30 @@ class CharacterSheetBridge(QObject):
                 "name": name,
                 "rarity": catalog.get("rarity", ""),
                 "type": catalog.get("type", ""),
+                "uid": entry["uid"],
                 "needsAttunement": bool(catalog.get("attunement")),
-                "attuned": name in attuned,
-                "equipped": bool(entry.get("equipped", True)) if isinstance(entry, dict) else True,
+                "attuned": bool(entry.get("attuned")),
+                "equipped": bool(entry.get("equipped", True)),
+                "studied": bool(entry.get("studied")),
+                "canStudy": can_study_manual(entry),
+                "isAmmo": is_magic_ammunition(name),
+                "qty": entry.get("qty", 1),
                 "resistanceChoicePool": resistance_pool,
                 "resistanceChoiceCurrent": current_dmg[0] if current_dmg else "",
             })
+        out.sort(key=lambda i: _mi_sort_key(i["rarity"], i["name"]))
         return out
 
     @Slot(str, bool)
-    def setMagicItemEquipped(self, name: str, on: bool):
-        char = self.char
-        for entry in char.get("magic_items", []):
-            if isinstance(entry, dict) and entry.get("name") == name:
-                entry["equipped"] = on
-        catalog = get_magic_item(name) or {}
-        itype = catalog.get("type", "")
-        if itype == "Weapon":
-            equipped_wpns = char.setdefault("equipped_weapons", [])
-            if on:
-                if name not in equipped_wpns:
-                    equipped_wpns.append(name)
-            elif name in equipped_wpns:
-                equipped_wpns.remove(name)
-        elif itype == "Armor":
-            if on:
-                char["armor_worn"] = name
-            elif char.get("armor_worn") == name:
-                char["armor_worn"] = "No Armor"
-        elif itype == "Shield":
-            char["shield"] = on
+    def setMagicItemEquipped(self, uid: str, on: bool):
+        set_owned_magic_item_equipped(self.char, uid, on)
+        self.ctrl.refresh()
+        self.statsChanged.emit()
+
+    @Slot(str, int)
+    def setMagicItemQuantity(self, uid: str, qty: int):
+        """Magic ammunition stacks -- 0 removes the stack."""
+        set_owned_magic_item_qty(self.char, uid, qty)
         self.ctrl.refresh()
         self.statsChanged.emit()
 
@@ -1226,7 +1313,10 @@ class CharacterSheetBridge(QObject):
 
     @Slot(str, str)
     def addMagicItemWithScrollSpell(self, name: str, spell_name: str):
-        self.addMagicItem(f"{name} — {spell_name}" if spell_name else name)
+        """A spell scroll always carries its spell -- never added blank."""
+        if not spell_name:
+            return
+        self.addMagicItem(f"{name} — {spell_name}")
 
     @Slot(str, int, result=list)
     def enchantCandidates(self, kind: str, bonus: int):
@@ -1313,12 +1403,9 @@ class CharacterSheetBridge(QObject):
         slot_filter = slot_filter or "All Slots"
         rarity_filter = rarity_filter or "All Rarities"
         attunement_filter = attunement_filter or "All"
-        known_names = {e.get("name") if isinstance(e, dict) else e for e in self.char.get("magic_items", [])}
         out = []
         for item in ALL_MAGIC_ITEMS:
             name = item["name"]
-            if name in known_names:
-                continue
             if q and q not in name.lower():
                 continue
             rarity = item.get("rarity", "?")
@@ -1334,13 +1421,12 @@ class CharacterSheetBridge(QObject):
             if attunement_filter == "No Attunement" and attune:
                 continue
             out.append({"name": name, "rarity": rarity, "type": itype})
-        rarity_rank = {r: i for i, r in enumerate(_MI_RARITY_ORDER)}
-        out.sort(key=lambda i: (rarity_rank.get(i["rarity"], len(_MI_RARITY_ORDER)), i["name"]))
+        out.sort(key=lambda i: _mi_sort_key(i["rarity"], i["name"]))
         return out
 
     @Slot(str)
     def addMagicItem(self, name: str):
-        catalog = get_magic_item(name) or {}
+        catalog = _catalog_entry(name) or {}
         itype = catalog.get("type", "")
         is_consumable = itype in ("Potion", "Scroll") or "potion" in name.lower() or "scroll" in name.lower()
         if is_consumable:
@@ -1352,47 +1438,24 @@ class CharacterSheetBridge(QObject):
                 eq.append({"name": name, "qty": 1, "weight": 0.5, "notes": "",
                           "magic": True, "rarity": catalog.get("rarity", ""), "desc": catalog.get("desc", "")})
         else:
-            items = self.char.setdefault("magic_items", [])
-            existing_names = {i.get("name") if isinstance(i, dict) else i for i in items}
-            if name not in existing_names:
-                items.append({"name": name, "attunement": bool(catalog.get("attunement")),
-                             "equipped": True, "notes": ""})
+            # every copy is its own entry (only ammunition stacks)
+            add_owned_magic_item(self.char, name)
+            self.ctrl.refresh()
         self.statsChanged.emit()
 
     @Slot(str, bool)
-    def setMagicItemAttuned(self, name: str, on: bool):
-        char = self.char
-        attuned = char.setdefault("attuned_items", [])
-        if on:
-            if name not in attuned:
-                met, reason = attunement_prereq_met(char, name)
-                if not met:
-                    self.toastRequested.emit(
-                        f"{name} requires attunement by {reason} -- this character doesn't qualify.")
-                    return
-                art_lvl = class_levels(char).get("Artificer", 0)
-                att_max = 6 if art_lvl >= 18 else 5 if art_lvl >= 14 else 4 if art_lvl >= 10 else 3
-                if "Mystic Conflux" in char.get("feats", []):
-                    att_max = max(att_max, 4)
-                if len(attuned) >= att_max:
-                    self.toastRequested.emit(f"Maximum {att_max} attuned items (PHB p.138).")
-                    return
-                attuned.append(name)
-        else:
-            if name in attuned:
-                attuned.remove(name)
-        for entry in char.get("magic_items", []):
-            if isinstance(entry, dict) and entry.get("name") == name:
-                entry["attunement"] = on
+    def setMagicItemAttuned(self, uid: str, on: bool):
+        why = set_owned_magic_item_attuned(self.char, uid, on)
+        if why:
+            self.toastRequested.emit(why)
+            return
+        self.ctrl.refresh()
         self.statsChanged.emit()
 
     @Slot(str)
-    def removeMagicItem(self, name: str):
-        items = self.char.get("magic_items", [])
-        self.char["magic_items"] = [i for i in items if (i.get("name") if isinstance(i, dict) else i) != name]
-        attuned = self.char.get("attuned_items", [])
-        if name in attuned:
-            attuned.remove(name)
+    def removeMagicItem(self, uid: str):
+        remove_owned_magic_item(self.char, uid)
+        self.ctrl.refresh()
         self.statsChanged.emit()
 
     # ── Simple HP adjustments (damage/heal/temp) ───────────────────
@@ -2166,7 +2229,7 @@ class CharacterSheetBridge(QObject):
         out = []
         # cantrips first, then by spell level, then by name
         names = sorted(self.char.get("spells_known", []),
-                       key=lambda n: ((get_spell(n) or {}).get("level", 0), n))
+                       key=lambda n: ((get_spell(n) or {}).get("level", 0), n.casefold()))
         for name in names:
             sp = get_spell(name) or {}
             out.append({
@@ -2182,6 +2245,8 @@ class CharacterSheetBridge(QObject):
                 # False for a spell none of this character's classes
                 # prepares (Warlock/Sorcerer/Bard/Ranger) -- no Prepared box
                 "preparable": bool(spell_preparing_classes(self.char, sp)),
+                # Cast offers "as a ritual" only when this character can
+                "canRitual": bool(sp) and can_ritual_cast(self.char, sp),
             })
         return out
 
@@ -2195,7 +2260,7 @@ class CharacterSheetBridge(QObject):
         prepared = set(self.char.get("spells_prepared", []))
         out = []
         for name in sorted(self.char.get("quick_spells", []),
-                           key=lambda n: ((get_spell(n) or {}).get("level", 0), n)):
+                           key=lambda n: ((get_spell(n) or {}).get("level", 0), n.casefold())):
             sp = get_spell(name)
             if not sp:
                 continue
@@ -2291,7 +2356,7 @@ class CharacterSheetBridge(QObject):
                 "ritual": bool(sp.get("ritual")),
                 "concentration": bool(sp.get("concentration")),
             })
-        out.sort(key=lambda s: (s["level"], s["name"]))
+        out.sort(key=lambda s: (s["level"], s["name"].casefold()))   # level, then name
         return out
 
     @Slot(str, result=dict)
@@ -2318,17 +2383,37 @@ class CharacterSheetBridge(QObject):
     def getItemDetail(self, name: str):
         """Details for any item -- magic item, weapon, armor, gear or tool
         -- for the browsers' View button / press-and-hold. Returns
-        {name, subtitle, facts: [str], desc}."""
+        {name, subtitle, facts: [str], desc} (+ rarity for magic items)."""
         from dnd_app.data.phbCommon.magic_items import get_magic_item
         from dnd_app.data.phbCommon.items import (WEAPON_DICT as _W, ARMOR_DICT as _A,
                                                    ADVENTURING_GEAR as _G, ALL_TOOLS as _T)
         gp = lambda c: (f"{c:g} gp" if c >= 1 else f"{round(c * 100):g} cp" if c else "")
+        scroll = parse_spell_scroll(name)
+        if scroll and scroll[1] and get_spell(scroll[1]):
+            # a bound scroll: its spell, the scroll's own DC/attack, and
+            # whether this character can read it
+            from dnd_app.core.spell_scrolls import scroll_reading, scroll_base_name
+            sp = get_spell(scroll[1])
+            info = scroll_reading(self.char, scroll[1])
+            lvl_txt = "Cantrip" if sp["level"] == 0 else f"Level {sp['level']}"
+            facts = [f"{lvl_txt} {sp.get('school', '')}".strip(),
+                     f"Casting time: {sp.get('cast_time', '1 action')}", f"Range: {sp.get('range', '')}",
+                     f"Duration: {sp.get('duration', '')}" + ("  (concentration)" if sp.get("concentration") else ""),
+                     f"Scroll save DC {info['save_dc']}, spell attack +{info['attack']}",
+                     ("You can't read this scroll -- the spell isn't on your class's list." if not info["readable"]
+                      else f"Above your casting level: {info['check']['ability']} check, DC {info['check']['dc']}, to cast it."
+                      if info["check"] else "You can cast this from the scroll.")]
+            base = get_magic_item(scroll_base_name(scroll[0])) or {}
+            return {"name": name, "subtitle": f"Spell scroll: {scroll[1]}", "facts": facts,
+                    "desc": sp.get("desc", ""), "rarity": base.get("rarity", "")}
         mi = get_magic_item(name)
         if mi:
-            facts = [f for f in (mi.get("rarity", ""), mi.get("type", ""),
+            # rarity goes in the dialog's subtitle (in its colour), not here
+            facts = [f for f in (mi.get("type", ""),
                                  "Requires attunement" if str(mi.get("attunement")) == "True" else "",
                                  f"Source: {mi.get('source')}" if mi.get("source") else "") if f]
-            return {"name": name, "subtitle": "Magic item", "facts": facts, "desc": mi.get("desc", "")}
+            return {"name": name, "subtitle": "Magic item", "facts": facts, "desc": mi.get("desc", ""),
+                    "rarity": mi.get("rarity", "")}
         unprefixed, material = parse_material_prefix(name)
         base, _ = parse_magic_suffix(unprefixed)
         w = _W.get(base)
@@ -2825,8 +2910,13 @@ class CharacterSheetBridge(QObject):
             self.toastRequested.emit(f"Can't cast {name} -- {block_reason}")
             return
         base_time = spell.get("cast_time", "1 action")
+        # a ritual casting still needs concentration (Detect Magic, ...)
+        if spell.get("concentration"):
+            start_concentration(self.char, name)
+        self._maybe_apply_spell_active_effect(spell)
         self.toastRequested.emit(
             f"Cast {name} as a ritual -- no spell slot used, but casting time is {base_time} + 10 minutes.")
+        self.statsChanged.emit()
 
     # ── Concentration ────────────────────────────────────────────────
     # Same core/magic_items.py helpers as ui_desktop's spells.py (full

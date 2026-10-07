@@ -9,6 +9,18 @@ Date: 2026-08-20
 
 RARITIES = ["Common", "Uncommon", "Rare", "Very Rare", "Legendary", "Artifact"]
 
+# The colour each rarity is shown in, on both apps (desktop reads this;
+# Android's Theme.rarityColor() in ui_android/qml/imports/Mimic/Theme.qml
+# holds the same values -- change both together).
+RARITY_COLORS = {
+    "Common":    "#6e6e6e",   # dark grey (no blue in it, so never mistaken for Rare)
+    "Uncommon":  "#2ea854",   # green
+    "Rare":      "#3fa0f0",   # blue
+    "Very Rare": "#a064ea",   # purple
+    "Legendary": "#e89828",   # amber
+    "Artifact":  "#e24f5d",   # crimson
+}
+
 
 def mitem(name, rarity, itype, attunement=False, desc="", source="DMG", effect=None, attune_req=""):
     entry = dict(
@@ -3012,14 +3024,15 @@ MAGIC_ITEM_EFFECTS: dict[str, dict] = {
     'Will of the Talon': {'type': 'grant_action', 'action': 'Will of the Talon',
         'action_type': 'Passive', 'description': "A Vestige of Divergence (war pick of Tiamat) -- its real tiered magical properties live in the separate Vestiges of Divergence rules this catalog doesn't include."},
 
-    # NOTE: Scroll-type items are consumed via the "Read" action
-    # (sheet.py's _use_scroll()), which looks the item up in
-    # effects.py's EFFECT_TABLE, not here — a scroll normally lives in
+    # NOTE: scrolls aren't in this table. A scroll lives in
     # char["equipment"] (the consumable stack), not char["magic_items"]
-    # (the worn/attuned-gear list this MAGIC_ITEM_EFFECTS table drives).
-    # See effects.py for the real Scroll entries (Spell Scroll levels,
-    # Scroll of Protection variants, Nether Scroll of Azumar, Scroll of
-    # Tarrasque Summoning, Scroll of the Comet).
+    # (the worn/attuned gear this table drives), and is used with its
+    # "Use" button:
+    #   * a spell scroll ("Spell Scroll (3rd level) — Fireball") casts its
+    #     spell -- see core/spell_scrolls.py;
+    #   * any other scroll (Scroll of Protection variants, Nether Scroll of
+    #     Azumar, Scroll of Tarrasque Summoning, Scroll of the Comet) is
+    #     used up and its effect looked up in effects.py's EFFECT_TABLE.
 
     # -- Wondrous items with no persistent numeric character-sheet state:
     # summon-a-companion items (no summon-tracking engine), vehicles (no
@@ -3230,6 +3243,29 @@ def items_by_rarity() -> dict:
         r = item["rarity"]
         result.setdefault(r, []).append(item)
     return result
+
+def _spell_scroll_desc(level: int) -> str:
+    """The DMG p.200 rules, the way the app applies them (see
+    core/spell_scrolls.py) -- one wording for every scroll level."""
+    dc, atk = {0: (13, 5), 1: (13, 5), 2: (13, 5), 3: (15, 7), 4: (15, 7), 5: (17, 9),
+               6: (17, 9), 7: (18, 10), 8: (18, 10), 9: (19, 11)}[level]
+    what = "a cantrip" if level == 0 else f"one level-{level} spell, chosen when you get the scroll"
+    higher = ("" if level == 0 else
+              f" If it's of a higher level than you can normally cast, make an ability check with "
+              f"your spellcasting ability (DC {10 + level}); on a failure the spell disappears "
+              f"from the scroll with no other effect.")
+    return (f"A scroll bearing {what}. If the spell is on your class's spell list, you can read "
+            f"the scroll and cast the spell (its normal casting time, no material components); "
+            f"otherwise the scroll is unintelligible to you.{higher} Once cast, the words fade and "
+            f"the scroll crumbles to dust. The scroll's spell save DC is {dc} and its spell attack "
+            f"bonus is +{atk}. (DMG p.200)")
+
+
+import re as _re_scroll
+for _it in ALL_MAGIC_ITEMS:
+    _m = _re_scroll.match(r"^Spell Scroll \((Cantrip|(\d)(?:st|nd|rd|th) level)\)$", _it["name"])
+    if _m:
+        _it["desc"] = _spell_scroll_desc(0 if _m.group(1) == "Cantrip" else int(_m.group(2)))
 
 # Convenience alias used by other modules
 MAGIC_ITEM_NAMES = [i["name"] for i in ALL_MAGIC_ITEMS]

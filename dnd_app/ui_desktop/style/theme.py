@@ -679,8 +679,9 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical,
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background: none; }}
 
 /* ── Lists & Tables ────────────────────────────────────────────────────────── */
-QListWidget {{ background: {b}; border: 2px solid {bo}; border-radius: 6px; outline: none; font-size: {px(15)}px; }}
-QListWidget::item {{ padding: 6px 10px; border-radius: 4px; color: {tx}; }}
+QListWidget {{ background: {b}; color: {tx}; border: 2px solid {bo}; border-radius: 6px; outline: none; font-size: {px(15)}px; }}
+/* no colour on ::item -- it would override each item's own (setForeground) colour */
+QListWidget::item {{ padding: 6px 10px; border-radius: 4px; }}
 QListWidget::item:selected {{ background: {ind}; color: white; }}
 QListWidget::item:hover:!selected {{ background: {s2}; }}
 QTableWidget {{ background: {b}; color: {tx}; border: none; gridline-color: {bo}; font-size: {px(14)}px; }}

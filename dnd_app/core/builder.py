@@ -437,17 +437,22 @@ def rebuild(char: dict) -> None:
     # Compute per-ability caps BEFORE clamping:
     #   Normal cap: 20 (PHB p.173)
     #   Barbarian Lv20 Primal Champion: STR and CON cap raised to 24
+    #   Manuals and tomes (Manual of Bodily Health...): each one studied
+    #     raises that score's maximum by 2 as well as the score -- kept in
+    #     char["ability_max_bonus"] (core/magic_items.study_owned_manual)
     #   Magic items that SET a score (Gauntlets, Belt of Giant Strength etc.)
     #     use ability_overrides and are applied AFTER builder — they bypass this cap.
     primal_champion = (
         any(c.get("class") == "Barbarian" and c.get("level", 0) >= 20 for c in classes)
     )
+    max_bonus = char.get("ability_max_bonus") or {}
     for ab in ABILITIES:
         # Determine the effective cap for this ability
         if primal_champion and ab in ("STR", "CON"):
             cap = 24  # Primal Champion raises STR/CON max to 24
         else:
             cap = 20
+        cap += int(max_bonus.get(ab, 0) or 0)
         # Defensive clamp on the base score itself, not just the bonus on
         # top of it — the check below only ever protected against
         # base+bonus exceeding the cap, never an oversized base score
@@ -464,7 +469,7 @@ def rebuild(char: dict) -> None:
     if primal_champion:
         for ab in ("STR", "CON"):
             base = char["abilities"].get(ab, 10)
-            cap  = 24
+            cap  = 24 + int(max_bonus.get(ab, 0) or 0)
             current_bonus = base_bonuses.get(ab, 0)
             # Add the Primal Champion +4, capped at 24
             primal_bonus = min(4, cap - base - current_bonus)

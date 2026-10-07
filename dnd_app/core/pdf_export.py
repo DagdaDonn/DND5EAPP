@@ -277,7 +277,10 @@ def build_field_values(char: dict) -> dict:
     text("PlayerName", char.get("player_name", ""))
     text("CharacterName", char.get("name", ""))
     text("CharacterName 2", char.get("name", ""))
-    text("Race ", char.get("species") or char.get("race", ""))
+    # "High Elf", "Hill Dwarf" -- the subrace too, as a player writes it
+    race = char.get("species") or char.get("race", "")
+    sub_race = char.get("subrace", "")
+    text("Race ", f"{sub_race} {race}".strip() if sub_race and sub_race.lower() not in race.lower() else race)
     text("Alignment", char.get("alignment", ""))
     text("XP", char.get("experience", 0))
     text("Inspiration", "X" if char.get("inspiration") else "")
@@ -473,7 +476,10 @@ def _fill_spells(char, values, text, check):
         by_level.setdefault(lvl, []).append(sp)
 
     for lvl, rows in SPELL_LEVEL_FIELDS.items():
-        names = sorted(by_level.get(lvl, []))
+        # a prepared caster's prepared spells first: the sheet has room for
+        # only 7-13 per level, and those are the ones that matter in play
+        names = sorted(by_level.get(lvl, []),
+                       key=lambda n: (is_prepared_class and n not in prepared, n))
         for (text_field, check_field), name in zip(rows, names):
             text(text_field, name)
             if check_field:

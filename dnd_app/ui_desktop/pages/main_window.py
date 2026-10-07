@@ -52,6 +52,7 @@ _lbl = h
 class StartMenu(QWidget):
     new_char  = Signal()
     load_char = Signal(str)
+    import_pdf = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -78,6 +79,12 @@ class StartMenu(QWidget):
         new_btn.setFixedSize(280, 54)
         new_btn.clicked.connect(self.new_char)
         btn_row.addWidget(new_btn)
+        pdf_btn = pill_btn("Import PDF Sheet", SURF3)
+        _icons.set_button_icon(pdf_btn, "file", 18, color="white")
+        pdf_btn.setFixedSize(220, 54)
+        pdf_btn.setToolTip("Bring in a character typed into the official 5e character sheet PDF")
+        pdf_btn.clicked.connect(self.import_pdf)
+        btn_row.addWidget(pdf_btn)
         hl.addLayout(btn_row)
         root.addWidget(hero, 1)
 
@@ -281,6 +288,14 @@ class SettingsDialog(QDialog):
         self.setStyleSheet(f"QDialog{{background:{BG};}}")
         root = QVBoxLayout(self); root.setContentsMargins(20,18,20,18); root.setSpacing(14)
         root.addWidget(_lbl("Settings", GOLD2, size=22, bold=True))
+        # The cards scroll -- together they're taller than a laptop screen
+        _scroll = QScrollArea(); _scroll.setWidgetResizable(True)
+        _scroll.setFrameShape(QFrame.NoFrame)
+        _scroll.setStyleSheet("QScrollArea{background:transparent;border:none;}")
+        _body = QWidget(); _body.setStyleSheet("background:transparent;")
+        body = QVBoxLayout(_body); body.setContentsMargins(0,0,6,0); body.setSpacing(14)
+        _scroll.setWidget(_body)
+        root.addWidget(_scroll, 1)
 
         # ── Appearance ────────────────────────────────────────────────────
         app_card = QFrame(); app_card.setStyleSheet(
@@ -315,7 +330,29 @@ class SettingsDialog(QDialog):
         self._font_combo.currentTextChanged.connect(self._on_font_scale_changed)
         font_row.addWidget(self._font_combo, 1)
         acl.addLayout(font_row)
-        root.addWidget(app_card)
+        body.addWidget(app_card)
+
+        # ── Character folder: where characters are saved ──────────────────
+        folder_card = QFrame(); folder_card.setStyleSheet(
+            f"QFrame{{background:{SURF};border:1px solid {BORDER};border-radius:10px;}}")
+        fcl = QVBoxLayout(folder_card); fcl.setContentsMargins(14,12,14,14); fcl.setSpacing(8)
+        fcl.addWidget(_lbl("CHARACTER FOLDER", TEAL2, FS_SMALL, bold=True))
+        self._save_dir_lbl = _lbl("", TEXT, FS_SMALL)
+        self._save_dir_lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        fcl.addWidget(self._save_dir_lbl)
+        folder_btns = QHBoxLayout(); folder_btns.setSpacing(8)
+        change_dir = _btn("Change…", INDIGO, variant="cta", height=32)
+        change_dir.clicked.connect(self._choose_save_dir)
+        default_dir = _btn("Use default", None, variant="neutral", height=32, padding="4px 16px")
+        default_dir.clicked.connect(self._reset_save_dir)
+        open_dir = _btn("Open folder", None, variant="neutral", height=32, padding="4px 16px")
+        open_dir.clicked.connect(self._open_save_dir)
+        for b in (change_dir, default_dir, open_dir):
+            folder_btns.addWidget(b)
+        folder_btns.addStretch()
+        fcl.addLayout(folder_btns)
+        body.addWidget(folder_card)
+        self._refresh_save_dir_label()
 
         # ── Advancement: milestone vs. tracked XP ──────────────────────────
         adv_card = QFrame(); adv_card.setStyleSheet(
@@ -339,7 +376,7 @@ class SettingsDialog(QDialog):
             "Choices tab, and flags your character as ready to level up "
             "once you cross the next threshold — leveling up itself is "
             "still a manual click, same as milestone.", TEXT3, FS_TINY))
-        root.addWidget(adv_card)
+        body.addWidget(adv_card)
 
         # ── Character Rules, Tasha's Cauldron Options, and DM Secrets are
         # three separate cards, split by what kind of toggle each one is:
@@ -411,7 +448,7 @@ class SettingsDialog(QDialog):
             "e.g. a self-only spell with no verbal component still works while "
             "Blinded and Gagged. A table-variant interpretation, not RAW.")
         rcl.addWidget(self._component_restrictions_cb)
-        root.addWidget(rules_card)
+        body.addWidget(rules_card)
 
         # ── Tasha's Cauldron of Everything: "swap something at an ASI
         # level" class options, all the same shape, grouped together ──────
@@ -480,7 +517,7 @@ class SettingsDialog(QDialog):
             "know, at each level that grants an Ability Score Improvement — a Tasha's Cauldron "
             "of Everything optional rule.")
         tcl.addWidget(self._sorcerous_versatility_cb)
-        root.addWidget(tasha_card)
+        body.addWidget(tasha_card)
 
         # ── DM Secrets: purely cosmetic flavor toggles, grouped separately
         # at the bottom since they have no effect on actual gameplay ──────
@@ -510,15 +547,80 @@ class SettingsDialog(QDialog):
             "Purely cosmetic — a small toast under the death screen, picked at random "
             "from a pool of gallows-humor one-liners. No gameplay effect.")
         scl.addWidget(self._critical_flavor_cb)
-        root.addWidget(secrets_card)
+        body.addWidget(secrets_card)
 
-        root.addStretch()
+        body.addStretch()
         btn_row = QHBoxLayout(); btn_row.addStretch()
         close_btn = QPushButton("Done"); close_btn.setFixedHeight(34)
         close_btn.setStyleSheet(_btn("", GOLD, variant="cta", text_color=GOLD2, padding="4px 24px").styleSheet())
         close_btn.clicked.connect(self._on_done)
         btn_row.addWidget(close_btn)
         root.addLayout(btn_row)
+        # Open at the content's natural size, but never taller than the screen
+        _hint = _body.sizeHint()
+        _w, _h = _hint.width() + 60, _hint.height() + 140
+        _scr = self.screen().availableGeometry() if self.screen() else None
+        if _scr is not None:
+            _w, _h = min(_w, int(_scr.width() * 0.9)), min(_h, int(_scr.height() * 0.85))
+        self.resize(_w, _h)
+
+    # ── Character folder ──────────────────────────────────────────────
+    def _refresh_save_dir_label(self):
+        from dnd_app.core.save_load import get_save_dir, default_save_dir
+        cur = get_save_dir()
+        note = "  (default)" if os.path.abspath(cur) == os.path.abspath(default_save_dir()) else ""
+        # zero-width spaces after separators let a long path wrap
+        self._save_dir_lbl.setText(cur.replace("/", "/\u200b").replace("\\", "\\\u200b") + note)
+
+    def _apply_save_dir(self, new_dir: str):
+        """Switch to new_dir ("" = the default), offering to copy the
+        characters saved in the current folder across."""
+        from dnd_app.core.save_load import (get_save_dir, default_save_dir, is_writable_dir,
+                                            copy_saved_characters, list_saved_characters)
+        from dnd_app.core.app_settings import set_custom_save_dir
+        old_dir = get_save_dir()
+        target = new_dir or default_save_dir()
+        if os.path.abspath(target) == os.path.abspath(old_dir):
+            return
+        if not is_writable_dir(target):
+            QMessageBox.warning(self, "Can't use that folder",
+                                f"MIMIC can't save files in:\n{target}")
+            return
+        if list_saved_characters(old_dir):
+            ans = QMessageBox.question(
+                self, "Copy your characters?",
+                f"Copy the characters saved in\n{old_dir}\ninto the new folder too?\n\n"
+                "(The originals stay where they are.)")
+            if ans == QMessageBox.Yes:
+                copy_saved_characters(old_dir, target)
+        set_custom_save_dir(new_dir)
+        # An open character keeps saving to the folder it came from unless
+        # it's moved along with the rest
+        sheet = getattr(self.app_window, "_sheet", None)
+        cur = getattr(sheet, "_save_path", None) if sheet is not None else None
+        if cur and os.path.dirname(os.path.abspath(cur)) == os.path.abspath(old_dir):
+            moved = os.path.join(target, os.path.basename(cur))
+            if os.path.exists(moved):
+                sheet._save_path = moved
+        self._refresh_save_dir_label()
+        start = getattr(self.app_window, "_start", None)
+        if start is not None and hasattr(start, "_rebuild_saved_list"):
+            start._rebuild_saved_list()
+
+    def _choose_save_dir(self):
+        from dnd_app.core.save_load import get_save_dir
+        path = QFileDialog.getExistingDirectory(self, "Choose where characters are saved", get_save_dir())
+        if path:
+            self._apply_save_dir(path)
+
+    def _reset_save_dir(self):
+        self._apply_save_dir("")
+
+    def _open_save_dir(self):
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+        from dnd_app.core.save_load import get_save_dir
+        QDesktopServices.openUrl(QUrl.fromLocalFile(get_save_dir()))
 
     def _on_theme_changed(self, name):
         # _set_theme() below is synchronous and, with a character sheet
@@ -698,9 +800,16 @@ class CharacterCreatorApp(QMainWindow):
         self._sheet  = None
         self._dice_roller = None
 
+        # Characters used to be saved in the hidden ~/.dnd_characters
+        # folder; they now live in Documents/MIMIC Characters (or the
+        # folder picked in Settings). Copied across once -- originals kept.
+        from dnd_app.core.save_load import migrate_saves_once, LEGACY_SAVE_DIR
+        migrate_saves_once(LEGACY_SAVE_DIR, "migrated_legacy_saves")
+
         self._start = StartMenu(self)
         self._start.new_char.connect(self._go_wizard)
         self._start.load_char.connect(self._go_sheet_from_path)
+        self._start.import_pdf.connect(self._import_pdf_dialog)
         self._stack.addWidget(self._start)
 
         self._build_menu()
@@ -775,6 +884,7 @@ class CharacterCreatorApp(QMainWindow):
         fm = mb.addMenu("&File")
         a = QAction("New Character", self); a.setShortcut("Ctrl+N"); a.triggered.connect(self._go_wizard); fm.addAction(a)
         a = QAction("Open…", self);         a.setShortcut("Ctrl+O"); a.triggered.connect(self._load_dialog); fm.addAction(a)
+        a = QAction("Import from PDF Sheet…", self); a.triggered.connect(self._import_pdf_dialog); fm.addAction(a)
         self._recent_menu = fm.addMenu("Open Recent"); self._rebuild_recent_menu()
         a = QAction("Save", self);           a.setShortcut("Ctrl+S"); a.triggered.connect(self._save); fm.addAction(a)
         a = QAction("Export…", self);        a.setShortcut("Ctrl+E"); a.triggered.connect(self._export_dialog); fm.addAction(a)
@@ -889,6 +999,7 @@ class CharacterCreatorApp(QMainWindow):
             self._start = StartMenu(self)
             self._start.new_char.connect(self._go_wizard)
             self._start.load_char.connect(self._go_sheet_from_path)
+            self._start.import_pdf.connect(self._import_pdf_dialog)
             self._stack.insertWidget(0, self._start)
             if was_current_start:
                 self._stack.setCurrentWidget(self._start)
@@ -920,10 +1031,56 @@ class CharacterCreatorApp(QMainWindow):
         self._stack.setCurrentWidget(self._wizard)
 
     def _go_sheet_from_path(self, path: str):
+        if path.lower().endswith(".pdf"):
+            self._import_pdf(path)
+            return
         try:
             char = load_character(path); self._show_sheet(char, save_path=path)
         except Exception as e:
             QMessageBox.warning(self, "Load Error", str(e))
+
+    def _import_pdf_dialog(self):
+        """What a PDF import can and can't do first, then the file picker."""
+        from dnd_app.core.pdf_import import PDF_IMPORT_INTRO, PDF_IMPORT_LIMITS
+        box = QMessageBox(self)
+        box.setWindowTitle("Import from a PDF Character Sheet")
+        box.setIcon(QMessageBox.Information)
+        box.setText(PDF_IMPORT_INTRO)
+        box.setInformativeText("Good to know:\n" + "\n".join(f"• {l}" for l in PDF_IMPORT_LIMITS))
+        choose = box.addButton("Choose PDF…", QMessageBox.AcceptRole)
+        box.addButton(QMessageBox.Cancel)
+        box.setDefaultButton(choose)
+        box.exec()
+        if box.clickedButton() is not choose:
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "Import a 5e Character Sheet (PDF)", "",
+                                              "PDF character sheets (*.pdf)")
+        if path:
+            self._import_pdf(path)
+
+    def _import_pdf(self, path: str):
+        """A filled-in official 5e character sheet PDF -> a new character
+        (see core/pdf_import.py), saved straight away like a new one."""
+        from dnd_app.core.pdf_import import import_character_pdf, SheetImportError
+        from dnd_app.core.save_load import name_in_use, unique_character_name
+        try:
+            char, notes = import_character_pdf(path)
+        except SheetImportError as e:
+            QMessageBox.warning(self, "Import from PDF", str(e)); return
+        except Exception as e:
+            QMessageBox.warning(self, "Import from PDF", f"Couldn't import that sheet: {e}"); return
+        if not char.get("name"):
+            char["name"] = os.path.splitext(os.path.basename(path))[0]
+        if name_in_use(char["name"]):
+            char["name"] = unique_character_name(char["name"])
+        self._show_sheet(char)
+        if self._sheet is not None:
+            self._sheet._auto_save()
+        msg = f"Imported {char['name']} from the character sheet."
+        if notes:
+            msg += "\n\nWorth checking:\n" + "\n".join(f"\u2022 {n}" for n in notes)
+            msg += "\n\n(These are also on the \u201cImported from PDF\u201d notes page.)"
+        QMessageBox.information(self, "Import from PDF", msg)
 
     def _show_new_sheet(self, char: dict):
         """The wizard's finish: show the new character's sheet and save
@@ -1041,12 +1198,15 @@ class CharacterCreatorApp(QMainWindow):
         self._start = StartMenu(self)
         self._start.new_char.connect(self._go_wizard)
         self._start.load_char.connect(self._go_sheet_from_path)
+        self._start.import_pdf.connect(self._import_pdf_dialog)
         self._stack.insertWidget(0, self._start)
         self._stack.setCurrentIndex(0)
 
     def _load_dialog(self):
+        from dnd_app.core.save_load import get_save_dir
         path, _ = QFileDialog.getOpenFileName(self, "Open Character",
-                      os.path.expanduser("~/.dnd_characters"), "JSON files (*.json)")
+                      get_save_dir(), "Characters (*.json *.pdf);;JSON files (*.json);;"
+                      "5e character sheets (*.pdf)")
         if path: self._go_sheet_from_path(path)
 
     def _save(self):
@@ -1090,7 +1250,9 @@ class CharacterCreatorApp(QMainWindow):
         from dnd_app.core.save_load import save_character, character_filename
         from dnd_app.ui_desktop.pages.main_window import _save_recent
         dup = copy.deepcopy(self._sheet.char)
-        dup["name"] = dup.get("name","Character") + " (Copy)"
+        from dnd_app.core.save_load import unique_character_name
+        # "(Copy 2)" etc. -- a second copy used to overwrite the first
+        dup["name"] = unique_character_name(dup.get("name","Character") + " (Copy)")
         dup["_id"] = f"char_{int(time.time())}"
         path = character_filename(dup)
         save_character(dup, path)

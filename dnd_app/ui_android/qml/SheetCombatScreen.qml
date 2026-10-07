@@ -187,28 +187,38 @@ Page {
                     }
                 }
 
-                RowLayout {
+                // One row on wider phones; on narrow ones the amount gets its
+                // own line so Damage / Heal / Temp keep room for their text.
+                GridLayout {
+                    id: hpGrid
                     Layout.fillWidth: true
-                    spacing: 8
+                    columns: width >= 340 ? 4 : 3
+                    columnSpacing: 8
+                    rowSpacing: 8
                     MSpinBox {
                         id: hpAmount
                         Layout.preferredWidth: 100
+                        Layout.columnSpan: hpGrid.columns === 4 ? 1 : 3
                         from: 0
                         to: 999
                         value: 1
                     }
                     MButton {
                         Layout.fillWidth: true
+                        Layout.preferredWidth: 0
                         primary: false
                         text: "Damage"
                         onClicked: sheetBridge.applyDamage(hpAmount.value)
                     }
                     MButton {
                         Layout.fillWidth: true
+                        Layout.preferredWidth: 0
                         text: "Heal"
                         onClicked: sheetBridge.applyHealing(hpAmount.value)
                     }
                     MButton {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 0
                         primary: false
                         text: "Temp"
                         onClicked: sheetBridge.setTempHp(hpAmount.value)
