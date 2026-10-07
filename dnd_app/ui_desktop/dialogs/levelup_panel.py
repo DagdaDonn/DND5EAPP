@@ -141,8 +141,7 @@ class ChoiceWidget(QFrame):
         src_name = choice_info.get("source_name","")
         if src_name:
             head.addWidget(_lbl(src_name, bg, bold=True, size=FS_BODY, wrap=False))
-        head.addWidget(_lbl(choice_info["label"], TEXT, bold=True, size=FS_LABEL))
-        head.addStretch()
+        head.addWidget(_lbl(choice_info["label"], TEXT, bold=True, size=FS_LABEL), 1)
         self._done_lbl = _lbl("✓ Done", TEAL2, bold=True, size=FS_BODY, wrap=False)
         self._done_lbl.setVisible(self._confirmed)
         head.addWidget(self._done_lbl)
@@ -875,13 +874,18 @@ class ChoiceWidget(QFrame):
         pool_names = self.choice_info.get("pool")
         spell_list = ([s for s in ALL_SPELLS if s["name"] in pool_names]
                       if pool_names else ALL_SPELLS)
-        top = QHBoxLayout()
+        # search + list in one box; the level filter slides in over the
+        # box's right side from the funnel button
+        ms_box = QWidget(); ms_lay = QVBoxLayout(ms_box)
+        ms_lay.setContentsMargins(0, 0, 0, 0); ms_lay.setSpacing(6)
         self._ms_search = QLineEdit(); self._ms_search.setPlaceholderText("Search spells…")
         self._ms_lvl_f = QComboBox()
         self._ms_lvl_f.addItem("All Levels")
         for i in range(10): self._ms_lvl_f.addItem("Cantrip" if i==0 else f"Level {i}")
-        top.addWidget(self._ms_search, 2); top.addWidget(self._ms_lvl_f)
-        self._lay.addLayout(top)
+        from ..widgets import FilterSidebar
+        self._ms_filters = FilterSidebar(ms_box)
+        self._ms_filters.add_combo("Level", self._ms_lvl_f)
+        ms_lay.addLayout(self._ms_filters.search_row(self._ms_search))
 
         self._ms_list = QListWidget()
         self._ms_list.setSelectionMode(QAbstractItemView.MultiSelection)
@@ -915,7 +919,9 @@ class ChoiceWidget(QFrame):
         self._ms_search.textChanged.connect(_filter)
         self._ms_lvl_f.currentTextChanged.connect(_filter)
         self._ms_list.itemSelectionChanged.connect(self._on_ms_change)
-        self._lay.addWidget(self._ms_list)
+        ms_lay.addWidget(self._ms_list)
+        ms_lay.addStretch(1)   # any spare height goes under the list, not above it
+        self._lay.addWidget(ms_box)
         self._status = _lbl(self._status_text(), TEXT2, size=FS_SMALL)
         self._lay.addWidget(self._status)
 
@@ -1057,8 +1063,9 @@ class GrantsSummaryWidget(QFrame):
             badge.setStyleSheet(f"color:white;font-size:{FS_TINY}px;font-weight:700;background:{color};"
                                 f"border-radius:8px;padding:1px 6px;")
             rl.addWidget(badge)
-            rl.addWidget(_lbl(desc, TEXT2, size=FS_BODY))
-            rl.addStretch()
+            # the description takes the rest of the row (wrapping only when
+            # it really runs out of room)
+            rl.addWidget(_lbl(desc, TEXT2, size=FS_BODY), 1)
             self._outer.addWidget(row_frame)
 
 
@@ -1183,10 +1190,13 @@ class LevelUpPanel(QWidget):
         # ── Features timeline ─────────────────────────────────────────────
         self._features_hdr = _lbl("CLASS FEATURES BY LEVEL", IND2, bold=True, size=FS_LABEL)
         self._outer.addWidget(self._features_hdr)
+        # as tall as the list, up to 340px -- past that it scrolls
         feat_scroll = QScrollArea(); feat_scroll.setWidgetResizable(True)
         feat_scroll.setMaximumHeight(340)
+        self._feat_scroll = feat_scroll
         feat_scroll.setStyleSheet(f"QScrollArea{{background:{BG};border:1px solid {BORDER};border-radius:6px;}}")
         feat_inner = QWidget(); feat_inner.setStyleSheet(f"background:{BG};")
+        self._feat_inner = feat_inner
         self._features_lay = QVBoxLayout(feat_inner)
         self._features_lay.setSpacing(2); self._features_lay.setContentsMargins(6,4,6,4)
         feat_scroll.setWidget(feat_inner)
@@ -1195,20 +1205,16 @@ class LevelUpPanel(QWidget):
         self._pending_hdr = _lbl("CHOICES FOR THIS CHARACTER", AMBER, bold=True, size=FS_HEAD)
         self._outer.addWidget(self._pending_hdr)
 
-        self._choices_scroll = QScrollArea()
-        self._choices_scroll.setWidgetResizable(True)
-        self._choices_scroll.setMinimumHeight(200)
-        self._choices_scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self._choices_scroll.setStyleSheet(
-            f"QScrollArea{{background:{BG};border:1px solid {BORDER};border-radius:8px;}}"
-        )
-        self._choices_inner = QWidget()
-        self._choices_inner.setStyleSheet(f"background:{BG};")
+        # One card per choice, at full height (the Choices tab itself
+        # scrolls); hidden when there are none.
+        self._choices_inner = QFrame()
+        self._choices_inner.setObjectName("choicesBox")
+        self._choices_inner.setStyleSheet(
+            f"QFrame#choicesBox{{background:{BG};border:1px solid {BORDER};border-radius:8px;}}")
         self._choices_vl = QVBoxLayout(self._choices_inner)
         self._choices_vl.setSpacing(8)
         self._choices_vl.setContentsMargins(8, 8, 8, 8)
-        self._choices_scroll.setWidget(self._choices_inner)
-        self._outer.addWidget(self._choices_scroll, 1)
+        self._outer.addWidget(self._choices_inner)
 
         self._no_choices = _lbl("✓  No pending choices — character fully configured.", TEAL2, size=FS_BODY)
         self._outer.addWidget(self._no_choices)
@@ -1306,8 +1312,10 @@ class LevelUpPanel(QWidget):
             self.pending_count = len(unfinished)
             self.pending_count_changed.emit(self.pending_count)
 
-        min_h = max(120, min(480, 72 * len(pending) + 40))
-        self._choices_scroll.setMinimumHeight(min_h)
+        self._choices_inner.setVisible(bool(pending))
+        # the features list: as tall as it needs, up to its 340px cap
+        self._feat_inner.adjustSize()
+        self._feat_scroll.setMinimumHeight(min(340, self._feat_inner.sizeHint().height() + 4))
 
         for choice_info in pending:
             w = ChoiceWidget(choice_info, self.char)
@@ -2507,6 +2515,47 @@ def _get_feat_choices(char):
                 "label": "Choose 2 1st-level ritual spells (Cleric/Druid/Wizard list) — always prepared",
                 "already_chosen": already,
             })
+
+    # Feats that give a spell of your choice (plus a fixed one -- see
+    # spells.py FEAT_FIXED_SPELLS). The picked spell joins your spell list
+    # and, like the fixed one, can be cast once per long rest for free.
+    from dnd_app.data.phbCommon.spells import ALL_SPELLS as _ALL_SP
+    for feat, key, schools, label in [
+        ("Fey Touched", "feat_fey_touched_spell", ("Divination", "Enchantment"),
+         "Choose a 1st-level divination or enchantment spell (with Misty Step: each once per long rest, free)"),
+        ("Shadow Touched", "feat_shadow_touched_spell", ("Illusion", "Necromancy"),
+         "Choose a 1st-level illusion or necromancy spell (with Invisibility: each once per long rest, free)"),
+    ]:
+        if feat in all_feats:
+            already = made.get(key, [])
+            if len(already) < 1:
+                choices.append({
+                    "id": key, "source": "feat", "source_name": feat,
+                    "type": "magical_secrets", "count": 1,
+                    "pool": sorted(sp["name"] for sp in _ALL_SP
+                                   if sp.get("level") == 1 and sp.get("school") in schools),
+                    "label": label, "already_chosen": already,
+                })
+    if "Magic Initiate" in all_feats:
+        # the class comes from the feat's name when a background gave it
+        # ("Magic Initiate (Cleric)"); otherwise any of the six lists
+        mi_cls = ""
+        for full in [char.get("origin_feat", "")] + list(all_feats):
+            if full.startswith("Magic Initiate (") and full.endswith(")"):
+                mi_cls = full[len("Magic Initiate ("):-1]
+        mi_classes = [mi_cls] if mi_cls else ["Bard", "Cleric", "Druid", "Sorcerer", "Warlock", "Wizard"]
+        for key, lvl, count, what in [("feat_magic_initiate_cantrips", 0, 2, "2 cantrips"),
+                                      ("feat_magic_initiate_spell", 1, 1, "1 1st-level spell (free once per long rest)")]:
+            already = made.get(key, [])
+            if len(already) < count:
+                choices.append({
+                    "id": key, "source": "feat", "source_name": "Magic Initiate",
+                    "type": "magical_secrets", "count": count,
+                    "pool": sorted(sp["name"] for sp in _ALL_SP if sp.get("level") == lvl
+                                   and any(c in sp.get("classes", []) for c in mi_classes)),
+                    "label": f"Choose {what} from the {' / '.join(mi_classes)} list",
+                    "already_chosen": already,
+                })
 
     if "Linguist" in all_feats:
         key = "feat_linguist_languages"

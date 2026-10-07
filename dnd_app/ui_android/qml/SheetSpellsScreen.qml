@@ -383,23 +383,39 @@ Page {
                 spacing: 8
                 MTextField {
                     id: spellSearch
+                    objectName: "spellSearchField"
                     Layout.fillWidth: true
                     placeholderText: "Search spells…"
                     onTextChanged: addableModel.refreshResults()
                 }
+                // level and class filters live in the drawer behind this
+                MFilterButton {
+                    objectName: "spellFilterButton"
+                    count: spellFilters.activeCount
+                    onClicked: spellFilters.open()
+                }
+            }
+            MFilterDrawer {
+                id: spellFilters
+                objectName: "spellFilterDrawer"
+                title: "Spell filters"
+                activeCount: (levelFilter.currentIndex > 0) + (classFilter.currentIndex > 0)
+                onCleared: { levelFilter.currentIndex = 0; classFilter.currentIndex = 0 }
+                Label { text: "Level"; color: Theme.text2; font.pixelSize: Theme.fsSmall; font.bold: true }
                 ComboBox {
                     id: levelFilter
-                    Layout.preferredWidth: 130
+                    Layout.fillWidth: true
                     model: ["All Levels", "Cantrip", "Level 1", "Level 2", "Level 3", "Level 4",
                             "Level 5", "Level 6", "Level 7", "Level 8", "Level 9"]
                     onCurrentIndexChanged: addableModel.refreshResults()
                 }
-            }
-            ComboBox {
-                id: classFilter
-                Layout.fillWidth: true
-                model: sheetBridge.spellClassFilters
-                onCurrentIndexChanged: addableModel.refreshResults()
+                Label { text: "Class"; color: Theme.text2; font.pixelSize: Theme.fsSmall; font.bold: true }
+                ComboBox {
+                    id: classFilter
+                    Layout.fillWidth: true
+                    model: sheetBridge.spellClassFilters
+                    onCurrentIndexChanged: addableModel.refreshResults()
+                }
             }
             MCheckBox {
                 Layout.fillWidth: true

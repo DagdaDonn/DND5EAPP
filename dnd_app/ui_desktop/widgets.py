@@ -1,9 +1,11 @@
 """Reusable custom widgets for the character creator.
 
-Only FlowLayout/FlowContainer are actually used anywhere in the app
-(imported by sheet.py) — the equivalents these components need
-(SkillRow, StatBox, HPTracker, etc.) are built directly into
-sheet.py/shared.py instead.
+- FlowLayout / FlowContainer: wrap chips onto new rows (badge strips).
+- RarityBarDelegate: a magic item's rarity as a coloured bar beside it.
+- FilterSidebar: a browser's filters in a panel that slides in from the
+  right, opened by a funnel button at the end of the search row.
+(SkillRow, StatBox, HPTracker and the like are built directly into
+the sheet pages / shared.py instead.)
 
 Author: Ethan O'Brien
 Date: 2026-08-20
@@ -144,3 +146,217 @@ class RarityBarDelegate(QStyledItemDelegate):
     def sizeHint(self, option, index):
         s = super().sizeHint(option, index)
         return QSize(s.width() + RARITY_BAR_WIDTH + 6, s.height())
+
+
+class FilterSidebar(QFrame):
+    """A panel of filters that slides in over the right-hand side of a
+    browser, so the browser's top row can be just a search box.
+
+    Using it:
+      1. Build the search box and the filter drop-downs as usual.
+      2. sidebar = FilterSidebar(host) -- host is the widget the panel
+         covers (the browser's page/tab).
+      3. sidebar.add_combo("Rarity", combo) for each drop-down filter,
+         sidebar.add_check(checkbox) for each on/off filter.
+      4. Put sidebar.search_row(search_box) where the search box used to
+         go: the search box takes the whole row except for a small funnel
+         button at the end.
+
+    The funnel button opens and closes the panel and, while any filter is
+    set, shows how many. "Clear filters" puts every drop-down back on its
+    first entry ("All ...") and every checkbox back how it started. The
+    filters themselves are unchanged widgets -- the browser still reads
+    combo.currentText() / checkbox.isChecked() and listens to their
+    signals exactly as before.
+    """
+
+    WIDTH = 236
+
+    def __init__(self, host: QWidget, title: str = "Filters"):
+        super().__init__(host)
+        from PySide6.QtWidgets import QGraphicsDropShadowEffect
+        from PySide6.QtGui import QColor
+        self._host = host
+        self._combos = []      # (row widget, combo)
+        self._checks = []      # (checkbox, its starting state)
+        self._anim = None
+        self.setObjectName("filterSidebar")
+        self.setStyleSheet(
+            f"QFrame#filterSidebar{{background:{SURF2};border:1px solid {BORDER2};"
+            f"border-radius:8px;}}"
+            # (a host styled with a bare QFrame{...} rule would otherwise
+            # draw its border round every label in here too)
+            f"QLabel{{background:transparent;border:none;}}")
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(24); shadow.setOffset(-4, 0); shadow.setColor(QColor(0, 0, 0, 150))
+        self.setGraphicsEffect(shadow)
+
+        lay = QVBoxLayout(self); lay.setContentsMargins(14, 10, 10, 12); lay.setSpacing(8)
+        # header: "FILTERS" and a close button
+        head = QHBoxLayout(); head.setSpacing(4)
+        cap = QLabel(title.upper())
+        cap.setStyleSheet(f"color:{GOLD};font-size:{FS_SMALL}px;font-weight:700;")
+        head.addWidget(cap); head.addStretch()
+        # close: a chevron pointing the way the panel slides away
+        close = QToolButton(); close.setToolTip("Close filters")
+        from dnd_app.ui_desktop import icons as _icons
+        _icons.set_button_icon(close, "chevron_right", 16)
+        close.setAccessibleName("Close filters")
+        close.setStyleSheet(
+            f"QToolButton{{background:transparent;border:none;color:{TEXT2};"
+            f"font-size:{FS_BODY}px;min-height:0;padding:2px 6px;}}"
+            f"QToolButton:hover{{color:{TEXT};}}")
+        close.clicked.connect(self.close_panel)
+        head.addWidget(close)
+        lay.addLayout(head)
+        # the filters go in here, one under the other
+        self._body = QVBoxLayout(); self._body.setSpacing(10)
+        lay.addLayout(self._body)
+        lay.addStretch()
+        self._clear = QPushButton("Clear filters")
+        self._clear.setAccessibleName("Clear all filters")
+        self._clear.setStyleSheet(
+            f"QPushButton{{background:{SURF3};border:1px solid {BORDER2};border-radius:6px;"
+            f"color:{TEXT};padding:6px 10px;font-size:{FS_SMALL}px;font-weight:700;}}"
+            f"QPushButton:hover{{border-color:{INDIGO};}}"
+            f"QPushButton:disabled{{color:{TEXT3};}}")
+        self._clear.clicked.connect(self.clear)
+        lay.addWidget(self._clear)
+
+        # the funnel button that sits at the end of the search row
+        self.button = QToolButton()
+        self.button.setCheckable(True)
+        self.button.setToolTip("Filters")
+        self.button.setAccessibleName("Show filters")
+        self.button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        _icons.set_button_icon(self.button, "filter", 18)
+        self.button.toggled.connect(self._toggle)
+
+        self.hide()
+        host.installEventFilter(self)
+        self._update_badge()
+
+    # ── Building ──────────────────────────────────────────────────────────
+    def add_combo(self, label: str, combo: QComboBox) -> QWidget:
+        """Move a filter drop-down into the panel under a small label.
+        Returns the row, so a filter that only sometimes applies can be
+        hidden with set_filter_visible()."""
+        row = QWidget(); rl = QVBoxLayout(row); rl.setContentsMargins(0, 0, 0, 0); rl.setSpacing(3)
+        cap = QLabel(label)
+        cap.setStyleSheet(f"color:{TEXT2};font-size:{FS_TINY}px;font-weight:700;")
+        rl.addWidget(cap)
+        # the panel is narrow: let the box be narrower than its longest
+        # entry (the list itself still opens wide enough to read)
+        combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        combo.setMinimumContentsLength(8)
+        combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        combo.view().setMinimumWidth(combo.view().sizeHintForColumn(0) + 24)
+        combo.setVisible(True)
+        rl.addWidget(combo)
+        self._body.addWidget(row)
+        self._combos.append((row, combo))
+        combo.currentIndexChanged.connect(lambda _i: self._update_badge())
+        self._update_badge()
+        return row
+
+    def add_check(self, check: QCheckBox):
+        """Move an on/off filter (e.g. "Show only prepared") into the panel."""
+        self._body.addWidget(check)
+        self._checks.append((check, check.isChecked()))
+        check.toggled.connect(lambda _c: self._update_badge())
+        self._update_badge()
+
+    def set_filter_visible(self, combo: QComboBox, visible: bool):
+        """Show or hide one drop-down's row (label included)."""
+        for row, c in self._combos:
+            if c is combo:
+                row.setVisible(visible)
+        self._update_badge()
+
+    def search_row(self, search: QLineEdit) -> QHBoxLayout:
+        """The browser's top row: the search box, then the funnel button."""
+        row = QHBoxLayout(); row.setSpacing(6)
+        row.addWidget(search, 1)
+        h = max(34, search.sizeHint().height())
+        self.button.setFixedHeight(h)
+        self.button.setMinimumWidth(h + 4)
+        row.addWidget(self.button)
+        return row
+
+    # ── State ─────────────────────────────────────────────────────────────
+    def active_count(self) -> int:
+        """How many filters are set to something other than their default."""
+        n = sum(1 for row, c in self._combos if not row.isHidden() and c.currentIndex() > 0)
+        return n + sum(1 for c, start in self._checks if c.isChecked() != start)
+
+    def clear(self):
+        for _row, c in self._combos:
+            c.setCurrentIndex(0)
+        for c, start in self._checks:
+            c.setChecked(start)
+
+    def _update_badge(self):
+        """Funnel button: plain when nothing is filtered, accent-bordered
+        with the number of filters set when something is."""
+        n = self.active_count()
+        self.button.setText(str(n) if n else "")
+        self.button.setAccessibleDescription(f"{n} filters set" if n else "No filters set")
+        edge = INDIGO if (n or self.button.isChecked()) else BORDER2
+        self.button.setStyleSheet(
+            f"QToolButton{{background:{SURF2};border:1px solid {edge};border-radius:6px;"
+            f"color:{IND2};font-weight:700;font-size:{FS_SMALL}px;min-height:0;padding:0 6px;}}"
+            f"QToolButton:hover{{border-color:{INDIGO};}}"
+            f"QToolButton:checked{{background:{SURF3};}}")
+        self._clear.setEnabled(n > 0)
+
+    # ── Opening / closing ─────────────────────────────────────────────────
+    def _target_rect(self) -> QRect:
+        """Down the right-hand edge of the host, from just under the search
+        row (so the funnel button and its count stay in view) to the
+        bottom."""
+        w = min(self.WIDTH, max(160, self._host.width() - 24))
+        top = 4
+        if self._host.isAncestorOf(self.button):
+            top = self.button.mapTo(self._host, QPoint(0, self.button.height())).y() + 6
+        return QRect(self._host.width() - w - 4, top, w, max(120, self._host.height() - top - 4))
+
+    def _toggle(self, on: bool):
+        from PySide6.QtCore import QPropertyAnimation, QEasingCurve
+        self._update_badge()
+        end = self._target_rect()
+        start = QRect(end); start.moveLeft(self._host.width())
+        if self._anim:
+            self._anim.stop()
+        if on:
+            self.setGeometry(start); self.show(); self.raise_()
+            a, b = start, end
+        else:
+            a, b = self.geometry(), start
+        anim = QPropertyAnimation(self, b"geometry", self)
+        anim.setDuration(160); anim.setEasingCurve(QEasingCurve.OutCubic)
+        anim.setStartValue(a); anim.setEndValue(b)
+        if not on:
+            anim.finished.connect(self.hide)
+        anim.start()
+        self._anim = anim
+        if on and self._combos:
+            self._combos[0][1].setFocus()
+
+    def open_panel(self):
+        self.button.setChecked(True)
+
+    def close_panel(self):
+        self.button.setChecked(False)
+
+    def keyPressEvent(self, ev):
+        if ev.key() == Qt.Key_Escape:
+            self.close_panel(); self.button.setFocus(); return
+        super().keyPressEvent(ev)
+
+    def eventFilter(self, obj, ev):
+        # keep the panel pinned to the host's right edge as it resizes
+        from PySide6.QtCore import QEvent
+        if obj is self._host and ev.type() == QEvent.Resize and self.isVisible():
+            if not (self._anim and self._anim.state() == self._anim.State.Running):
+                self.setGeometry(self._target_rect())
+        return False

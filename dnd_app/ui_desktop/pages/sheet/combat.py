@@ -544,12 +544,14 @@ class CombatMixin:
         # Damage / Heal
         ctrl_row = QHBoxLayout(); ctrl_row.setSpacing(6)
         self._hp_amt = QSpinBox(); self._hp_amt.setRange(1,9999); self._hp_amt.setValue(1)
-        self._hp_amt.setMinimumWidth(64); self._hp_amt.setMaximumWidth(80)
-        dmg_btn = _btn("Damage", CRIMSON, variant="danger", height=32, bg_alpha=0x44,
+        self._hp_amt.setMinimumWidth(96); self._hp_amt.setMaximumWidth(120)   # "-  n  +"
+        self._hp_amt.setFixedHeight(34)   # the same height as Damage / Heal
+        self._hp_amt.setStyleSheet("QSpinBox{min-height:0;}")   # (the theme's min-height would win)
+        dmg_btn = _btn("Damage", CRIMSON, variant="danger", height=34, bg_alpha=0x44,
                         text_color=CRIM2, hover_text="white", font_size=FS_SMALL, padding="0px")
         dmg_btn.setAccessibleName("Apply damage to hit points")
         dmg_btn.clicked.connect(self._do_damage)
-        heal_btn = _btn("Heal", GREEN, variant="cta", height=32, bg_alpha=0x44,
+        heal_btn = _btn("Heal", GREEN, variant="cta", height=34, bg_alpha=0x44,
                          text_color=GREEN2, hover_text="white", font_size=FS_SMALL, padding="0px")
         heal_btn.setAccessibleName("Heal hit points")
         heal_btn.clicked.connect(self._do_heal)
@@ -618,7 +620,10 @@ class CombatMixin:
         pips_row.addStretch()
         dsl.addLayout(pips_row)
         hpcl.addWidget(self._death_saves_container)
-        top_lay.addWidget(hp_card, 4)
+        # spare height goes under the controls, not between the title and
+        # the numbers
+        hpcl.addStretch(1)
+        top_lay.addWidget(hp_card, 3)
 
         # ── Armor & Shield card (READ-ONLY display — equip via Gear tab) ──────
         armor_card = _card(); armor_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -628,7 +633,7 @@ class CombatMixin:
         self._armor_card_ac_lbl.setStyleSheet(
             f"QLabel{{background:{qa(TEAL,0x22)};border:1px solid {TEAL};border-radius:6px;"
             f"padding:4px 10px;color:{TEAL2};font-weight:700;font-size:{FS_BODY}px;}}")
-        acl2.addWidget(self._armor_card_ac_lbl)
+        self._armor_card_ac_lbl.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
         self._armor_display = QLabel("No Armor")
         self._armor_display.setStyleSheet(
             f"QLabel{{background:{SURF2};border:1px solid {BORDER2};border-radius:6px;"
@@ -638,13 +643,20 @@ class CombatMixin:
         self._shield_display.setStyleSheet(
             f"QLabel{{background:{SURF2};border:1px solid {BORDER};border-radius:6px;"
             f"padding:4px 10px;color:{TEXT3};font-size:{FS_SMALL}px;}}")
-        acl2.addWidget(self._armor_display); acl2.addWidget(self._shield_display)
+        # one row: the AC pill, then what's worn (armor above shield) --
+        # leaves the rest of the card's height for the weapons list
+        ac_row = QHBoxLayout(); ac_row.setSpacing(6)
+        ac_row.addWidget(self._armor_card_ac_lbl)
+        worn = QVBoxLayout(); worn.setSpacing(4)
+        worn.addWidget(self._armor_display); worn.addWidget(self._shield_display)
+        ac_row.addLayout(worn, 1)
+        acl2.addLayout(ac_row)
         armor_jump = QPushButton("Equip armor && shield in Gear ▸")
         _icons.set_button_icon(armor_jump, "shield", 12)
         armor_jump.setFixedHeight(24)
         armor_jump.setStyleSheet(
             f"QPushButton{{background:transparent;border:none;color:{TEAL2};"
-            f"font-size:{FS_TINY}px;text-align:left;}}"
+            f"font-size:{FS_TINY}px;text-align:left;min-height:0;padding:0;}}"
             f"QPushButton:hover{{color:{TEAL};text-decoration:underline;}}")
         armor_jump.clicked.connect(lambda: self._tabs.setCurrentIndex(3))
         acl2.addWidget(armor_jump)
@@ -654,6 +666,7 @@ class CombatMixin:
         wpn_host = QWidget(); wpn_host.setStyleSheet("background:transparent;border:none;")
         self._weapon_rows = QVBoxLayout(wpn_host)
         self._weapon_rows.setSpacing(4); self._weapon_rows.setContentsMargins(0,0,0,0)
+        self._weapon_rows.setAlignment(Qt.AlignTop)   # rows keep their own height, stacked from the top
         wpn_scroll = QScrollArea(); wpn_scroll.setWidgetResizable(True)
         wpn_scroll.setFrameShape(QFrame.NoFrame)
         wpn_scroll.setMinimumHeight(80)
@@ -670,10 +683,11 @@ class CombatMixin:
         exhl.setContentsMargins(0,0,0,0); exhl.setSpacing(6)
         exhl.addWidget(_lbl("Exhaustion:", TEXT2, FS_SMALL, wrap=False))
         self._exhaustion_spin = QSpinBox(); self._exhaustion_spin.setRange(0,6)
-        self._exhaustion_spin.setFixedWidth(52)
+        self._exhaustion_spin.setFixedWidth(78)
         self._exhaustion_spin.setStyleSheet(
             f"QSpinBox{{background:{SURF2};border:1px solid {BORDER2};"
-            f"border-radius:4px;color:{TEXT};font-size:{FS_SMALL}px;padding:2px;}}")
+            f"border-radius:4px;color:{TEXT};font-size:{FS_SMALL}px;padding:2px;}}"
+            f"QSpinBox::up-button,QSpinBox::down-button{{width:18px;background:{BORDER};}}")
         self._exhaustion_spin.setToolTip(
             "PHB exhaustion (cumulative):\n"
             "1 — Disadvantage on ability checks\n"
@@ -764,12 +778,14 @@ class CombatMixin:
         # own light background actually render.
         self._action_tabs.setTabPosition(QTabWidget.North)
         self._action_tabs.setStyleSheet(
-            f"QTabWidget::pane{{border:1px solid {qa(AMBER,0x33)};border-radius:8px;"
-            f"background:{SURF};margin-top:-1px;}}"
+            # selected tab joined to its page (see theme.py's QTabWidget::pane)
+            f"QTabWidget::pane{{border:1px solid {qa(AMBER,0x33)};border-top-left-radius:0px;border-top-right-radius:8px;border-bottom-right-radius:8px;border-bottom-left-radius:8px;"
+            f"background:{SURF};top:-1px;}}"
             f"QTabBar::tab{{background:{BG};color:{TEXT2};border:1px solid {qa(AMBER,0x22)};"
-            f"border-bottom:none;padding:6px 14px;border-radius:6px 6px 0 0;"
+            f"border-bottom:1px solid {qa(AMBER,0x33)};padding:6px 14px;border-top-left-radius:6px;border-top-right-radius:6px;border-bottom-right-radius:0px;border-bottom-left-radius:0px;"
             f"font-size:{FS_SMALL}px;font-weight:700;min-width:80px;}}"
-            f"QTabBar::tab:selected{{background:{SURF};color:{GOLD};border-color:{qa(AMBER,0x66)};}}"
+            f"QTabBar::tab:selected{{background:{SURF};color:{GOLD};border-color:{qa(AMBER,0x66)};"
+            f"border-bottom:1px solid {SURF};}}"
             f"QTabBar::tab:hover{{background:{qa(AMBER,0x11)};color:{AMBE2};}}"
         )
         self._action_bucket_widgets = {}
@@ -1841,7 +1857,9 @@ class CombatMixin:
             pa_cb.stateChanged.connect(_on_power_attack_toggle)
             rl.addWidget(pa_cb)
         prop_str = ", ".join(str(p) for p in (props[:2] if props else []))
-        if prop_str: rl.addWidget(_lbl(prop_str, TEXT3, FS_SMALL, wrap=False))
+        # properties (Versatile, Heavy, range...) on hover rather than inline:
+        # the row stays one line with its Hit button in view
+        if prop_str: row_f.setToolTip(f"Properties: {', '.join(str(p) for p in props)}")
         rl.addStretch()
 
         # ── Ammo counter (ranged non-thrown weapons) ──────────────────────────
@@ -1923,7 +1941,7 @@ class CombatMixin:
 
         # Attach the completed row to the combat tab (this line was lost in a
         # past refactor — without it every weapon row was built then dropped).
-        self._weapon_rows.addWidget(row_f)
+        self._place_weapon_row(row_f)
         self._weapon_row_widgets.append(row_f)
 
     def _add_martial_arts_row(self):
@@ -1961,7 +1979,9 @@ class CombatMixin:
         dmg_display = f"{die}+{mod}" if mod >= 0 else f"{die}{mod}"
         rl.addWidget(_lbl(f"{dmg_display} bludgeoning", GOLD2, FS_BODY, wrap=False))
         self._add_onhit_damage_badges(rl)
-        rl.addWidget(_lbl(f"({stat})", TEXT3, FS_SMALL, wrap=False))
+        # which ability it uses is on hover, not a label -- keeps the row
+        # narrow enough that its Hit button stays in view
+        row_f.setToolTip(f"Attack and damage use {stat}")
         rl.addStretch()
 
         def _roll_hit(checked=False, _atk=atk):
@@ -1981,7 +2001,7 @@ class CombatMixin:
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
-        self._weapon_rows.addWidget(row_f)
+        self._place_weapon_row(row_f)
         self._weapon_row_widgets.append(row_f)
 
     def _refresh_hit_dice(self):
@@ -2006,12 +2026,12 @@ class CombatMixin:
             sp = QSpinBox()
             sp.setRange(0, hd_data.get("total", lvl))
             sp.setValue(hd_data.get("remaining", lvl))
-            sp.setFixedWidth(54); sp.setFixedHeight(32)
+            sp.setFixedWidth(78); sp.setFixedHeight(32)   # "-  n  +" needs the room
             sp.setAlignment(Qt.AlignCenter)
             sp.setStyleSheet(
                 f"QSpinBox{{background:{SURF2};border:2px solid {qa(TEAL,0x66)};border-radius:6px;"
-                f"font-weight:700;font-size:{FS_SMALL}px;color:{TEAL2};}}"
-                f"QSpinBox::up-button,QSpinBox::down-button{{width:14px;background:{BORDER};}}")
+                f"font-weight:700;font-size:{FS_SMALL}px;color:{TEAL2};padding:0 2px;}}"
+                f"QSpinBox::up-button,QSpinBox::down-button{{width:18px;background:{BORDER};}}")
             col.addWidget(_lbl(f"d{hd}", TEXT3, FS_TINY, align=Qt.AlignCenter))
             sp.valueChanged.connect(
                 lambda v, k=hd_key, tot=hd_data.get("total", lvl):
@@ -2061,7 +2081,9 @@ class CombatMixin:
         dmg_display = f"{die}+{dmg_mod}" if dmg_mod >= 0 else f"{die}{dmg_mod}"
         rl.addWidget(_lbl(f"{dmg_display} bludgeoning or slashing", GOLD2, FS_BODY, wrap=False))
         self._add_onhit_damage_badges(rl)
-        rl.addWidget(_lbl(f"({stat})", TEXT3, FS_SMALL, wrap=False))
+        # which ability it uses is on hover, not a label -- keeps the row
+        # narrow enough that its Hit button stays in view
+        row_f.setToolTip(f"Attack and damage use {stat}")
         rl.addStretch()
 
         def _roll_hit(checked=False, _atk=atk):
@@ -2081,7 +2103,7 @@ class CombatMixin:
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
-        self._weapon_rows.addWidget(row_f)
+        self._place_weapon_row(row_f)
         self._weapon_row_widgets.append(row_f)
 
     def _add_racial_natural_weapon_row(self):
@@ -2193,6 +2215,17 @@ class CombatMixin:
                     "Instead of damage, you can Grapple or Shove with it instead — see the Actions tab."
         })
 
+    def _place_weapon_row(self, row_f):
+        """Add a finished attack row to the Weapons list, with everything in
+        it (name, to-hit, damage, the Hit button...) centred on one line --
+        otherwise the taller buttons sit lower than the text beside them."""
+        lay = row_f.layout()
+        for i in range(lay.count() if lay else 0):
+            w = lay.itemAt(i).widget()
+            if w is not None:
+                lay.setAlignment(w, Qt.AlignVCenter)
+        self._weapon_rows.addWidget(row_f)
+
     def _add_one_natural_weapon_row(self, info):
         pb = get_prof_bonus(self.char)
         stat = info["stat"]
@@ -2204,9 +2237,8 @@ class CombatMixin:
             f"QFrame{{background:{qa(TEAL2,0x14)};border:1px solid {qa(TEAL2,0x55)};border-radius:8px;}}")
         rl = QHBoxLayout(row_f); rl.setContentsMargins(10,8,10,8); rl.setSpacing(10)
         rl.addWidget(_lbl(info["name"], TEXT, FS_BODY, bold=True, wrap=False))
-        badge = _lbl("Natural Weapon", TEAL2, FS_TINY, bold=True, wrap=False)
-        if info.get("note"):
-            badge.setToolTip(info["note"])
+        badge = _lbl("Natural", TEAL2, FS_TINY, bold=True, wrap=False)   # "Natural weapon" on hover
+        badge.setToolTip("Natural weapon" + (f" -- {info['note']}" if info.get("note") else ""))
         rl.addWidget(badge)
         atk_lbl = _lbl(f"{atk} to hit", TEAL2, FS_BODY, wrap=False)
         atk_lbl.setToolTip("Right-click for a breakdown")
@@ -2220,7 +2252,9 @@ class CombatMixin:
             dmg_display = f"{info['die']}+{mod}" if mod >= 0 else f"{info['die']}{mod}"
         rl.addWidget(_lbl(f"{dmg_display} {info['damage_type']}", GOLD2, FS_BODY, wrap=False))
         self._add_onhit_damage_badges(rl)
-        rl.addWidget(_lbl(f"({stat})", TEXT3, FS_SMALL, wrap=False))
+        # which ability it uses is on hover, not a label -- keeps the row
+        # narrow enough that its Hit button stays in view
+        row_f.setToolTip(f"Attack and damage use {stat}")
         rl.addStretch()
 
         def _roll_hit(checked=False, _atk=atk, _name=info["name"]):
@@ -2240,7 +2274,7 @@ class CombatMixin:
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
-        self._weapon_rows.addWidget(row_f)
+        self._place_weapon_row(row_f)
         self._weapon_row_widgets.append(row_f)
 
     def _add_beast_form_row(self):
@@ -2313,7 +2347,7 @@ class CombatMixin:
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
-        self._weapon_rows.addWidget(row_f)
+        self._place_weapon_row(row_f)
         self._weapon_row_widgets.append(row_f)
 
     def _add_battlerager_spikes_row(self):
@@ -2372,7 +2406,7 @@ class CombatMixin:
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
-        self._weapon_rows.addWidget(row_f)
+        self._place_weapon_row(row_f)
         self._weapon_row_widgets.append(row_f)
 
     def _add_armorer_model_row(self):
@@ -2444,7 +2478,7 @@ class CombatMixin:
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
-        self._weapon_rows.addWidget(row_f)
+        self._place_weapon_row(row_f)
         self._weapon_row_widgets.append(row_f)
 
     def _add_longtooth_shifter_row(self):
@@ -2503,7 +2537,7 @@ class CombatMixin:
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
-        self._weapon_rows.addWidget(row_f)
+        self._place_weapon_row(row_f)
         self._weapon_row_widgets.append(row_f)
 
     def _add_vampire_bite_row(self):
@@ -2556,7 +2590,7 @@ class CombatMixin:
         hit_btn.clicked.connect(_roll_hit)
         rl.addWidget(hit_btn)
 
-        self._weapon_rows.addWidget(row_f)
+        self._place_weapon_row(row_f)
         self._weapon_row_widgets.append(row_f)
 
     def _refresh_combat_weapons(self):
@@ -2656,7 +2690,7 @@ class CombatMixin:
                 hit_btn.clicked.connect(_roll_hit)
                 rl.addWidget(hit_btn)
 
-            self._weapon_rows.addWidget(row_f)
+            self._place_weapon_row(row_f)
             self._weapon_row_widgets.append(row_f)
 
         # ══ TAB: CHOICES (level-up panel) ═════════════════════════════════════════

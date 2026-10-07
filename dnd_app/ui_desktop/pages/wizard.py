@@ -62,7 +62,10 @@ class CharacterWizard(QWidget):
 
         # ── Top header bar ────────────────────────────────────────────────────
         header = QFrame()
-        header.setStyleSheet(f"QFrame{{background:{SURF};border-bottom:2px solid {BORDER};}}")
+        # (#id selector: a bare QFrame{...} rule would also give every QLabel
+        # inside -- QLabel is a QFrame -- a bottom border, nudging the title up)
+        header.setObjectName("wizHeader")
+        header.setStyleSheet(f"QFrame#wizHeader{{background:{SURF};border-bottom:2px solid {BORDER};}}")
         header.setFixedHeight(64)
         hl = QHBoxLayout(header); hl.setContentsMargins(24,0,24,0)
         hl.addWidget(_icons.icon_label("combat", 30))
@@ -93,7 +96,8 @@ class CharacterWizard(QWidget):
 
         # ── Bottom nav bar ─────────────────────────────────────────────────────
         nav = QFrame()
-        nav.setStyleSheet(f"QFrame{{background:{SURF};border-top:2px solid {BORDER};}}")
+        nav.setObjectName("wizNav")
+        nav.setStyleSheet(f"QFrame#wizNav{{background:{SURF};border-top:2px solid {BORDER};}}")
         nav.setFixedHeight(72)
         nl = QHBoxLayout(nav); nl.setContentsMargins(24,0,24,0)
         self._back_btn = pill_btn("← Back", SURF2, TEXT)
@@ -214,7 +218,7 @@ class Step1Race(QWidget):
 
         # Subrace
         sub_row = QHBoxLayout()
-        sub_row.addWidget(_lbl("Subrace:", TEXT2, FS_BODY, bold=True))
+        sub_row.addWidget(_lbl("Subrace:", TEXT2, FS_BODY, bold=True, wrap=False))
         self._subrace_combo = QComboBox(); self._subrace_combo.addItem("(None)")
         self._subrace_combo.setMinimumWidth(240)
         sub_row.addWidget(self._subrace_combo, 1)
@@ -222,7 +226,7 @@ class Step1Race(QWidget):
 
         # Draconic Ancestry — shown only for Dragonborn
         self._anc_row = QHBoxLayout()
-        self._anc_row.addWidget(_lbl("Draconic Ancestry:", TEXT2, FS_BODY, bold=True))
+        self._anc_row.addWidget(_lbl("Draconic Ancestry:", TEXT2, FS_BODY, bold=True, wrap=False))
         self._ancestry_combo = QComboBox()
         self._ancestry_combo.setMinimumWidth(240)
         self._anc_row.addWidget(self._ancestry_combo, 1)
@@ -235,7 +239,7 @@ class Step1Race(QWidget):
         # charms, Winter frightens, Spring lets a willing creature come
         # with you, Summer burns everyone at your origin point).
         self._season_row = QHBoxLayout()
-        self._season_row.addWidget(_lbl("Eladrin Season:", TEXT2, FS_BODY, bold=True))
+        self._season_row.addWidget(_lbl("Eladrin Season:", TEXT2, FS_BODY, bold=True, wrap=False))
         self._season_combo = QComboBox()
         self._season_combo.setMinimumWidth(340)
         for season, effect in [
@@ -255,7 +259,7 @@ class Step1Race(QWidget):
         # is granted later, not at character creation, so it isn't picked
         # here (same reasoning as feats/ASIs gained on level-up).
         self._simic_row = QHBoxLayout()
-        self._simic_row.addWidget(_lbl("Animal Enhancement:", TEXT2, FS_BODY, bold=True))
+        self._simic_row.addWidget(_lbl("Animal Enhancement:", TEXT2, FS_BODY, bold=True, wrap=False))
         self._simic_combo = QComboBox()
         self._simic_combo.setMinimumWidth(340)
         for opt, desc in [
@@ -646,7 +650,7 @@ class Step2Abilities(QWidget):
             sp = QSpinBox(); sp.setRange(0, 4); sp.setValue(0); sp.setFixedWidth(52)
             sp.setButtonSymbols(QAbstractSpinBox.NoButtons)
             sp.setStyleSheet(f"QSpinBox{{color:{GOLD2};font-weight:700;font-size:{FS_BODY}px;"
-                             f"border:2px solid {qa(GOLD,0x55)};border-radius:6px;background:{SURF2};}}")
+                             f"border:2px solid {qa(GOLD,0x55)};border-radius:6px;background:{SURF2};padding:2px;}}")
             sp.valueChanged.connect(self._on_tashas_spin)
             mod_lbl = QLabel("0"); mod_lbl.setAlignment(Qt.AlignCenter)
             mod_lbl.setStyleSheet(f"color:{TEXT3};font-size:{FS_SMALL}px;background:transparent;border:none;")
@@ -1244,13 +1248,14 @@ class Step4Spells(QWidget):
         # Left: browser
         left = QWidget(); ll = QVBoxLayout(left); ll.setSpacing(8)
         ll.addWidget(_lbl("Available Spells", GOLD, FS_BODY, bold=True))
-        top = QHBoxLayout(); top.setSpacing(8)
         self._sp_search = QLineEdit(); self._sp_search.setPlaceholderText("Search spells…")
         self._sp_lvl = QComboBox(); self._sp_lvl.addItem("All Levels")
-        self._sp_lvl.setMinimumWidth(130)
         for i in range(10): self._sp_lvl.addItem("Cantrip" if i==0 else f"Level {i}")
-        top.addWidget(self._sp_search, 2); top.addWidget(self._sp_lvl)
-        ll.addLayout(top)
+        # search across the top; the level filter in the funnel's sidebar
+        from ..widgets import FilterSidebar
+        self._sp_filters = FilterSidebar(left)
+        self._sp_filters.add_combo("Level", self._sp_lvl)
+        ll.addLayout(self._sp_filters.search_row(self._sp_search))
         self._browser = QListWidget(); self._browser.setMinimumWidth(300)
         ll.addWidget(self._browser, 1)
         add_btn = pill_btn("Add Selected →", INDIGO)

@@ -547,12 +547,23 @@ Page {
             id: addEqAnchor
             title: "Add Equipment"
             iconName: "package"
-            MTextField {
-                id: eqSearch
-                objectName: "eqSearchField"
+            // search box across the row; category and sort live in the
+            // filter drawer behind the funnel button
+            RowLayout {
                 Layout.fillWidth: true
-                placeholderText: "Search weapons, armor, gear, tools…"
-                onTextChanged: eqAddModel.refreshResults()
+                spacing: 8
+                MTextField {
+                    id: eqSearch
+                    objectName: "eqSearchField"
+                    Layout.fillWidth: true
+                    placeholderText: "Search weapons, armor, gear, tools…"
+                    onTextChanged: eqAddModel.refreshResults()
+                }
+                MFilterButton {
+                    objectName: "eqFilterButton"
+                    count: eqFilters.activeCount
+                    onClicked: eqFilters.open()
+                }
             }
             RowLayout {
                 Layout.fillWidth: true
@@ -572,18 +583,24 @@ Page {
                 }
             }
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
+            MFilterDrawer {
+                id: eqFilters
+                objectName: "eqFilterDrawer"
+                title: "Equipment filters"
+                // a changed sort counts too: the list isn't in its usual order
+                activeCount: (eqCategoryFilter.currentIndex > 0) + (eqSortBy.currentIndex > 0)
+                onCleared: { eqCategoryFilter.currentIndex = 0; eqSortBy.currentIndex = 0 }
+                Label { text: "Category"; color: Theme.text2; font.pixelSize: Theme.fsSmall; font.bold: true }
                 ComboBox {
                     id: eqCategoryFilter
                     Layout.fillWidth: true
                     model: sheetBridge.equipmentCategories
                     onCurrentIndexChanged: eqAddModel.refreshResults()
                 }
+                Label { text: "Sort by"; color: Theme.text2; font.pixelSize: Theme.fsSmall; font.bold: true }
                 ComboBox {
                     id: eqSortBy
-                    Layout.preferredWidth: 120
+                    Layout.fillWidth: true
                     model: ["Name", "Cost", "Weight"]
                     onCurrentIndexChanged: eqAddModel.refreshResults()
                 }
@@ -823,33 +840,56 @@ Page {
             id: addMiAnchor
             title: "Add a Magic Item"
             iconName: "magic"
-            MTextField {
-                id: miSearch
-                Layout.fillWidth: true
-                placeholderText: "Search magic items…"
-                onTextChanged: miAddModel.refreshResults()
-            }
+            // search box across the row; slot / rarity / attunement in the
+            // filter drawer behind the funnel button
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
+                MTextField {
+                    id: miSearch
+                    objectName: "miSearchField"
+                    Layout.fillWidth: true
+                    placeholderText: "Search magic items…"
+                    onTextChanged: miAddModel.refreshResults()
+                }
+                MFilterButton {
+                    objectName: "miFilterButton"
+                    count: miFilters.activeCount
+                    onClicked: miFilters.open()
+                }
+            }
+            MFilterDrawer {
+                id: miFilters
+                objectName: "miFilterDrawer"
+                title: "Magic item filters"
+                activeCount: (miSlotFilter.currentIndex > 0) + (miRarityFilter.currentIndex > 0)
+                             + (miAttuneFilter.currentIndex > 0)
+                onCleared: {
+                    miSlotFilter.currentIndex = 0
+                    miRarityFilter.currentIndex = 0
+                    miAttuneFilter.currentIndex = 0
+                }
+                Label { text: "Slot"; color: Theme.text2; font.pixelSize: Theme.fsSmall; font.bold: true }
                 ComboBox {
                     id: miSlotFilter
                     Layout.fillWidth: true
                     model: sheetBridge.magicItemSlots
                     onCurrentIndexChanged: miAddModel.refreshResults()
                 }
+                Label { text: "Rarity"; color: Theme.text2; font.pixelSize: Theme.fsSmall; font.bold: true }
                 ComboBox {
                     id: miRarityFilter
                     Layout.fillWidth: true
                     model: sheetBridge.magicItemRarities
                     onCurrentIndexChanged: miAddModel.refreshResults()
                 }
-            }
-            ComboBox {
-                id: miAttuneFilter
-                Layout.fillWidth: true
-                model: sheetBridge.magicItemAttunementOptions
-                onCurrentIndexChanged: miAddModel.refreshResults()
+                Label { text: "Attunement"; color: Theme.text2; font.pixelSize: Theme.fsSmall; font.bold: true }
+                ComboBox {
+                    id: miAttuneFilter
+                    Layout.fillWidth: true
+                    model: sheetBridge.magicItemAttunementOptions
+                    onCurrentIndexChanged: miAddModel.refreshResults()
+                }
             }
 
             QtObject {

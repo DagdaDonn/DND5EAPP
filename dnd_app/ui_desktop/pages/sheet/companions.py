@@ -596,7 +596,7 @@ class CompanionsMixin:
             hp_spin_header = QSpinBox()
             hp_spin_header.setRange(0, max_hp)
             hp_spin_header.setValue(cur_hp)
-            hp_spin_header.setFixedWidth(56)
+            hp_spin_header.setFixedWidth(84)   # "-  n  +"
             hp_spin_header.setAccessibleName(f"{sb['display_name']} current HP")
             hp_spin_header.setToolTip("Current HP for this creature — edits are saved.")
             hp_row_hdr.addWidget(hp_spin_header)

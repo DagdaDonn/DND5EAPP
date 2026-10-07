@@ -540,6 +540,10 @@ ICON_PATHS = {
     # is in ICON_FILLS, the band round it in ICON_CUTS
     "search": _join(circle(10, 10, 6.3), arc(10, 10, 3.8, 3.8, 195, 255)),
     "info": _join(circle(12, 12, 9), line(12, 10.8, 12, 16.8)),
+    # Filters: a funnel -- an open rim on top, the cone narrowing into a
+    # short spout that's cut off at a slant
+    "filter": _join(ellipse(12, 5.4, 8.2, 2.2),
+                    "M 3.8 5.4 Q 4 6.8 10 12.6 L 10 20.2 L 14 18.2 L 14 12.6 Q 20 6.8 20.2 5.4"),
     "credits": _join(circle(12, 12, 9), arc(12, 12, 4.3, 4.3, 45, 315)),
     "arrow_left": _join(line(19, 12, 5, 12), poly((10.5, 6.5), (5, 12), (10.5, 17.5), closed=False)),
     "arrow_up": _join(line(12, 19.5, 12, 5), poly((6.5, 10.5), (12, 5), (17.5, 10.5), closed=False)),

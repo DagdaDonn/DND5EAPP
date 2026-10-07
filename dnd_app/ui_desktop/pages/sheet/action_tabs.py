@@ -91,12 +91,13 @@ class ActionTabsMixin:
 
             # Spinbox for current value — editable in-place
             sp = QSpinBox(); sp.setRange(0, maximum); sp.setValue(current)
-            sp.setFixedWidth(48); sp.setAlignment(Qt.AlignCenter)
+            sp.setFixedWidth(72); sp.setAlignment(Qt.AlignCenter)   # "-  n  +"
             sp.setToolTip(f"Current uses of {name}")
             sp.setStyleSheet(
                 f"QSpinBox{{background:{SURF2};border:1px solid {qa(bar_color,0x66)};"
                 f"border-radius:4px;color:{bar_color};font-size:{FS_TINY}px;"
-                f"font-weight:700;padding:1px;}}")
+                f"font-weight:700;padding:1px;}}"
+                f"QSpinBox::up-button,QSpinBox::down-button{{width:17px;background:{BORDER};}}")
             max_l = _lbl(f"/{maximum}", TEXT3, FS_TINY, wrap=False)
 
             def _save_res(val, _key=res_key, _iname=item_name, _is_item=is_item):

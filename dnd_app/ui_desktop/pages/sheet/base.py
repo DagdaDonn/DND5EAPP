@@ -923,14 +923,18 @@ class BaseSheetMixin:
 
         # ── Header ────────────────────────────────────────────────────────────
         # ── Slim top bar: name · identity chips · inspiration · save/load ─────
-        header = QFrame(); header.setStyleSheet(f"QFrame{{background:{SURF};border-bottom:2px solid {BORDER};}}")
+        # (#id selector: a bare QFrame{...} rule would also hit every QLabel
+        # inside -- QLabel is a QFrame -- giving each one a bottom border)
+        header = QFrame(); header.setObjectName("sheetHeader")
+        self._sheet_header = header   # its width decides how the class cards fit
+        header.setStyleSheet(f"QFrame#sheetHeader{{background:{SURF};border-bottom:2px solid {BORDER};}}")
         header.setFixedHeight(70)
         hl = QHBoxLayout(header); hl.setContentsMargins(16,0,16,0); hl.setSpacing(10)
 
         # ← Menu
         back_btn = _btn("← Menu", variant="neutral", width=90, radius=7, font_size=FS_SMALL)
         back_btn.clicked.connect(self._on_back_clicked)
-        hl.addWidget(back_btn)
+        hl.addWidget(back_btn, 0, Qt.AlignVCenter)
 
         # Character name
         self._name_edit = QLineEdit(self.char.get("name",""))
@@ -951,10 +955,15 @@ class BaseSheetMixin:
         # (hidden — class controls live in Level Up tab)
 
         # Class summary chip — read-only, just shows e.g. "Fighter 5"
-        self._class_summary = _lbl("", TEXT2, FS_SMALL, wrap=False)
-        self._class_summary.setStyleSheet(f"color:{IND2};font-size:{FS_SMALL}px;font-weight:700;padding:2px 8px;"
-                                           f"border:1px solid {qa(INDIGO,0x44)};border-radius:5px;background:{qa(INDIGO,0x11)};")
-        hl.addWidget(self._class_summary)
+        # Class cards -- read-only, one per class so a multiclass slots each
+        # one in beside the last: "Wizard 5" large, its subclass under it.
+        # Filled by _refresh_class_cards().
+        self._class_summary = QWidget()
+        self._class_summary.setStyleSheet("background:transparent;")
+        self._class_cards_lay = QHBoxLayout(self._class_summary)
+        self._class_cards_lay.setContentsMargins(0, 0, 0, 0)
+        self._class_cards_lay.setSpacing(8)
+        hl.addWidget(self._class_summary, 0, Qt.AlignVCenter)
 
         hl.addStretch()
 
@@ -1061,10 +1070,26 @@ class BaseSheetMixin:
         # QTabWidget{background:...} rule.
         self._tabs.setAttribute(Qt.WA_StyledBackground, True)
         self._tabs.setTabPosition(QTabWidget.North)
+        # The tabs always fit the window: they share its full width, and
+        # when that's not enough the longer names shorten with "…" (hover
+        # for the full name) instead of the row spilling off the right
+        # behind scroll arrows.
+        _bar = self._tabs.tabBar()
+        _bar.setUsesScrollButtons(False)
+        _bar.setElideMode(Qt.ElideRight)
+        _bar.setExpanding(True)
         # "&&" is a literal ampersand -- a single "&" in tab text is a
         # keyboard-mnemonic marker and would vanish.
+        # Each tab has a full name and a short one; _fit_tab_names() shows
+        # the short ones only when the full ones don't fit the window.
+        self._tab_names = []   # (full, short) per tab, in order
+        _SHORT = {"Abilities && Saves": "Abilities", "Skills && Proficiencies": "Skills",
+                  "Gear && Items": "Gear", "Traits && Notes": "Notes"}
+
         def _add_tab(page, label, icon):
-            self._tabs.addTab(page, label)
+            idx = self._tabs.addTab(page, label)
+            self._tab_names.append((label, _SHORT.get(label, label)))
+            self._tabs.setTabToolTip(idx, label.replace("&&", "&"))   # the full name, if it's shortened
             _icons.set_tab_icon(self._tabs, page, icon)
             return page
         _add_tab(self._build_tab_abilities(),    "Abilities && Saves",      "abilities")
@@ -1079,6 +1104,123 @@ class BaseSheetMixin:
         _add_tab(self._build_tab_traits_notes(), "Traits && Notes",         "notes")
         root.addWidget(self._tabs, 1)
         self._install_choices_pulse()
+        self._tabs.installEventFilter(self)   # re-fit the tab names on resize
+        self._sheet_header.installEventFilter(self)   # ...and the class cards
+        self._fit_tab_names()
+
+    def _refresh_class_cards(self):
+        """(Re)build the header's class cards: one per class, each in its
+        class's colour (data/phbCommon/class_colors.py) as the card's border,
+        left stripe and tint -- the text stays the normal text colour, so
+        darker class colours stay readable. A multiclass slots each class
+        in beside the last. They always fit the
+        header -- trying, widest first:
+          1. full cards: "Wizard 5" with its subclass underneath
+          2. compact cards: just "Wizard 5"
+          3. as many compact cards as fit, then a "+N more" card listing
+             the rest on hover (a 13-class character is legal, if unwise)"""
+        lay = self._class_cards_lay
+        classes = self.char.get("classes", [])
+        from dnd_app.data.phbCommon.class_colors import class_color, needs_outline
+        avail = self._class_cards_room()
+
+        def _card(title, sub, col, tip, compact):
+            card = QFrame(); card.setObjectName("classCard")
+            # a colour that would vanish into the header (Rogue's black on a
+            # dark theme, Cleric's white on a light one) gets a neutral
+            # outline, and a stronger tint so the card still reads as it
+            faint = needs_outline(col, SURF)
+            edge = qa(TEXT3, 0xaa) if faint else qa(col, 0xaa)
+            card.setStyleSheet(
+                f"QFrame#classCard{{background:{qa(col, 0x66 if faint else 0x26)};"
+                f"border:1px solid {edge};border-left:4px solid {col};border-radius:8px;}}")
+            card.setMinimumHeight(50)
+            cl = QVBoxLayout(card)
+            cl.setContentsMargins(10 if compact else 16, 4, 10 if compact else 16, 4); cl.setSpacing(0)
+            cl.addWidget(_lbl(title, TEXT, FS_LABEL + 1, bold=True, align=Qt.AlignCenter, wrap=False))
+            if sub:
+                cl.addWidget(_lbl(sub, TEXT2, FS_SMALL, align=Qt.AlignCenter, wrap=False))
+            card.setToolTip(tip)
+            return card
+
+        def _tip(c):
+            sub = c.get("subclass", "")
+            return (f"{c['class']} {c['level']}" + (f" — {sub}" if sub else "")
+                    + "\nLevel up, level down or change subclass on the Choices tab")
+
+        def _build(compact, limit=None):
+            cards = []
+            shown = classes if limit is None else classes[:limit]
+            for i, c in enumerate(shown):
+                cards.append(_card(f"{c['class']} {c['level']}",
+                                   "" if compact else c.get("subclass", ""),
+                                   class_color(c["class"]), _tip(c), compact))
+            rest = classes[len(shown):]
+            if rest:
+                cards.append(_card(f"+{len(rest)} more", "", TEXT2,
+                                   "\n".join(_tip(c).split("\n")[0] for c in rest), True))
+            return cards
+
+        def _width(cards):
+            return sum(cd.sizeHint().width() for cd in cards) + lay.spacing() * max(0, len(cards) - 1)
+
+        cards = _build(compact=False)
+        if avail and _width(cards) > avail:
+            cards = _build(compact=True)
+            limit = len(classes)
+            while avail and _width(cards) > avail and limit > 1:
+                limit -= 1
+                cards = _build(compact=True, limit=limit)
+
+        while lay.count():
+            w = lay.takeAt(0).widget()
+            if w is not None:
+                w.deleteLater()
+        for cd in cards:
+            lay.addWidget(cd)
+
+    def _class_cards_room(self) -> int:
+        """Width the header has for the class cards: its own width minus
+        everything else in it (0 before the header has been laid out)."""
+        hdr = getattr(self, "_sheet_header", None)
+        if hdr is None or hdr.width() < 100:
+            return 0
+        hl = hdr.layout()
+        m = hl.contentsMargins()
+        room = hdr.width() - m.left() - m.right()
+        for i in range(hl.count()):
+            item = hl.itemAt(i)
+            w = item.widget()
+            if w is self._class_summary:
+                continue
+            if w is not None and not w.isHidden():
+                room -= w.sizeHint().width() + hl.spacing()
+        return max(0, room - 24)   # a little air either side
+
+    def _fit_tab_names(self):
+        """Full tab names when they all fit across the window, the short
+        ones (Abilities, Skills, Gear, Notes) when they don't -- the tab bar
+        never spills off the edge, and only shortens further (with "…")
+        in a very narrow window."""
+        tabs = getattr(self, "_tabs", None)
+        if tabs is None or len(self._tab_names) != tabs.count():
+            return
+        bar = tabs.tabBar()
+        for i, (full, _short) in enumerate(self._tab_names):
+            if tabs.tabText(i) != full:
+                tabs.setTabText(i, full)
+        need = sum(bar.tabSizeHint(i).width() for i in range(bar.count()))
+        if need > tabs.width():
+            for i, (_full, short) in enumerate(self._tab_names):
+                tabs.setTabText(i, short)
+
+    def eventFilter(self, obj, event):
+        from PySide6.QtCore import QEvent
+        if obj is getattr(self, "_tabs", None) and event.type() == QEvent.Resize:
+            self._fit_tab_names()
+        elif obj is getattr(self, "_sheet_header", None) and event.type() == QEvent.Resize:
+            self._refresh_class_cards()
+        return super().eventFilter(obj, event)
 
     def _show_breakdown_popup(self, title: str, parts, total_str: str, global_pos):
         """Small dismissible popup listing each contribution to a stat,
@@ -1562,11 +1704,7 @@ class BaseSheetMixin:
                 "This character has no class levels. Use Edit Class or reload after completing creation.",
             )
         classes = char.get("classes", [])
-        cls_parts = []
-        for c in classes:
-            sub = c.get("subclass","")
-            cls_parts.append(f"{c['class']} {c['level']}" + (f" ({sub})" if sub else ""))
-        self._class_summary.setText("  ·  ".join(cls_parts))
+        self._refresh_class_cards()
 
         self._refresh_stat_bar()
         self._refresh_abilities_tab()
@@ -1661,10 +1799,6 @@ class BaseSheetMixin:
         if swim: _spd_parts.append(f"swim {swim}")
         if clmb: _spd_parts.append(f"climb {clmb}")
         self._sb_spd._val.setText(" / ".join(_spd_parts))
-        cls_parts = []
-        for c in self.char.get("classes",[]):
-            sub = c.get("subclass","")
-            cls_parts.append(f"{c['class']} {c['level']}" + (f" ({sub})" if sub else ""))
-        self._class_summary.setText("  ·  ".join(cls_parts))
+        self._refresh_class_cards()
         self._refresh_xp_tracker()
 

@@ -35,7 +35,8 @@ MIMIC is a Dungeons & Dragons 5th Edition app that brings together everything a 
 - **Spell slots by level** — automatically calculated and tracked
 - **Concentration tracking** — with save prompts when you take damage
 - **Ritual and quick-cast markers**
-- **Searchable spell browser**
+- **Free daily casts** — spells from your race or a feat (a Tiefling's Hellish Rebuke and Darkness, Fey Touched's Misty Step, Firbolg Magic, Telepathic's Detect Thoughts...) each get a once-per-rest counter, and Cast uses it before a spell slot — so a Fighter can still throw their Hellish Rebuke. Long (or short) rests bring them back
+- **Searchable spell browser** — the search box gets the whole row; class and level filters sit behind a funnel button
 - **Auto-prepared spells** for domains, oaths, circles, patrons, and sorcerer origins (Aberrant Mind, Clockwork Soul, Lunar Sorcery), each from a verified spell list
 - **Spell descriptions on hover**
 
@@ -79,6 +80,7 @@ MIMIC is a Dungeons & Dragons 5th Edition app that brings together everything a 
 
 ### Gear & Inventory
 - **Equipment browser** with search and category filtering
+- **Row buttons say what they do** — a magnifying glass for details and a trash can to remove; quantities use − value + boxes, like on Android
 - **Inventory grouped by kind** — weapons, armor, magic items, consumables, tools and gear — with equipped items first
 - **Items you use get their own icon** — tool kits, musical instruments, tinderboxes and torches, lanterns, thrown flasks, healer's kits
 - **Quantity tracking** for stackable items — on Android a stack shows its count as a button beside View; tap it (or press and hold the item) to type a new amount or step it with − / + (hold to go in 5s); 0 removes it
@@ -88,17 +90,22 @@ MIMIC is a Dungeons & Dragons 5th Edition app that brings together everything a 
 ### Feat Manager
 - **138 feats** from all official sources
 - **Automatically checked prerequisites**
+- **Feats that grant spells are wired** — Fey Touched, Shadow Touched and Magic Initiate ask which spell you want, and every feat's spells join your spell list
+- **One-line feat summaries** in the Features tab, with the full rules text on hover / Show Details instead of repeated in the row
 - **DM-granted feats browser** for feats gained outside normal progression
 
 ### Interface & Customization
 - **26 themes** (16 dark, 10 light) — Obsidian, Dragon's Hoard, Shadowfell, Feywild, Blood Moon, Frostspire, Cinderveil, Tavern Hearth, Mossgrove, Gearworks, Hallowed Stone, Underdark, Astral Sea, Nine Hells, Kraken's Depth, Storm Giant's Eye, Arcane Scroll, Moonlit Vellum, Sunlit Meadow, Elven Grove, Coastal Tide, Rose Chantry, Desert Oasis, Frostlight, Harvest Gold, Sky Citadel
 - **Resizable window** with draggable splitters between panels
+- **Tabs that fit and join their page** — the selected tab is drawn as part of the page under it, and the tab row never spills off the edge: in a narrower window the names shorten (Abilities, Skills, Gear, Notes), with the full name on hover
+- **Choices tab as one scrolling page** — class & level, identity, what was auto-applied, class features by level and every pending choice, each at its full height
 - **Right-click any feature, race trait, or subrace trait** for a full detail popup
 - **Search everywhere** — find spells, feats, items, and equipment instantly
+- **Filters out of the way** — every browser (equipment, magic items, spells, feats, level-up and creation spell picks) is a full-width search box plus a funnel button; the funnel opens a side panel with the filters, shows how many are set, and has a Clear filters button. The same on both apps
 - **On Android, one consistent pattern:** the everyday action is a button (Cast, Equip, Drink, Use), the magnifying glass shows details, and press-and-hold opens a small menu for the rarer things — preparing or favouriting a spell, attuning, studying, removing
 
 ### Custom Icon Set
-- **74 hand-built line icons** replace every emoji the app used to show — tabs, actions, items, rests, conditions, and app chrome
+- **75 hand-built line icons** replace every emoji the app used to show — tabs, actions, items, rests, conditions, and app chrome
 - **One colour, from your theme:** every icon is drawn in the active theme's accent and repaints the moment you switch themes
 - **Shared by both apps** — the desktop and Android versions draw the same artwork from one source
 - **Condition icons with a little character** — a few of them are nods to famous memes, for anyone who spots them

@@ -12,7 +12,7 @@ from ...shared import *
 # aliases to h/card/hline, which ARE plain names the wildcard import above
 # already brought in).
 from ...shared import _btn, _pill
-from ...widgets import FlowLayout, FlowContainer
+from ...widgets import FlowLayout, FlowContainer, FilterSidebar
 from dnd_app.core.character import (
     ability_score, ability_mod, total_level, class_levels, subclasses,
     long_rest, short_rest, add_class
@@ -45,7 +45,7 @@ from dnd_app.ui_desktop.dialogs.levelup_panel import LevelUpPanel
 from dnd_app.data.phb2014.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
 from dnd_app.data.phb2014.races import get_race
 from dnd_app.data.phbCommon.backgrounds import get_background
-from dnd_app.data.phbCommon.feats import get_feat
+from dnd_app.data.phbCommon.feats import get_feat, feat_summary
 from dnd_app.data.phbCommon.spells import get_spell, spells_for_class, ALL_SPELLS
 from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON_DICT,
     ADVENTURING_GEAR, GEAR_NAMES, MOUNTS, ALL_TOOLS, SIMPLE_MELEE, SIMPLE_RANGED,
@@ -357,7 +357,9 @@ class FeaturesMixin:
             if fd:
                 chosen_ab = self.char.get("_choices", {}).get(f"feat_ability_{fname.lower().replace(' ','_')}")
                 prefix = f"{chosen_ab}-based — " if chosen_ab else ""
-                summary = self._summarize_feature_text(fd.get('special', ''))
+                # a one-line headline only -- the full rules text is in the
+                # row's tooltip / Show Details, so it isn't said twice
+                summary = feat_summary(fd)
                 feat_items.append(f"{fname}: {prefix}{summary}")
         if feat_items:
             self._add_feature_section("Feats", PURP2, feat_items, badge_color=PURP2)
@@ -477,7 +479,7 @@ class FeaturesMixin:
                 if ft:
                     src_tag = ft.get("source","")
                     pre = ft.get("prereq","")
-                    desc = self._summarize_feature_text(ft.get("special",""), max_len=180)
+                    desc = feat_summary(ft)   # headline; full text in Show Details
                     feat_items.append(
                         f"<b>{fname}</b>  [{src_tag}]"
                         + (f"  <i>Req: {pre}</i>" if pre else "")
@@ -534,7 +536,7 @@ class FeaturesMixin:
 
         # Header row
         fb_hdr = QHBoxLayout()
-        fb_hdr.addWidget(_lbl("✦  BONUS FEATURE BROWSER  —  DM Rewards", AMBER, FS_SMALL, bold=True))
+        fb_hdr.addWidget(_lbl("✦  BONUS FEATURE BROWSER  —  DM Rewards", AMBER, FS_SMALL, bold=True, wrap=False))
         fb_hdr.addStretch()
         fb_hdr.addWidget(_lbl("Double-click or click Add to grant a feat outside class progression",
                                TEXT3, FS_TINY, wrap=False))
@@ -544,14 +546,15 @@ class FeaturesMixin:
         fb_body = QHBoxLayout(); fb_body.setSpacing(8)
 
         # Left: search + category filter + list
-        fb_left = QVBoxLayout(); fb_left.setSpacing(4)
-        fb_search_row = QHBoxLayout(); fb_search_row.setSpacing(6)
+        # (in a widget of its own so the filter sidebar slides over the
+        # list, not over the preview beside it)
+        fb_left_w = QWidget(); fb_left = QVBoxLayout(fb_left_w)
+        fb_left.setContentsMargins(0, 0, 0, 0); fb_left.setSpacing(4)
         fb_search = QLineEdit(); fb_search.setPlaceholderText("Search feats…")
         fb_search.setStyleSheet(
             f"QLineEdit{{background:{SURF2};border:1px solid {BORDER2};border-radius:5px;"
             f"color:{TEXT};padding:4px 8px;font-size:{FS_SMALL}px;}}"
             f"QLineEdit:focus{{border-color:{AMBER};}}")
-        fb_search_row.addWidget(fb_search, 2)
         from dnd_app.data.phbCommon.dm_rewards import DM_REWARD_CATEGORIES
         fb_type_filter = QComboBox()
         fb_type_filter.addItems(DM_REWARD_CATEGORIES)
@@ -559,8 +562,10 @@ class FeaturesMixin:
             f"QComboBox{{background:{SURF2};border:1px solid {BORDER2};border-radius:5px;"
             f"color:{TEXT};padding:4px 8px;font-size:{FS_SMALL}px;}}")
         fb_type_filter.setToolTip("Filter by feature type")
-        fb_search_row.addWidget(fb_type_filter, 1)
-        fb_left.addLayout(fb_search_row)
+        # search across the row; the type filter in the funnel's sidebar
+        fb_filters = FilterSidebar(fb_left_w)
+        fb_filters.add_combo("Feature type", fb_type_filter)
+        fb_left.addLayout(fb_filters.search_row(fb_search))
 
         fb_list = QListWidget()
         fb_list.setMaximumHeight(200)
@@ -628,7 +633,7 @@ class FeaturesMixin:
         fb_search.textChanged.connect(_filter_feats)
         fb_type_filter.currentTextChanged.connect(_filter_feats)
         fb_left.addWidget(fb_list)
-        fb_body.addLayout(fb_left, 3)
+        fb_body.addWidget(fb_left_w, 3)
 
         # Right: info + add/remove buttons
         fb_right = QVBoxLayout(); fb_right.setSpacing(6)
@@ -680,9 +685,10 @@ class FeaturesMixin:
 
         btn_add = _btn("＋  Grant Feat", AMBER, variant="danger", border_width=1,
                         font_size=FS_SMALL, padding="6px 12px")
-        btn_rem = _btn("✕  Remove", CRIMSON, variant="danger", border_width=1,
+        btn_rem = _btn("Remove", CRIMSON, variant="danger", border_width=1,
                         bg_alpha=0x22, border_alpha=0x55, text_color=CRIM2,
                         hover_text="white", font_size=FS_SMALL, padding="6px 12px")
+        _icons.set_button_icon(btn_rem, "trash", 15, color=CRIM2)
 
         def _grant_feat(lst=fb_list):
             item = lst.currentItem()

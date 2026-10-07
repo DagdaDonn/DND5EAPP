@@ -647,7 +647,7 @@ BONUS_SPELLS = {
         10: ["Commune with Nature"],                 # Spirit Walker — ritual only
     },
     ("Barbarian", "Path of the Ancestral Guardian"): {
-        3: ["Augury", "Clairvoyance"],  # Consult the Spirits — 1/SR or LR, no slot/components
+        10: ["Augury", "Clairvoyance"],  # Consult the Spirits (a 10th-level feature) — 1/SR or LR, no slot/components
     },
     # ── Artificer Subclasses ─────────────────────────────────────────────
     ("Artificer", "Alchemist"): {
@@ -1166,6 +1166,66 @@ RACIAL_BONUS_SPELLS = {
 }
 
 
+def racial_innate_spells(char: dict) -> list[str]:
+    """The fixed spells the character's race gives them at their current
+    level (RACIAL_BONUS_SPELLS) -- e.g. a 5th-level Tiefling's Thaumaturgy,
+    Hellish Rebuke and Darkness."""
+    from dnd_app.core.character import total_level
+    out = []
+    species = char.get("species") or char.get("race", "")
+    char_subrace = char.get("subrace", "") or ""
+    if species.strip().lower() == "tiefling" and not char_subrace.strip():
+        char_subrace = "Asmodeus"  # PHB default bloodline per the race data
+    char_lvl = total_level(char)
+    for (race_key, subrace_key), by_level in RACIAL_BONUS_SPELLS.items():
+        # Prefix check, not containment -- "Elf" is a literal substring of
+        # "Half-Elf", and "Drow" of "Drow Descent", so containment would
+        # match a Half-Elf/Drow Descent character against Elf/Drow's
+        # entry too and grant its Faerie Fire/Darkness on top of their
+        # own correct Half-Elf spells.
+        if not species.lower().startswith(race_key.lower()):
+            continue
+        if subrace_key is not None and not char_subrace.lower().startswith(subrace_key.lower()):
+            continue
+        for req_lvl, spells in by_level.items():
+            if char_lvl >= req_lvl:
+                out.extend(spells)
+    return out
+
+
+# Spells a feat gives you outright: {feat: [fixed spells]}, plus the
+# _choices keys holding the ones you pick (filled in by the level-up
+# panel's feat choosers). Each leveled one can be cast once per long
+# rest without a slot -- see core/free_casts.py.
+FEAT_FIXED_SPELLS = {
+    "Fey Touched": ["Misty Step"],
+    "Shadow Touched": ["Invisibility"],
+    "Telepathic": ["Detect Thoughts"],
+    "Fey Teleportation": ["Misty Step"],
+    "Outlands Envoy": ["Misty Step", "Tongues"],
+    "Mystic Conflux": ["Identify"],
+    "Field Medic": ["Cure Wounds"],
+}
+FEAT_CHOSEN_SPELL_KEYS = {
+    "Fey Touched": ["feat_fey_touched_spell"],
+    "Shadow Touched": ["feat_shadow_touched_spell"],
+    "Magic Initiate": ["feat_magic_initiate_cantrips", "feat_magic_initiate_spell"],
+}
+
+
+def feat_granted_spells(char: dict) -> list[str]:
+    """Every spell the character's feats give them -- the fixed ones and
+    whatever they picked for the feats that let them choose."""
+    feats = set(char.get("feats", []))
+    choices = char.get("_choices", {})
+    out = []
+    for feat in feats:
+        out.extend(FEAT_FIXED_SPELLS.get(feat, []))
+        for key in FEAT_CHOSEN_SPELL_KEYS.get(feat, []):
+            out.extend(choices.get(key, []))
+    return out
+
+
 def get_bonus_spells(char: dict) -> list[str]:
     """Return every bonus spell the character currently has access to,
     across all their classes/subclasses and their race, based on current
@@ -1228,25 +1288,8 @@ def get_bonus_spells(char: dict) -> list[str]:
                 if warlock_lvl >= req_lvl:
                     out.append(sp_name)
 
-    species = char.get("species") or char.get("race", "")
-    char_subrace = char.get("subrace", "") or ""
-    if species.strip().lower() == "tiefling" and not char_subrace.strip():
-        char_subrace = "Asmodeus"  # PHB default bloodline per the race data
-    char_lvl = total_level(char)
-    for (race_key, subrace_key), by_level in RACIAL_BONUS_SPELLS.items():
-        # Prefix check, not containment -- same reasoning as the
-        # class/subclass loop above: "Elf" is a literal substring of
-        # "Half-Elf", and "Drow" of "Drow Descent", so containment would
-        # match a Half-Elf/Drow Descent character against Elf/Drow's
-        # entry too and grant its Faerie Fire/Darkness on top of their
-        # own correct Half-Elf spells.
-        if not species.lower().startswith(race_key.lower()):
-            continue
-        if subrace_key is not None and not char_subrace.lower().startswith(subrace_key.lower()):
-            continue
-        for req_lvl, spells in by_level.items():
-            if char_lvl >= req_lvl:
-                out.extend(spells)
+    out.extend(racial_innate_spells(char))
+    out.extend(feat_granted_spells(char))
 
     # DM-Granted Bonus Features (dm_rewards.py): unconditional cantrip
     # grants — Gathered Whispers' Spirit Whispers (Message) and Living

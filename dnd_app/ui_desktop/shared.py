@@ -57,6 +57,12 @@ def h(text, color=None, size=FS_BODY, bold=False, align=Qt.AlignLeft, wrap=True)
     s = f"color:{c};font-size:{size}px;background:transparent;border:none;"
     if bold: s += "font-weight:700;"
     w.setStyleSheet(s)
+    # A horizontal-only alignment (the default AlignLeft) would also drop
+    # QLabel's own vertical centring, drawing the text at the top whenever
+    # the label is taller than it (header titles, "Subrace:" beside a
+    # taller drop-down) -- so centre vertically unless told otherwise.
+    if not (align & Qt.AlignVertical_Mask):
+        align = align | Qt.AlignVCenter
     w.setAlignment(align)
     if wrap: w.setWordWrap(True)
     return w
@@ -352,7 +358,7 @@ class AbilityBlock(QFrame):
             self._score_spin.setButtonSymbols(QAbstractSpinBox.NoButtons)
             self._score_spin.setStyleSheet(
                 f"QSpinBox{{font-size:{FS_STAT}px;font-weight:700;color:{TEXT};"
-                f"border:none;background:transparent;text-align:center;}}"
+                f"border:none;background:transparent;text-align:center;padding:0;}}"
             )
             def _on_spin_change(v, self=self):
                 mod = (v - 10) // 2
@@ -538,9 +544,12 @@ class SpellRow(QFrame):
         self._star_btn.clicked.connect(self._on_star)
         lay.addWidget(self._star_btn)
 
-        # Remove button
-        rm = QPushButton("✕"); rm.setFixedSize(28,28)
-        rm.setStyleSheet(f"QPushButton{{background:transparent;border:none;color:{TEXT3};font-size:16px;border-radius:14px;}}QPushButton:hover{{background:{CRIMSON};color:white;}}")
+        # Remove button: a trash can
+        rm = QPushButton(); rm.setFixedSize(28,28)
+        rm.setToolTip("Remove from list"); rm.setAccessibleName(f"Remove {spell.get('name', 'spell')}")
+        _icons.set_button_icon(rm, "trash", 17)
+        rm.setStyleSheet(f"QPushButton{{background:transparent;border:none;border-radius:6px;min-height:0;padding:0;}}"
+                         f"QPushButton:hover{{background:{qa(CRIMSON,0x55)};}}")
         rm.clicked.connect(lambda: self.remove.emit(self))
         lay.addWidget(rm)
 
@@ -605,7 +614,7 @@ class SpellRow(QFrame):
         prep_act  = menu.addAction("✓  Toggle Prepared")
         star_act  = menu.addAction("★  Pin to Quick Spells" if not self._pinned else "☆  Unpin from Quick Spells")
         menu.addSeparator()
-        rm_act    = menu.addAction("✕  Remove from list")
+        rm_act    = menu.addAction(_icons.icon("trash"), "Remove from list")
         action = menu.exec(event.globalPos())
         if action == detail_act:
             from PySide6.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QLabel, QScrollArea, QWidget

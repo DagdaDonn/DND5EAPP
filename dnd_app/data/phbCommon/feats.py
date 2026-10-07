@@ -822,6 +822,32 @@ def get_feat(name: str) -> dict:
             return f
     return None
 
+def feat_summary(feat: dict, max_len: int = 90) -> str:
+    """A one-line headline for a feat -- what a Features-tab row shows,
+    with the full rules text kept for its details view (so the two don't
+    say the same thing twice).
+      1. Take the feat's mechanics text ("special").
+      2. Drop a leading "+1 INT/WIS/CHA (max 20)." (or "+1 to any ability
+         (max 20).") -- most newer feats open with it, and it isn't what
+         the feat is about.
+      3. Keep the first sentence (or the first clause, up to a ";").
+      4. Still too long? Cut at the last whole word and add "…"."""
+    import re
+    t = (feat or {}).get("special", "").strip()
+    t = re.sub(r'^\+\d+\s+(?:to\s+(?:a\s+chosen|any|one)\s+ability(?:\s+score)?|'
+               r'[A-Z]{3}(?:(?:/|,\s*|\s+or\s+)[A-Z]{3})*)\s*\(max\s*20\)[.;,]?\s*', '', t)
+    # (a "." straight after "ft"/"lb" is an abbreviation, not a sentence end)
+    m = re.match(r'(.+?)(?:(?<!ft)(?<!lb)[.;](?=\s|$))', t)
+    if m:
+        t = m.group(1).strip()
+    if len(t) > max_len:
+        cut = t[:max_len]
+        if cut.rfind(" ") > max_len * 0.6:
+            cut = cut[:cut.rfind(" ")]
+        t = cut.rstrip(".,;: ") + "…"
+    return t
+
+
 def feats_by_source() -> dict:
     result = {}
     for f in ALL_FEATS:

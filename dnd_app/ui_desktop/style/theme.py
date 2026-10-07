@@ -542,6 +542,38 @@ def sync_globals(module_globals: dict) -> None:
             module_globals[attr] = getattr(_t, attr)
 
 
+def _spin_glyphs(colour: str) -> tuple[str, str]:
+    """Paths to small "-" and "+" images in `colour` for the spin box
+    buttons (QSS can only show an image there, not text), drawn once per
+    colour into a cache folder. ("", "") before a Qt application exists."""
+    import os, tempfile
+    from PySide6.QtGui import QGuiApplication
+    if QGuiApplication.instance() is None:
+        return "", ""
+    from PySide6.QtGui import QPixmap, QPainter, QPen, QColor
+    from PySide6.QtCore import Qt
+    folder = os.path.join(tempfile.gettempdir(), "mimic_spin_glyphs")
+    os.makedirs(folder, exist_ok=True)
+    paths = []
+    for kind in ("minus", "plus"):
+        path = os.path.join(folder, f"{kind}_{colour.lstrip('#')}.png")
+        if not os.path.exists(path):
+            pm = QPixmap(24, 24)
+            pm.fill(Qt.transparent)
+            p = QPainter(pm)
+            p.setRenderHint(QPainter.Antialiasing)
+            pen = QPen(QColor(colour), 3)
+            pen.setCapStyle(Qt.RoundCap)
+            p.setPen(pen)
+            p.drawLine(5, 12, 19, 12)
+            if kind == "plus":
+                p.drawLine(12, 5, 12, 19)
+            p.end()
+            pm.save(path)
+        paths.append(path.replace("\\", "/"))
+    return paths[0], paths[1]
+
+
 def build_qss(t=None):  # noqa: C901
     if t is None: t = _active
     b=t["BG"]; s=t["SURF"]; s2=t["SURF2"]; s3=t["SURF3"]
@@ -570,6 +602,14 @@ def build_qss(t=None):  # noqa: C901
     def px(n):
         return max(1, round(n * _font_scale))
 
+    # spin boxes read "-  value  +" like Android's: the down button on the
+    # left, up on the right, each showing a glyph in the text colour
+    minus_img, plus_img = _spin_glyphs(tx)
+    spin_glyph_qss = (
+        f"QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{ image: url({minus_img}); width: 10px; height: 10px; }}\n"
+        f"QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{ image: url({plus_img}); width: 10px; height: 10px; }}\n"
+    ) if minus_img else ""
+
     return f"""
 /* ── Reset & Base ────────────────────────────────────────────────────────── */
 * {{ font-family: 'Segoe UI', 'Ubuntu', 'Noto Sans', sans-serif; font-size: {px(15)}px; }}
@@ -594,15 +634,23 @@ QSplitter {{ background: {b}; }}
    the same "recessed dark chrome" language as other panel surfaces,
    with a hue unique to each theme (see THEMES/PANELDK's own comment). */
 QTabWidget {{ background: {pdk}; }}
-QTabWidget::pane {{ border: 1px solid {bo}; background: {b}; border-radius: 0 8px 8px 8px; }}
-QTabBar {{ background: {pdk}; border-bottom: 2px solid {bo}; }}
+/* Corner radii are set one corner at a time: Qt's stylesheets don't take
+   CSS's four-value "border-radius: a b c d" (it rounds every corner), so
+   a tab written that way came out rounded at the bottom too.
+   The selected tab is joined to its page, like a folder tab: it's the
+   page's own colour, and the page is pulled up 1px (top: -1px) so its top
+   border runs along the bottom of the tabs -- under the selected tab that
+   line is painted over in the page colour, so tab and page read as one
+   piece. The other tabs keep the line, so they sit "behind" it. */
+QTabWidget::pane {{ border: 1px solid {bo2}; background: {b}; border-top-left-radius: 0px; border-top-right-radius: 0px; border-bottom-right-radius: 8px; border-bottom-left-radius: 8px; top: -1px; }}
+QTabBar {{ background: {pdk}; }}
 QTabBar::tab {{
-    background: {s}; color: {tx2}; padding: 12px 22px;
-    border: 1px solid {bo}; border-bottom: none;
-    border-radius: 8px 8px 0 0; font-weight: 700; font-size: {px(14)}px;
-    margin-right: 2px; min-width: 80px;
+    background: {s}; color: {tx2}; padding: 12px 12px;
+    border: 1px solid {bo}; border-bottom: 1px solid {bo2};
+    border-top-left-radius: 8px; border-top-right-radius: 8px; border-bottom-right-radius: 0px; border-bottom-left-radius: 0px; font-weight: 700; font-size: {px(14)}px;
+    margin-right: 2px; min-width: 60px;
 }}
-QTabBar::tab:selected {{ background: {s2}; color: {g2}; border-color: {bo2}; border-bottom: 2px solid {s2}; }}
+QTabBar::tab:selected {{ background: {b}; color: {g2}; border-color: {bo2}; border-bottom: 1px solid {b}; }}
 QTabBar::tab:hover:!selected {{ background: {s2}; color: {tx}; }}
 
 /* ── Group Boxes ───────────────────────────────────────────────────────────── */
@@ -627,12 +675,24 @@ QLineEdit, QTextEdit, QPlainTextEdit, QSpinBox, QComboBox, QListWidget {{
 QLineEdit:focus, QSpinBox:focus, QComboBox:focus, QTextEdit:focus, QPlainTextEdit:focus {{
     border: 2px solid {ind}; background: {s};
 }}
-QSpinBox::up-button, QSpinBox::down-button {{
-    background: {bo}; border: none; width: 20px; border-radius: 3px;
+/* "-  value  +": down button on the left, up on the right, full height */
+QSpinBox, QDoubleSpinBox {{ padding-left: 2px; padding-right: 2px; }}   /* Qt leaves room for both buttons itself */
+QSpinBox::down-button, QDoubleSpinBox::down-button {{
+    subcontrol-origin: border; subcontrol-position: center left;
+    width: 24px; height: 200px; background: {bo}; border: none;
+    border-top-left-radius: 5px; border-bottom-left-radius: 5px;
 }}
-QSpinBox::up-button:hover, QSpinBox::down-button:hover {{ background: {ind}; }}
+QSpinBox::up-button, QDoubleSpinBox::up-button {{
+    subcontrol-origin: border; subcontrol-position: center right;
+    width: 24px; height: 200px; background: {bo}; border: none;
+    border-top-right-radius: 5px; border-bottom-right-radius: 5px;
+}}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover,
+QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {{ background: {ind}; }}
+QSpinBox::up-button:disabled, QSpinBox::down-button:disabled {{ background: {s2}; }}
+{spin_glyph_qss}
 QComboBox {{ padding-right: 28px; }}
-QComboBox::drop-down {{ border: none; width: 26px; background: {bo2}; border-radius: 0 5px 5px 0; }}
+QComboBox::drop-down {{ border: none; width: 26px; background: {bo2}; border-top-left-radius: 0px; border-top-right-radius: 5px; border-bottom-right-radius: 5px; border-bottom-left-radius: 0px; }}
 QComboBox::down-arrow {{ image: none; }}
 QComboBox QAbstractItemView {{
     background: {s2}; border: 2px solid {bo2};

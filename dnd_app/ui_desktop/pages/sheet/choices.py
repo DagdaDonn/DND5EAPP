@@ -263,21 +263,24 @@ class ChoicesMixin:
             target.addWidget(col)
 
     def _build_tab_choices(self):
-        """Choices tab: Class Manager + Identity cards in a top pane, the
-        LevelUpPanel (choices) and Optional Class Features in a bottom pane —
-        split by a draggable handle, same pattern as the Combat tab, so a
-        character with few pending choices doesn't leave a large empty
-        gap with no way to reclaim that space."""
-        tab = QWidget()
-        outer = QVBoxLayout(tab)
-        outer.setContentsMargins(12, 10, 12, 10)
-        outer.setSpacing(8)
-
-        splitter = QSplitter(Qt.Vertical)
-        splitter.setChildrenCollapsible(False)
-        splitter.setStyleSheet(f"QSplitter::handle{{background:{qa(AMBER,0x33)};height:4px;"
-                              f"border-radius:2px;margin:2px 40%;}}"
-                              f"QSplitter::handle:hover{{background:{AMBER};}}")
+        """Choices tab: one scrolling column, top to bottom --
+          1. Class & Level card (subclass picks, level up / down buttons)
+          2. Experience card (XP levelling only) and Identity card
+          3. LevelUpPanel: what's been applied automatically, the class
+             features by level, and any choices still to make
+          4. Optional Class Features (Tasha's)
+        Each section is as tall as its contents and the page scrolls, so a
+        long list of choices never squashes the others (and a character
+        with nothing left to choose doesn't get an empty gap)."""
+        tab = QScrollArea()
+        tab.setWidgetResizable(True)
+        tab.setFrameShape(QFrame.NoFrame)
+        tab.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        page = QWidget()
+        tab.setWidget(page)
+        column = QVBoxLayout(page)
+        column.setContentsMargins(12, 10, 12, 10)
+        column.setSpacing(8)
 
         top_half = QWidget()
         layout = QVBoxLayout(top_half)
@@ -300,7 +303,7 @@ class ChoicesMixin:
             ("Level Up / Multiclass", self._open_level_up_or_multiclass, GOLD,
              "Gain a level in an existing class, or add a new one", "arrow_up"),
             ("Level Down",        self._open_level_down,      CRIMSON,"Remove one level", "arrow_down"),
-            ("✕ Remove Class",    self._open_remove_class,    CRIMSON,"Remove an entire class (multiclass only)", None),
+            ("Remove Class",      self._open_remove_class,    CRIMSON,"Remove an entire class (multiclass only)", "trash"),
         ]:
             b = _btn(label, color, variant="chip", height=28, font_size=FS_TINY, tooltip=tip)
             if icon:
@@ -389,9 +392,8 @@ class ChoicesMixin:
         id_cl.addLayout(id_btn_row)
         layout.addWidget(id_card)
         self._refresh_identity_buttons()
-        layout.addStretch()
 
-        # ── Bottom pane: LevelUpPanel + Optional Class Features ───────────────
+        # ── LevelUpPanel + Optional Class Features ────────────────────────────
         bottom_half = QWidget()
         blay = QVBoxLayout(bottom_half)
         blay.setContentsMargins(0, 0, 0, 0)
@@ -400,7 +402,7 @@ class ChoicesMixin:
         try:
             self._levelup_panel = LevelUpPanel(self.char)
             self._levelup_panel.choices_changed.connect(self._on_choices_changed)
-            blay.addWidget(self._levelup_panel, 1)
+            blay.addWidget(self._levelup_panel)
         except Exception as e:
             import traceback; traceback.print_exc()
             blay.addWidget(_lbl(f"Error: {e}", CRIM2, FS_BODY))
@@ -420,19 +422,10 @@ class ChoicesMixin:
         opt_lay.addWidget(self._opt_inner)
         blay.addWidget(opt_card)
 
-        splitter.addWidget(top_half)
-        splitter.addWidget(bottom_half)
+        column.addWidget(top_half)
+        column.addWidget(bottom_half)
+        column.addStretch(1)   # spare height goes below the last card
         self._choices_top_half = top_half
-        # Enough for all 3 top cards (Class Manager, Experience, Identity)
-        # without initial clipping when XP leveling mode is on — a hidden
-        # Experience card (milestone mode) doesn't consume this space, it
-        # just leaves more room for the addStretch() below it, so this
-        # default doesn't cost milestone characters anything. The splitter
-        # handle can still be dragged to any ratio, same as the Combat tab.
-        splitter.setSizes([280, 460])
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        outer.addWidget(splitter, 1)
 
         return tab
 
@@ -462,7 +455,7 @@ class ChoicesMixin:
         idx = self._tabs.indexOf(self._choices_tab_page)
         self._choices_pulse.set_active(n > 0 and self._tabs.currentIndex() != idx)
         self._tabs.setTabToolTip(idx,
-                                 f"{n} pending choice{'s' if n != 1 else ''}" if n else "")
+                                 f"{n} pending choice{'s' if n != 1 else ''}" if n else "Choices")
 
     # ══ TAB 4: SPELLS ══════════════════════════════════════════════════════════
     def _has_infuse_item_access(self):

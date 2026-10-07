@@ -112,12 +112,14 @@ class TraitsNotesMixin:
         # 12px/22px padding overwhelms a small tab strip squeezed into
         # one column.
         self._notes_tabs.setStyleSheet(
-            f"QTabWidget::pane{{border:1px solid {qa(TEAL,0x33)};border-radius:8px;"
-            f"background:{SURF};margin-top:-1px;}}"
+            # selected tab joined to its page (see theme.py's QTabWidget::pane)
+            f"QTabWidget::pane{{border:1px solid {qa(TEAL,0x33)};border-top-left-radius:0px;border-top-right-radius:8px;border-bottom-right-radius:8px;border-bottom-left-radius:8px;"
+            f"background:{SURF};top:-1px;}}"
             f"QTabBar::tab{{background:{BG};color:{TEXT2};border:1px solid {qa(TEAL,0x22)};"
-            f"border-bottom:none;padding:6px 14px;border-radius:6px 6px 0 0;"
+            f"border-bottom:1px solid {qa(TEAL,0x33)};padding:6px 14px;border-top-left-radius:6px;border-top-right-radius:6px;border-bottom-right-radius:0px;border-bottom-left-radius:0px;"
             f"font-size:{FS_SMALL}px;font-weight:700;min-width:0px;margin-right:2px;}}"
-            f"QTabBar::tab:selected{{background:{SURF};color:{GOLD};border-color:{qa(TEAL,0x66)};}}"
+            f"QTabBar::tab:selected{{background:{SURF};color:{GOLD};border-color:{qa(TEAL,0x66)};"
+            f"border-bottom:1px solid {SURF};}}"
             f"QTabBar::tab:hover:!selected{{background:{qa(TEAL,0x11)};color:{TEAL2};}}"
         )
         self._notes_tabs.tabBarDoubleClicked.connect(self._rename_notes_page)

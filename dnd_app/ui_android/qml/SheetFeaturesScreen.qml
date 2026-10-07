@@ -188,10 +188,24 @@ Page {
                     placeholderText: "Search feats / DM rewards…"
                     onTextChanged: dmModel.refreshResults()
                 }
+                // the type filter lives in the drawer behind this
+                MFilterButton {
+                    objectName: "dmFilterButton"
+                    count: dmFilters.activeCount
+                    onClicked: dmFilters.open()
+                }
+            }
+            MFilterDrawer {
+                id: dmFilters
+                objectName: "dmFilterDrawer"
+                title: "Feature filters"
+                activeCount: dmCategory.currentIndex > 0 ? 1 : 0
+                onCleared: dmCategory.currentIndex = 0
+                Label { text: "Feature type"; color: Theme.text2; font.pixelSize: Theme.fsSmall; font.bold: true }
                 ComboBox {
                     id: dmCategory
                     objectName: "dmCategoryCombo"
-                    Layout.preferredWidth: 150
+                    Layout.fillWidth: true
                     model: sheetBridge.dmRewardCategories
                     onCurrentIndexChanged: dmModel.refreshResults()
                 }
@@ -201,7 +215,7 @@ Page {
                 id: dmModel
                 property var results: sheetBridge.searchDmRewardBrowser("", "All Types")
                 function refreshResults() {
-                    results = sheetBridge.searchDmRewardBrowser(dmSearch.text, dmCategory.currentText)
+                    results = sheetBridge.searchDmRewardBrowser(dmSearch.text, dmCategory.model[dmCategory.currentIndex])
                 }
             }
             Connections {

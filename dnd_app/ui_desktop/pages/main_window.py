@@ -66,9 +66,11 @@ class StartMenu(QWidget):
         hl.setAlignment(Qt.AlignCenter)
 
         title = QLabel("MIMIC")
-        tf = QFont(); tf.setBold(True); tf.setPointSize(28)
-        title.setFont(tf); title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet(f"color:{GOLD2};background:transparent;border:none;")
+        title.setAlignment(Qt.AlignCenter)
+        # size in the stylesheet: the theme's QLabel font-size rule would
+        # otherwise override a QFont point size and shrink the title
+        title.setStyleSheet(f"color:{GOLD2};background:transparent;border:none;"
+                            f"font-size:{FS_BIG + 6}px;font-weight:800;letter-spacing:4px;")
         hl.addWidget(_icons.icon_header("combat", title, size=40, spacing=14, center=True))
         hl.addWidget(_lbl("A D&D 5e Character Creator", GOLD, FS_BODY, bold=True, align=Qt.AlignCenter))
         hl.addWidget(_lbl("Build, track, and play your character from creation to legend.", TEXT2, FS_BODY+2, align=Qt.AlignCenter))
@@ -117,7 +119,17 @@ class StartMenu(QWidget):
 
         saved = list_saved_characters()
         if not saved:
-            self._saved_layout.addWidget(_lbl("No saved characters yet. Create one to get started!", TEXT2, FS_BODY))
+            # empty state: a quiet card near the top, centred
+            empty = QFrame()
+            empty.setStyleSheet(f"QFrame{{background:{SURF};border:1px dashed {BORDER2};border-radius:12px;}}"
+                                f"QLabel{{border:none;background:transparent;}}")
+            el = QVBoxLayout(empty); el.setContentsMargins(24, 28, 24, 28); el.setSpacing(8)
+            el.addWidget(_icons.icon_label("folder", 34), 0, Qt.AlignHCenter)
+            el.addWidget(_lbl("No saved characters yet", TEXT, FS_LABEL, bold=True, align=Qt.AlignCenter))
+            el.addWidget(_lbl("Create one, or import a filled-in PDF sheet, to get started.",
+                              TEXT2, FS_SMALL, align=Qt.AlignCenter))
+            self._saved_layout.addWidget(empty)
+            self._saved_layout.addStretch(1)
             return
 
         groups: dict[str, list] = {}
@@ -193,9 +205,11 @@ class StartMenu(QWidget):
                 move_btn.setToolTip("Move to folder…")
                 move_btn.clicked.connect(lambda checked, p=path, nf=named_folders: self._move_saved_row(p, nf))
                 rl.addWidget(move_btn)
-                del_btn = _btn("✕", CRIMSON, variant="ghost", width=38, height=38, radius=8,
+                del_btn = _btn("", CRIMSON, variant="ghost", width=38, height=38, radius=8,
                                 border_alpha=0x55, text_color=TEXT3, font_size=16)
-                del_btn.setStyleSheet(del_btn.styleSheet() + f"QPushButton:hover{{background:{CRIMSON};color:white;}}")
+                _icons.set_button_icon(del_btn, "trash", 18)
+                del_btn.setToolTip("Delete character…")
+                del_btn.setStyleSheet(del_btn.styleSheet() + f"QPushButton:hover{{background:{qa(CRIMSON,0x55)};}}")
                 del_btn.clicked.connect(lambda checked, p=path, r=row: self._delete_saved_row(p, r))
                 rl.addWidget(del_btn)
                 il.addWidget(row)

@@ -2874,6 +2874,18 @@ class CharacterSheetBridge(QObject):
             self.toastRequested.emit(f"Cast {name} (cantrip -- at will)")
             self.statsChanged.emit()
             return
+        # A free daily cast (a racial spell, Fey Touched, Firbolg Magic...)
+        # is used before any slot -- see core/free_casts.py.
+        from dnd_app.core.free_casts import spend_free_cast, free_cast_message
+        free = spend_free_cast(self.char, name)
+        if free:
+            if spell.get("concentration"):
+                start_concentration(self.char, name)
+            self._maybe_apply_spell_active_effect(spell)
+            self._mark_spell_cast_time(spell)
+            self.toastRequested.emit(free_cast_message(name, free))
+            self.statsChanged.emit()
+            return
         slots_used = self.char.setdefault("spell_slots_used", [0] * 9)
         slots_max = self.char.get("spell_slots_max", [0] * 9)
         for i in range(lvl - 1, 9):

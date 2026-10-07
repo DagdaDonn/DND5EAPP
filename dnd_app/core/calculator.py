@@ -3371,6 +3371,13 @@ def update_all(char: dict) -> dict:
                 "source_class": "Sorcerer", "subclass": "Lunar Sorcery",
             })
 
+    # Free daily casts nothing above tracks -- each leveled racial
+    # spell, and Fey Touched / Shadow Touched's spells -- one counter per
+    # spell. Cast (both apps) spends these before a slot; see
+    # core/free_casts.py.
+    from dnd_app.core.free_casts import innate_free_cast_resources
+    new_resources.extend(innate_free_cast_resources(char, new_resources))
+
     merged = []
     for res in new_resources:
         key = res.get("key", "")

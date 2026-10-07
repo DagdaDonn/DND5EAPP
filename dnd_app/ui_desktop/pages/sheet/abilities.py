@@ -219,7 +219,7 @@ class AbilitiesMixin:
 
         for i, (label, val, color) in enumerate(stats):
             box = BigStatBox(label, val, color)
-            box.setFixedWidth(140)
+            box.setFixedWidth(164)   # wide enough for "Carry Capacity"
             d_grid.addWidget(box, i//4, i%4)
             self._stat_boxes[label] = box
         dcl.addLayout(d_grid); lay.addWidget(der_card)

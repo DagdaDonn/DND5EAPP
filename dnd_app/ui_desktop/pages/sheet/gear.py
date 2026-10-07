@@ -12,7 +12,7 @@ from ...shared import *
 # aliases to h/card/hline, which ARE plain names the wildcard import above
 # already brought in).
 from ...shared import _btn, _pill
-from ...widgets import FlowLayout, FlowContainer, RarityBarDelegate, RARITY_ROLE
+from ...widgets import FlowLayout, FlowContainer, RarityBarDelegate, RARITY_ROLE, FilterSidebar
 from dnd_app.core.character import (
     ability_score, ability_mod, total_level, class_levels, subclasses,
     long_rest, short_rest, add_class
@@ -82,7 +82,7 @@ class GearMixin:
             sp.setValue(self.char.get("currency",{}).get(coin.lower(),0))
             sp.setAlignment(Qt.AlignCenter)
             sp.setStyleSheet(f"QSpinBox{{font-size:{FS_BODY}px;font-weight:700;color:{color};"
-                             f"border:2px solid {qa(color,0x66)};border-radius:6px;background:{SURF2};}}")
+                             f"border:2px solid {qa(color,0x66)};border-radius:6px;background:{SURF2};padding:2px;}}")
             sp.setButtonSymbols(QAbstractSpinBox.NoButtons)
             sp.valueChanged.connect(lambda v,k=coin.lower(): self._on_currency_change(k,v))
             col.addWidget(sp); mcl.addLayout(col)
@@ -118,9 +118,11 @@ class GearMixin:
         egl.setContentsMargins(0,0,0,0); egl.setSpacing(6)
         egl.addWidget(_icons.icon_header("gear", _lbl("CARRIED EQUIPMENT", TEAL2, FS_SMALL, bold=True, wrap=False)))
         self._gear_equip_tree = QTreeWidget()
-        self._gear_equip_tree.setHeaderLabels(["Item", "Eq", "Qty", "Wt", "Value", ""])
+        # Item | Eq (tick / scroll's Use) | Qty | Wt | Value | view | remove
+        self._gear_equip_tree.setHeaderLabels(["Item", "Eq", "Qty", "Wt", "Value", "", ""])
         self._gear_equip_tree.setAlternatingRowColors(True)
         self._gear_equip_tree.setRootIsDecorated(False)
+        self._gear_equip_tree.setUniformRowHeights(True)
         self._gear_equip_tree.setStyleSheet(
             # text colour on the widget, not ::item -- an ::item colour would
             # override each row's own (rarity) colour
@@ -132,8 +134,11 @@ class GearMixin:
             f"QHeaderView::section{{background:{SURF2};color:{GOLD2};font-weight:700;"
             f"font-size:{FS_TINY}px;padding:4px;border:1px solid {BORDER};}}")
         hdr = self._gear_equip_tree.header()
+        # the Item column takes the spare width -- Qt otherwise stretches the
+        # (blank) last column and leaves names cut short beside empty space
+        hdr.setStretchLastSection(False)
         hdr.setSectionResizeMode(0, QHeaderView.Stretch)
-        for col, w in [(1,40),(2,52),(3,48),(4,55),(5,28)]:   # col 1: Eq tick / scroll's Use
+        for col, w in [(1,40),(2,76),(3,48),(4,55),(5,32),(6,32)]:   # col 1: Eq tick / scroll's Use
             hdr.setSectionResizeMode(col, QHeaderView.Fixed)
             self._gear_equip_tree.setColumnWidth(col, w)
         # a magic item's rarity is a coloured bar on the row's left edge
@@ -155,9 +160,11 @@ class GearMixin:
                                    PURP2, FS_SMALL, bold=True, wrap=False)
         mgl.addWidget(_icons.icon_header("magic", self._mi_title_lbl))
         self._magic_items_tree = QTreeWidget()
-        self._magic_items_tree.setHeaderLabels(["Item", "Rarity", "Attuned", "Eq'd", ""])
+        # Item | Rarity | Attuned | Eq'd | view | remove
+        self._magic_items_tree.setHeaderLabels(["Item", "Rarity", "Attuned", "Eq'd", "", ""])
         self._magic_items_tree.setAlternatingRowColors(True)
         self._magic_items_tree.setRootIsDecorated(False)
+        self._magic_items_tree.setUniformRowHeights(True)
         self._magic_items_tree.setStyleSheet(
             # text colour on the widget, not ::item -- an ::item colour would
             # override each row's own (rarity) colour
@@ -169,8 +176,9 @@ class GearMixin:
             f"QHeaderView::section{{background:{SURF2};color:{GOLD2};font-weight:700;"
             f"font-size:{FS_TINY}px;padding:4px;border:1px solid {BORDER};}}")
         mhdr = self._magic_items_tree.header()
+        mhdr.setStretchLastSection(False)
         mhdr.setSectionResizeMode(0, QHeaderView.Stretch)
-        for col, w in [(1,80),(2,64),(3,52),(4,28)]:
+        for col, w in [(1,104),(2,64),(3,52),(4,32),(5,32)]:   # Rarity wide enough for "Uncommon"
             mhdr.setSectionResizeMode(col, QHeaderView.Fixed)
             self._magic_items_tree.setColumnWidth(col, w)
         self._magic_items_tree.setItemDelegateForColumn(0, RarityBarDelegate(self._magic_items_tree))
@@ -187,19 +195,23 @@ class GearMixin:
         # a plain QSS "background" rule without it, leaving the strip
         # past the last tab showing the OS default background.
         right_tabs.setAttribute(Qt.WA_StyledBackground, True)
+        # tabs shorten with "…" rather than spilling behind scroll arrows
+        right_tabs.tabBar().setUsesScrollButtons(False)
+        right_tabs.tabBar().setElideMode(Qt.ElideRight)
         right_tabs.setStyleSheet(
-            f"QTabWidget::pane{{background:{SURF};border:1px solid {BORDER};border-radius:8px;}}"
-            f"QTabBar::tab{{background:{SURF2};color:{TEXT2};padding:8px 16px;"
-            f"font-size:{FS_SMALL}px;border:1px solid {BORDER};border-bottom:none;"
-            f"border-radius:6px 6px 0 0;margin-right:2px;}}"
-            f"QTabBar::tab:selected{{background:{SURF};color:{GOLD2};font-weight:700;}}")
+            # selected tab joined to its page (see theme.py's QTabWidget::pane)
+            f"QTabWidget::pane{{background:{SURF};border:1px solid {BORDER};border-top-left-radius:0px;border-top-right-radius:8px;border-bottom-right-radius:8px;border-bottom-left-radius:8px;top:-1px;}}"
+            f"QTabBar::tab{{background:{SURF2};color:{TEXT2};padding:8px 8px;"
+            f"font-size:{FS_SMALL}px;border:1px solid {BORDER};"
+            f"border-top-left-radius:6px;border-top-right-radius:6px;border-bottom-right-radius:0px;border-bottom-left-radius:0px;margin-right:1px;}}"
+            f"QTabBar::tab:selected{{background:{SURF};color:{GOLD2};font-weight:700;border-bottom-color:{SURF};}}")
 
         # ── MUNDANE BROWSER ───────────────────────────────────────────────────
         mundane_tab = QWidget(); mdt = QVBoxLayout(mundane_tab)
         mdt.setContentsMargins(8,8,8,8); mdt.setSpacing(6)
 
-        # Search + category filter
-        mdt_top = QHBoxLayout()
+        # Search box across the top; the category filter lives in a sidebar
+        # behind the funnel button at the end of the search row
         self._md_search = QLineEdit(); self._md_search.setPlaceholderText("Search equipment…")
         self._md_search.setStyleSheet(f"QLineEdit{{background:{SURF2};border:1px solid {BORDER2};"
                                        f"border-radius:6px;padding:4px 8px;color:{TEXT};}}")
@@ -207,8 +219,9 @@ class GearMixin:
         for cat in ["All","Weapons — Simple","Weapons — Martial","Materials (Silvered/Adamantine)","Armor",
                      "Adventuring Gear","Tools","Mounts & Vehicles"]:
             self._md_cat.addItem(cat)
-        mdt_top.addWidget(self._md_search,2); mdt_top.addWidget(self._md_cat)
-        mdt.addLayout(mdt_top)
+        self._md_filters = FilterSidebar(mundane_tab)
+        self._md_filters.add_combo("Category", self._md_cat)
+        mdt.addLayout(self._md_filters.search_row(self._md_search))
 
         self._md_list = QTreeWidget()
         self._md_list.setHeaderLabels(["Name","Category","Damage / AC","Weight","Cost"])
@@ -220,8 +233,16 @@ class GearMixin:
             f"QTreeWidget::item{{padding:4px 2px;font-size:{FS_BODY}px;color:{TEXT};}}"
             f"QTreeWidget::item:selected{{background:{TEAL};color:#0a0d12;font-weight:700;}}"
             f"QTreeWidget::item:selected:!active{{background:{TEAL};color:#0a0d12;}}")
-        for col,w in enumerate([200,140,100,70,80]):
-            self._md_list.setColumnWidth(col,w)
+        # Name takes the spare width; the rest are just wide enough
+        md_hdr = self._md_list.header()
+        md_hdr.setStretchLastSection(False)
+        md_hdr.setSectionResizeMode(0, QHeaderView.Stretch)
+        for col, w in [(1, 120), (2, 104), (3, 60), (4, 64)]:
+            md_hdr.setSectionResizeMode(col, QHeaderView.Interactive)
+            self._md_list.setColumnWidth(col, w)
+        # the list is already grouped under category headings, so a
+        # Category column only took width from the names
+        self._md_list.setColumnHidden(1, True)
         self._md_list.header().setStyleSheet(
             f"QHeaderView::section{{background:{SURF2};color:{GOLD2};font-weight:700;"
             f"font-size:{FS_SMALL}px;padding:6px;border:1px solid {BORDER};}}")
@@ -231,14 +252,15 @@ class GearMixin:
         _icons.set_button_icon(add_selected, "arrow_left", 16, color="white")
         add_selected.clicked.connect(lambda: self._add_mundane_from_browser(self._md_list.currentItem(),0))
         mdt.addWidget(add_selected)
-        right_tabs.addTab(mundane_tab, "Mundane Equipment")
+        right_tabs.addTab(mundane_tab, "Equipment")
         _icons.set_tab_icon(right_tabs, mundane_tab, "package", 15)
 
         # ── MAGIC ITEM BROWSER ────────────────────────────────────────────────
         magic_tab = QWidget(); mgt = QVBoxLayout(magic_tab)
         mgt.setContentsMargins(8,8,8,8); mgt.setSpacing(6)
 
-        mgt_top = QHBoxLayout()
+        # Search box across the top; slot / rarity / attunement filters in
+        # the funnel button's sidebar
         self._mi_search = QLineEdit(); self._mi_search.setPlaceholderText("Search magic items…")
         self._mi_search.setStyleSheet(f"QLineEdit{{background:{SURF2};border:1px solid {BORDER2};"
                                         f"border-radius:6px;padding:4px 8px;color:{TEXT};}}")
@@ -250,11 +272,11 @@ class GearMixin:
         self._mi_rarity_f.addItems(["All Rarities","Common","Uncommon","Rare","Very Rare","Legendary","Artifact"])
         self._mi_attune_f = QComboBox()
         self._mi_attune_f.addItems(["All","Requires Attunement","No Attunement"])
-        mgt_top.addWidget(self._mi_search,2)
-        mgt_top.addWidget(self._mi_type_f)
-        mgt_top.addWidget(self._mi_rarity_f)
-        mgt_top.addWidget(self._mi_attune_f)
-        mgt.addLayout(mgt_top)
+        self._mi_filters = FilterSidebar(magic_tab)
+        self._mi_filters.add_combo("Slot", self._mi_type_f)
+        self._mi_filters.add_combo("Rarity", self._mi_rarity_f)
+        self._mi_filters.add_combo("Attunement", self._mi_attune_f)
+        mgt.addLayout(self._mi_filters.search_row(self._mi_search))
 
         self._mi_browser = QListWidget()
         self._mi_browser.setStyleSheet(
@@ -267,6 +289,7 @@ class GearMixin:
             f"QListWidget::item:selected:!active{{background:{PURP2};color:#15071f;}}"
             f"QListWidget::item:alternate{{background:{SURF};}}")
         self._mi_browser.setAlternatingRowColors(True)
+        self._mi_browser.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         # rarity shown as a coloured bar on the left of each row (text stays
         # the normal text colour -- easier to read)
         self._mi_browser.setItemDelegate(RarityBarDelegate(self._mi_browser))
@@ -285,7 +308,11 @@ class GearMixin:
         _icons.set_tab_icon(right_tabs, companions_tab, "paw", 15)
 
         splitter.addWidget(right_tabs)
-        splitter.setSizes([380,500])
+        # what you carry gets two thirds of the width, the browser one third
+        # (still draggable)
+        splitter.setStretchFactor(0, 2)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([640, 320])
         root.addWidget(splitter,1)
 
         # Connect filters
@@ -754,6 +781,28 @@ class GearMixin:
     def _add_magic_item(self):
         pass  # legacy — replaced by _add_magic_from_browser
 
+    def _row_icon_btn(self, icon_name: str, tooltip: str, hover_colour: str) -> QPushButton:
+        """A small icon button for a table row (view / remove): 28x24 with
+        an 18px icon -- big enough to hit, small enough for the row."""
+        b = QPushButton()
+        b.setFixedSize(28, 24)
+        b.setToolTip(tooltip)
+        b.setCursor(Qt.PointingHandCursor)
+        _icons.set_button_icon(b, icon_name, 18)
+        b.setStyleSheet(
+            f"QPushButton{{min-height:0;padding:0;background:transparent;border:1px solid transparent;"
+            f"border-radius:5px;}}"
+            f"QPushButton:hover{{background:{qa(hover_colour, 0x33)};border-color:{hover_colour};}}")
+        return b
+
+    def _show_item_details(self, name: str, html: str):
+        """The magnifying glass on an owned item: its full details."""
+        box = QMessageBox(self)
+        box.setWindowTitle(name)
+        box.setTextFormat(Qt.RichText)
+        box.setText(html or f"<b>{name}</b>")
+        box.exec()
+
     def _refresh_magic_items(self):
         from PySide6.QtGui import QColor
         art_lvl_for_max = class_levels(self.char).get("Artificer", 0)
@@ -859,12 +908,13 @@ class GearMixin:
             eq_cb.stateChanged.connect(lambda s,u=uid: self._toggle_equipped(u, bool(s)))
             self._magic_items_tree.setItemWidget(item, 3, eq_cb)
 
-            # Remove button (col 4)
-            rm = _btn("✕", CRIMSON, variant="danger", width=20, height=20, radius=4,
-                       border_width=1, bg_alpha=0x44, text_color=CRIM2,
-                       hover_text="white", font_size=11, padding="0px")
+            # View (magnifying glass) and remove (trash) -- cols 4 and 5
+            view = self._row_icon_btn("search", "Details", INDIGO)
+            view.clicked.connect(lambda checked=False, n=name, t=tip: self._show_item_details(n, t))
+            self._magic_items_tree.setItemWidget(item, 4, view)
+            rm = self._row_icon_btn("trash", "Remove", CRIMSON)
             rm.clicked.connect(lambda checked=False, u=uid: self._remove_magic_item(u))
-            self._magic_items_tree.setItemWidget(item, 4, rm)
+            self._magic_items_tree.setItemWidget(item, 5, rm)
             self._magic_item_rows.append(item)
 
         self._magic_items_tree.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -890,7 +940,7 @@ class GearMixin:
             if is_magic_ammunition(_name):
                 qty_act = menu.addAction(_icons.icon("ammo"), "Set quantity…")
                 qty_act.triggered.connect(lambda checked=False, u=_uid, e=_entry: self._set_magic_ammo_qty(u, e))
-            rm_act = menu.addAction(f"✕  Remove {_name[:36]}")
+            rm_act = menu.addAction(_icons.icon("trash"), f"Remove {_name[:36]}")
             rm_act.triggered.connect(lambda: self._remove_magic_item(_uid))
             menu.exec(self._magic_items_tree.viewport().mapToGlobal(pos))
         self._magic_items_tree.customContextMenuRequested.connect(_mi_ctx_menu)
@@ -1031,27 +1081,10 @@ class GearMixin:
         from PySide6.QtGui import QColor
         self._gear_equip_tree.clear()
 
-        # Build a combined list: mundane equipment PLUS owned magic items
-        # (magic items appear here as read-only reference rows)
-        from dnd_app.data.phbCommon.magic_items import get_magic_item
+        # Carried equipment: everything in char["equipment"] (mundane gear,
+        # plus magic potions and scrolls). Worn/attuned magic items are listed
+        # once, in the Magic Items table below -- not repeated here.
         items = list(self.char.get("equipment", []))
-        mi_names_in_eq = {e.get("name") for e in items if e.get("magic")}
-        for mi in self.char.get("magic_items", []):
-            if isinstance(mi, dict):
-                mname = mi.get("name","")
-            else:
-                mname = str(mi)
-            if mname in mi_names_in_eq:
-                continue   # already shown from equipment list
-            cat = get_magic_item(mname)
-            rarity = cat.get("rarity","") if cat else ""
-            itype  = cat.get("type","Wondrous") if cat else "Wondrous"
-            desc   = cat.get("desc","") if cat else ""
-            items.append({
-                "name": mname, "qty": mi.get("qty", 1) if isinstance(mi, dict) else 1, "weight": 0,
-                "magic": True, "rarity": rarity, "type": itype, "desc": desc,
-                "_mi_only": True,   # flag: shown in equipment for reference only
-            })
 
         if not items:
             placeholder = QTreeWidgetItem(["No items — double-click from the Equipment Browser →", "", "", "", "", ""])
@@ -1202,7 +1235,7 @@ class GearMixin:
                 use_btn = QPushButton("Use"); use_btn.setFixedHeight(20)
                 use_btn.setToolTip("Read the scroll and cast its spell")
                 use_btn.setStyleSheet(
-                    f"QPushButton{{background:{SURF2};border:1px solid {BORDER2};border-radius:4px;"
+                    f"QPushButton{{min-height:0;background:{SURF2};border:1px solid {BORDER2};border-radius:4px;"
                     f"color:{TEXT};font-size:{FS_TINY}px;font-weight:700;padding:0 6px;}}"
                     f"QPushButton:hover{{background:{SURF3};}}")
                 use_btn.clicked.connect(lambda checked=False, n=name: self._use_scroll(n))
@@ -1212,10 +1245,12 @@ class GearMixin:
             qty_spin = QSpinBox()
             qty_spin.setRange(0, 9999); qty_spin.setValue(eq.get("qty",1))
             qty_spin.setAlignment(Qt.AlignCenter)
+            qty_spin.setFixedHeight(22)
             qty_spin.setStyleSheet(
-                f"QSpinBox{{background:{SURF2};border:1px solid {BORDER2};border-radius:4px;"
+                # min-height:0 -- the theme's 32px input minimum made every row tall
+                f"QSpinBox{{min-height:0;background:{SURF2};border:1px solid {BORDER2};border-radius:4px;"
                 f"color:{GOLD2 if eq.get('qty',1)>1 else TEXT};font-size:{FS_TINY}px;font-weight:700;padding:0 2px;}}"
-                f"QSpinBox::up-button,QSpinBox::down-button{{width:12px;background:{BORDER};}}")
+                f"QSpinBox::up-button,QSpinBox::down-button{{width:16px;background:{BORDER};}}")
             def _qty_changed(v, eq_ref=eq, n=name):
                 eq_ref["qty"] = v
                 if v == 0:
@@ -1225,26 +1260,14 @@ class GearMixin:
             qty_spin.valueChanged.connect(_qty_changed)
             self._gear_equip_tree.setItemWidget(item, 2, qty_spin)
 
-            # Remove / Info button (col 4)
-            if eq.get("_mi_only"):
-                info_btn = QPushButton(); info_btn.setFixedSize(20,20)
-                _icons.set_button_icon(info_btn, "info", 14)
-                info_btn.setStyleSheet(
-                    f"QPushButton{{background:transparent;border:none;color:{AMBE2};"
-                    f"font-size:11px;border-radius:3px;}}"
-                    f"QPushButton:hover{{background:{qa(AMBER,0x44)};}}")
-                tip_html = (f"<b>{name}</b><br><i>{eq.get('rarity','')} "
-                            f"{eq.get('type','')}</i><br><br>{self._format_multi_para(eq.get('desc',''))}")
-                info_btn.clicked.connect(lambda checked=False, t=tip_html, n=name:
-                    QMessageBox.information(self, n, t))
-                self._gear_equip_tree.setItemWidget(item, 5, info_btn)
-            else:
-                rm = QPushButton("✕"); rm.setFixedSize(20,20)
-                rm.setStyleSheet(f"QPushButton{{background:transparent;border:none;color:{TEXT3};"
-                                 f"font-size:10px;border-radius:3px;}}"
-                                 f"QPushButton:hover{{background:{CRIMSON};color:white;}}")
-                rm.clicked.connect(lambda checked=False,n=name: self._remove_equipment(n))
-                self._gear_equip_tree.setItemWidget(item, 5, rm)
+            # View (magnifying glass) and remove (trash) -- cols 5 and 6
+            view = self._row_icon_btn("search", "Details", INDIGO)
+            view.clicked.connect(lambda checked=False, n=name, it=item:
+                                 self._show_item_details(n, it.toolTip(0)))
+            self._gear_equip_tree.setItemWidget(item, 5, view)
+            rm = self._row_icon_btn("trash", "Remove", CRIMSON)
+            rm.clicked.connect(lambda checked=False, n=name: self._remove_equipment(n))
+            self._gear_equip_tree.setItemWidget(item, 6, rm)
 
             # Right-click context menu for full details (magic items) / removal
             # is handled at the tree level below (customContextMenuRequested),
@@ -1305,7 +1328,7 @@ class GearMixin:
                          else "Use (choose its spell)" if _scroll else f"Read {_name[:36]}")
                 read_act = menu.addAction(_icons.icon("file"), label)
                 read_act.triggered.connect(lambda checked=False, n=_name: self._use_scroll(n))
-            rm_act = menu.addAction(f"✕  Remove {_name[:36]}")
+            rm_act = menu.addAction(_icons.icon("trash"), f"Remove {_name[:36]}")
             rm_act.triggered.connect(lambda: self._remove_equipment(_name))
             if _eq.get("_mi_only"):
                 rm_act.setEnabled(False)

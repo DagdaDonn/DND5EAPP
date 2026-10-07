@@ -12,7 +12,7 @@ from ...shared import *
 # aliases to h/card/hline, which ARE plain names the wildcard import above
 # already brought in).
 from ...shared import _btn, _pill
-from ...widgets import FlowLayout, FlowContainer
+from ...widgets import FlowLayout, FlowContainer, FilterSidebar
 from dnd_app.ui_desktop.action_abilities import _append_cantrip_scaling_note
 from dnd_app.core.character import (
     ability_score, ability_mod, total_level, class_levels, subclasses,
@@ -373,12 +373,16 @@ class SpellsMixin:
         # a plain QSS "background" rule without it, leaving the strip
         # past the last tab showing the OS default background.
         right.setAttribute(Qt.WA_StyledBackground, True)
+        # tabs shorten with "…" rather than spilling behind scroll arrows
+        right.tabBar().setUsesScrollButtons(False)
+        right.tabBar().setElideMode(Qt.ElideRight)
         right.setStyleSheet(
-            f"QTabWidget::pane{{background:{SURF};border:1px solid {BORDER};border-radius:8px;}}"
+            # selected tab joined to its page (see theme.py's QTabWidget::pane)
+            f"QTabWidget::pane{{background:{SURF};border:1px solid {BORDER};border-top-left-radius:0px;border-top-right-radius:8px;border-bottom-right-radius:8px;border-bottom-left-radius:8px;top:-1px;}}"
             f"QTabBar::tab{{background:{SURF2};color:{TEXT2};padding:8px 18px;"
-            f"font-size:{FS_SMALL}px;border:1px solid {BORDER};border-bottom:none;"
-            f"border-radius:6px 6px 0 0;margin-right:2px;}}"
-            f"QTabBar::tab:selected{{background:{SURF};color:{GOLD2};font-weight:700;}}"
+            f"font-size:{FS_SMALL}px;border:1px solid {BORDER};"
+            f"border-top-left-radius:6px;border-top-right-radius:6px;border-bottom-right-radius:0px;border-bottom-left-radius:0px;margin-right:2px;}}"
+            f"QTabBar::tab:selected{{background:{SURF};color:{GOLD2};font-weight:700;border-bottom-color:{SURF};}}"
         )
 
         # ── My Spells tab ─────────────────────────────────────────────────────
@@ -395,15 +399,16 @@ class SpellsMixin:
             f"QLineEdit{{background:{SURF2};border:1px solid {BORDER2};border-radius:7px;"
             f"padding:6px 10px;color:{TEXT};font-size:{FS_BODY}px;}}")
         self._my_sp_filter.textChanged.connect(self._filter_my_spells)
-        mst_lay.addWidget(self._my_sp_filter)
+        # the search box gets the row; "only prepared" and the class filter
+        # sit in the sidebar behind the funnel button at its end
+        self._my_sp_filters = FilterSidebar(my_spells_w)
+        mst_lay.addLayout(self._my_sp_filters.search_row(self._my_sp_filter))
 
-        my_sp_row2 = QHBoxLayout()
-        self._my_sp_prepared_only = QCheckBox("Show only prepared spells")
+        self._my_sp_prepared_only = QCheckBox("Only prepared spells")
         self._my_sp_prepared_only.setStyleSheet(
             f"QCheckBox{{color:{TEAL2};font-size:{FS_SMALL}px;font-weight:700;padding:2px;}}")
         self._my_sp_prepared_only.stateChanged.connect(lambda _s: self._filter_my_spells())
-        my_sp_row2.addWidget(self._my_sp_prepared_only)
-        my_sp_row2.addStretch()
+        self._my_sp_filters.add_check(self._my_sp_prepared_only)
         # Class filter — only meaningful (and only shown) for a multiclass
         # caster; a single-casting-class character has nothing to sort by.
         self._my_sp_class_f = QComboBox()
@@ -411,9 +416,10 @@ class SpellsMixin:
             f"QComboBox{{background:{SURF2};border:1px solid {BORDER2};border-radius:6px;"
             f"padding:4px 8px;color:{TEXT};font-size:{FS_SMALL}px;}}")
         self._my_sp_class_f.currentTextChanged.connect(lambda _t: self._filter_my_spells())
-        self._my_sp_class_f.setVisible(False)  # shown once _refresh_my_spells_class_filter() finds 2+ classes
-        my_sp_row2.addWidget(self._my_sp_class_f)
-        mst_lay.addLayout(my_sp_row2)
+        self._my_sp_filters.add_combo("Class", self._my_sp_class_f)
+        # hidden until _refresh_my_spells_class_filter() finds 2+ classes
+        self._my_sp_class_on = False
+        self._my_sp_filters.set_filter_visible(self._my_sp_class_f, False)
 
         self._my_spells_scroll = QScrollArea(); self._my_spells_scroll.setWidgetResizable(True)
         self._my_spells_inner = QWidget(); self._my_spells_inner.setStyleSheet(f"background:{BG};")
@@ -423,6 +429,20 @@ class SpellsMixin:
         self._my_spells_scroll.setWidget(self._my_spells_inner)
         self._spell_rows = []; self._level_headers = {}
         mst_lay.addWidget(self._my_spells_scroll, 1)
+        # shown instead of the (empty) list until the character knows a spell
+        self._my_sp_empty = QFrame()
+        self._my_sp_empty.setStyleSheet(
+            f"QFrame{{background:{SURF};border:1px dashed {BORDER2};border-radius:12px;}}"
+            f"QLabel{{border:none;background:transparent;}}")
+        _el = QVBoxLayout(self._my_sp_empty); _el.setContentsMargins(24, 28, 24, 28); _el.setSpacing(8)
+        _el.addWidget(_icons.icon_label("spells", 34), 0, Qt.AlignHCenter)
+        self._my_sp_empty_title = _lbl("No spells yet", TEXT, FS_LABEL, bold=True, align=Qt.AlignCenter)
+        self._my_sp_empty_hint = _lbl("Add spells from the Spell Browser tab.", TEXT2, FS_SMALL, align=Qt.AlignCenter)
+        _el.addWidget(self._my_sp_empty_title)
+        _el.addWidget(self._my_sp_empty_hint)
+        self._my_sp_empty.setVisible(False)
+        mst_lay.addWidget(self._my_sp_empty)
+        mst_lay.addStretch(0)   # takes the height only while the list is hidden
         right.addTab(my_spells_w, "My Spells")
         _icons.set_tab_icon(right, my_spells_w, "features", 15)
 
@@ -430,15 +450,18 @@ class SpellsMixin:
         browser_w = QWidget(); brl = QVBoxLayout(browser_w); brl.setContentsMargins(8,8,8,8); brl.setSpacing(6)
         browser_card = _card(); brcl = QVBoxLayout(browser_card); brcl.setContentsMargins(14,12,14,14)
         brcl.addWidget(_lbl("SPELL BROWSER", GOLD, FS_SMALL, bold=True))
-        bt_row = QHBoxLayout(); bt_row.setSpacing(8)
         self._sp_search = QLineEdit(); self._sp_search.setPlaceholderText("Search 435 spells…")
         self._sp_cls_f  = QComboBox(); self._sp_cls_f.addItem("All Classes")
         for cn in ["Wizard","Cleric","Druid","Bard","Sorcerer","Warlock","Paladin","Ranger","Artificer"]:
             self._sp_cls_f.addItem(cn)
         self._sp_lvl_f = QComboBox(); self._sp_lvl_f.addItem("All Levels")
         for i in range(10): self._sp_lvl_f.addItem("Cantrip" if i==0 else f"Lv {i}")
-        bt_row.addWidget(self._sp_search, 2); bt_row.addWidget(self._sp_cls_f); bt_row.addWidget(self._sp_lvl_f)
-        brcl.addLayout(bt_row)
+        # search across the top; class and level filters in the funnel
+        # button's sidebar
+        self._sp_filters = FilterSidebar(browser_w)
+        self._sp_filters.add_combo("Class", self._sp_cls_f)
+        self._sp_filters.add_combo("Level", self._sp_lvl_f)
+        brcl.addLayout(self._sp_filters.search_row(self._sp_search))
         # ── Homebrew toggle: OFF = class-list only + known-spell limits enforced
         self._sp_homebrew = QCheckBox("Homebrew mode — learn any spell, ignore spell limits")
         self._sp_homebrew.setAccessibleName("Homebrew mode: allow learning any spell and ignore spell limits")
@@ -524,6 +547,7 @@ class SpellsMixin:
         self._refresh_spell_count_labels()
         self._relayout_my_spells_by_class(spell_to_class, class_order)
         self._refresh_my_spells_class_filter(class_order)
+        self._filter_my_spells()   # re-applies any filters, and the empty state
 
     def _compute_spell_class_attribution(self):
         """{spell_name: class_name} for every entry in spells_known, plus
@@ -568,8 +592,9 @@ class SpellsMixin:
         combo = getattr(self, "_my_sp_class_f", None)
         if not combo:
             return
-        combo.setVisible(len(class_order) > 1)
-        if len(class_order) <= 1:
+        self._my_sp_class_on = len(class_order) > 1
+        self._my_sp_filters.set_filter_visible(combo, self._my_sp_class_on)
+        if not self._my_sp_class_on:
             return
         current = combo.currentText()
         combo.blockSignals(True)
@@ -1231,7 +1256,10 @@ class SpellsMixin:
         prepared_only = getattr(self, "_my_sp_prepared_only", None)
         prepared_only = prepared_only.isChecked() if prepared_only else False
         class_f = getattr(self, "_my_sp_class_f", None)
-        class_f = class_f.currentText() if class_f and class_f.isVisible() else "All Classes"
+        # (the class filter only counts for a multiclass caster -- it's
+        # hidden otherwise, and may be holding a stale selection)
+        class_f = (class_f.currentText() if class_f and getattr(self, "_my_sp_class_on", False)
+                   else "All Classes")
         any_filter = bool(q) or prepared_only or class_f != "All Classes"
         visible = {}  # (class, level) -> True if any matching row is visible there
         for row in self._spell_rows:
@@ -1250,6 +1278,21 @@ class SpellsMixin:
                 k[1] == lvl for k in visible))
         for key, hdr in getattr(self, "_class_level_headers", {}).items():
             hdr.setVisible(True if not any_filter else visible.get(key, False))
+        # nothing known yet: the empty-state card instead of a blank list
+        empty = not self._spell_rows
+        if hasattr(self, "_my_sp_empty"):
+            self._my_sp_empty.setVisible(empty)
+            self._my_spells_scroll.setVisible(not empty)
+            if empty:
+                # a pure martial (no slots, no pact magic, no cantrips from
+                # any class yet) gets a wink rather than a to-do
+                martial = (self._max_castable_spell_level() == 0 and
+                           not any(cm > 0 for cm, _ in self._all_caster_classes().values()))
+                self._my_sp_empty_title.setText(
+                    "No spells yet - Who needs them anyway" if martial else "No spells yet")
+                self._my_sp_empty_hint.setText(
+                    "Your steel does the talking." if martial
+                    else "Add spells from the Spell Browser tab.")
 
     def _prepared_caster_caps(self) -> dict:
         """{class_name: cap} for each prepared-casting class the character
@@ -1523,6 +1566,22 @@ class SpellsMixin:
             # that's consumed.
             self._mark_spell_cast_time(spell)
             self._toast(f"Cast {spell['name']} (cantrip — at will)")
+            return
+        # A free daily cast (a racial spell, Fey Touched, Firbolg Magic...)
+        # is used before any slot -- see core/free_casts.py.
+        from dnd_app.core.free_casts import spend_free_cast, free_cast_message
+        free = spend_free_cast(self.char, spell["name"])
+        if free:
+            if spell.get("concentration"):
+                start_concentration(self.char, spell["name"])
+                self.ctrl.update("concentration", self.char["concentration"], rebuild_char=False)
+                self._refresh_concentration()
+            self._apply_spell_active_effect(spell)
+            self._mark_spell_cast_time(spell)
+            self._mark_dirty()
+            if hasattr(self, "_refresh_combat"):
+                self._refresh_combat()   # the resource counter it came from
+            self._toast(free_cast_message(spell["name"], free).replace(" -- ", " — "))
             return
         for l in range(lvl, 10):
             bar = self._slot_bars.get(l)

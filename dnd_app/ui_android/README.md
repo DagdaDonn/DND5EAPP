@@ -61,6 +61,11 @@ Conventions every screen follows:
   never on text (coloured text, navy on dark especially, is hard to read).
 - **Every dialog darkens what's behind it** (`Overlay.modal`), and
   button icons/text are centred on the whole button.
+- **Browsers are a search box and a funnel.** The filters (category,
+  slot, rarity, level, class...) live in an `MFilterDrawer` that slides
+  in from the right; the `MFilterButton` at the end of the search row
+  opens it and shows how many filters are set. The filters keep their
+  own ids, so each browser reads them exactly as before.
 
 Saving: characters are saved in the shared Documents/MIMIC Characters
 folder (the app's private one if shared storage can't be written; saves
