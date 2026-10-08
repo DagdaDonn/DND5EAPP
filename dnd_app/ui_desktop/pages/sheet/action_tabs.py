@@ -187,7 +187,17 @@ class ActionTabsMixin:
                 def _on_toggle(checked, _name=toggle_effect, _btn=tgl):
                     active = self.char.setdefault("active_effects", [])
                     if checked and _name not in active:
+                        from dnd_app.core.calculator import effect_start_problem, on_effect_started
+                        why = effect_start_problem(self.char, _name)   # Rage in heavy armor
+                        if why:
+                            _btn.blockSignals(True); _btn.setChecked(False); _btn.blockSignals(False)
+                            self._toast(f"{_name}: {why}".replace(" -- ", " — "))
+                            return
                         active.append(_name)
+                        note = on_effect_started(self.char, _name)
+                        if note:   # Rage ends concentration
+                            self._toast(f"{_name}: {note}")
+                            self._refresh_concentration()
                     elif not checked and _name in active:
                         active.remove(_name)
                     _btn.setText("Active" if checked else "Inactive")
@@ -663,6 +673,12 @@ class ActionTabsMixin:
                                     self._toast(f"{_display} already active — use the \"Active\" "
                                                 f"checkbox on its resource row (Other tab) to end it")
                                     return
+                                # e.g. Rage in heavy armor -- refused before a use is spent
+                                from dnd_app.core.calculator import effect_start_problem, on_effect_started
+                                why = effect_start_problem(self.char, _display)
+                                if why:
+                                    self._toast(f"{_display}: {why}".replace(" -- ", " — "))
+                                    return
                                 cur = res.get("current", 0)
                                 if cur <= 0:
                                     self._toast(f"{_display}: no uses left "
@@ -682,6 +698,10 @@ class ActionTabsMixin:
                                         fx = self.char.setdefault("active_effects", [])
                                         if _display not in fx:
                                             fx.append(_display)
+                                            note = on_effect_started(self.char, _display)
+                                            if note:   # Rage ends concentration
+                                                self._toast(f"{_display}: {note}")
+                                                self._refresh_concentration()
                                         self._refresh_combat_weapons()
                                         self._refresh_effects_list()
                                         # The Other tab's own "Active" checkbox

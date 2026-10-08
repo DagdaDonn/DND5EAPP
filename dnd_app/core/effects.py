@@ -783,25 +783,25 @@ INSTANT_POTION_EFFECTS: dict[str, dict] = {
 }
 
 
-def effect_ac_bonus(char: dict) -> int:
-    """Sum of flat AC modifiers from active effects."""
-    total = 0
-    heavy_armors = {"Plate", "Splint", "Ring Mail", "Chain Mail", "Half Plate"}
-    medium_armors = {"Hide", "Chain Shirt", "Scale Mail", "Breastplate"}
-    wearing_heavy = char.get("armor_worn") in heavy_armors
+def effect_ac_parts(char: dict) -> list:
+    """[(label, AC)] from active effects and effect-like feats -- each line
+    of what effect_ac_bonus() adds, so the AC breakdown can show it."""
+    from dnd_app.core.calculator import armor_type_worn, ability_mod
+    worn = armor_type_worn(char)              # "none" / "light" / "medium" / "heavy"
+    parts = []
     for name in char.get("active_effects", []):
         e = EFFECT_TABLE.get(name, {})
-        total += e.get("ac", 0)
-        if "ac_no_heavy_armor" in e and not wearing_heavy:
-            total += e["ac_no_heavy_armor"]
+        if e.get("ac"):
+            parts.append((name, e["ac"]))
+        if "ac_no_heavy_armor" in e and worn != "heavy":
+            parts.append((f"{name} (no heavy armor)", e["ac_no_heavy_armor"]))
     # Bladesong (Wizard, Bladesinging, 2nd level): +INT modifier to AC
     # while lightly armored or unarmored. Variable per-character bonus,
     # so it can't live as a static EFFECT_TABLE value like most entries.
-    if "Bladesong" in char.get("active_effects", []):
-        wearing_medium_or_heavy = char.get("armor_worn") in (heavy_armors | medium_armors)
-        if not wearing_medium_or_heavy:
-            from dnd_app.core.calculator import ability_mod
-            total += max(0, ability_mod(char, "INT"))
+    if "Bladesong" in char.get("active_effects", []) and worn not in ("medium", "heavy"):
+        int_mod = max(0, ability_mod(char, "INT"))
+        if int_mod:
+            parts.append(("Bladesong (INT modifier)", int_mod))
     # Dual Wielder: +1 AC while wielding a separate melee weapon in each
     # hand. Checks the character's actual equipped weapons (not just
     # "has the feat") for 2+ distinct melee weapons, neither Two-handed,
@@ -815,13 +815,18 @@ def effect_ac_bonus(char: dict) -> int:
             if w.get("category","").endswith("Melee") and "Two-handed" not in w.get("properties", []):
                 melee_one_handed.append(wname)
         if len(set(melee_one_handed)) >= 2:
-            total += 1
+            parts.append(("Dual Wielder", 1))
     # Revenant Blade: +1 AC while holding a double-bladed scimitar with two hands.
     if "Revenant Blade" in char.get("feats", []):
         equipped = {w.split(" +")[0].strip() for w in char.get("equipped_weapons", [])}
         if "Double-Bladed Scimitar" in equipped:
-            total += 1
-    return total
+            parts.append(("Revenant Blade", 1))
+    return parts
+
+
+def effect_ac_bonus(char: dict) -> int:
+    """Sum of flat AC modifiers from active effects (see effect_ac_parts)."""
+    return sum(v for _, v in effect_ac_parts(char))
 
 
 def effect_ac_floor(char: dict) -> int:

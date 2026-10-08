@@ -1170,6 +1170,8 @@ Page {
                                     MButton {
                                         text: modelData.isNew ? "Multiclass In" : "Level Up"
                                         height: 36
+                                        // character level 20 is the most there is
+                                        enabled: !sheetBridge.atMaxLevel && modelData.currentLevel < 20
                                         onClicked: sheetBridge.levelUpClass(modelData.name)
                                     }
                                 }

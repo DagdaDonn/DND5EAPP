@@ -463,14 +463,9 @@ def aggregate_resources(class_levels: dict, ability_scores: dict,
 
             resources.append(entry)
 
-    # ── Monk Ki / Focus Points ────────────────────────────────────────────────
-    monk_lvl = class_levels.get("Monk", 0)
-    if monk_lvl >= 2:
-        resources.append({
-            "name": "Focus Points (Ki)", "key": "ki",
-            "source_class": "Monk", "source_level": monk_lvl,
-            "current_max": monk_lvl, "reset": "SR", "track": "pool"
-        })
+    # (Monk Ki / Focus Points come from the class data's own "ki" resource
+    # above -- a second hand-made entry here gave every Monk two Ki pools
+    # under the same key.)
 
     # ── Subclass-specific resources ────────────────────────────────────────────
     _add_subclass_resources(resources, class_levels, subclasses or {}, ability_mods, pb, choices or {})

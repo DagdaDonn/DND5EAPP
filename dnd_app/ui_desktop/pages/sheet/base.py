@@ -492,7 +492,12 @@ class BaseSheetMixin:
         all resources reset, reduce exhaustion by 1."""
         from dnd_app.core.calculator import update_all
         from dnd_app.core.builder import rebuild
+        from dnd_app.core.character import long_rest_block_reason
         char = self.char
+        why = long_rest_block_reason(char)   # e.g. at 0 HP
+        if why:
+            QMessageBox.information(self, "Long Rest", f"Can't take a long rest — {why}.")
+            return
 
         preview = self._preview_long_rest()
         options = RestOptionsDialog._build_options(char, "long")
@@ -1178,6 +1183,8 @@ class BaseSheetMixin:
                 w.deleteLater()
         for cd in cards:
             lay.addWidget(cd)
+        if hasattr(self, "_refresh_class_buttons"):
+            self._refresh_class_buttons()   # level/class buttons follow the same change
 
     def _class_cards_room(self) -> int:
         """Width the header has for the class cards: its own width minus
@@ -1325,7 +1332,11 @@ class BaseSheetMixin:
         Level Up and Add Multiclass buttons. See LevelUpMulticlassDialog
         for the full behavior."""
         from dnd_app.data.phb2014.classes import CLASS_DICT
-        from dnd_app.core.character import add_class
+        from dnd_app.core.character import add_class, level_up_block_reason
+        why = level_up_block_reason(self.char)   # character level 20
+        if why:
+            QMessageBox.information(self, "Level Up", f"Can't gain a level — {why}.")
+            return
         dlg = LevelUpMulticlassDialog(self.char, self)
         if dlg.exec() != QDialog.Accepted:
             return
@@ -1538,10 +1549,15 @@ class BaseSheetMixin:
         # with no way to ever pick differently.
         old_ids = _all_relevant_choice_ids(self.char)
         entry["level"] -= 1
+        # below its subclass level, a class can't keep a subclass
+        from dnd_app.core.character import drop_subclasses_below_level
+        dropped = drop_subclasses_below_level(self.char)
         new_ids = _all_relevant_choice_ids(self.char)
         _prune_stale_choices(self.char, old_ids - new_ids)
 
         self.ctrl.refresh()
+        for cn, sub, need in dropped:
+            self._toast(f"{sub} removed until {cn} level {need}")
         # self.ctrl.refresh() already triggers _populate_subclass_combo()
         # and _levelup_panel.refresh() via the observer chain (see
         # _open_level_up for the full explanation) — no need to call
@@ -1632,12 +1648,24 @@ class BaseSheetMixin:
         # same class later saw them as "already chosen" instead of
         # prompting fresh.
         old_ids = _all_relevant_choice_ids(self.char)
+        removed = next(c for c in classes if c["class"] == cls_name)
         self.char["classes"] = [c for c in classes if c["class"] != cls_name]
+        # Its spells go with it -- only the ones no remaining class could
+        # have (core/character.py). Before the prune, which would hide its
+        # Magical Secrets picks.
+        from dnd_app.core.character import drop_spells_of_removed_class, name_list
+        lost = drop_spells_of_removed_class(self.char, removed)
         new_ids = _all_relevant_choice_ids(self.char)
         _prune_stale_choices(self.char, old_ids - new_ids)
         self.ctrl.refresh()
         # See _open_level_up — self.ctrl.refresh() already triggers both
-        # calls via the observer chain.
+        # calls via the observer chain. My Spells only rebuilds on load,
+        # so it's redone here when spells left.
+        if lost:
+            self._populate_my_spells_from_char()
+            self._toast(f"{cls_name} removed, along with its spells: {name_list(lost)}")
+        else:
+            self._toast(f"{cls_name} removed")
         self._mark_dirty()
         self._auto_save()
 

@@ -178,6 +178,13 @@ Page {
                             wrapMode: Text.WordWrap
                             Layout.fillWidth: true
                         }
+                        // took damage while concentrating: roll to keep it
+                        MButton {
+                            visible: sheetBridge.concentrationSaveDc > 0
+                            implicitHeight: 36
+                            text: "Save DC " + sheetBridge.concentrationSaveDc
+                            onClicked: sheetBridge.rollPendingConcentrationSave()
+                        }
                         MButton {
                             primary: false
                             implicitHeight: 36
@@ -192,7 +199,7 @@ Page {
                 GridLayout {
                     id: hpGrid
                     Layout.fillWidth: true
-                    columns: width >= 340 ? 4 : 3
+                    columns: width >= 400 ? 4 : 3
                     columnSpacing: 8
                     rowSpacing: 8
                     MSpinBox {
@@ -288,6 +295,8 @@ Page {
                     color: Theme.text
                     font.pixelSize: Theme.fsBody
                     font.bold: true
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
                 }
                 Row {
                     spacing: 24
@@ -1020,8 +1029,8 @@ Page {
     }
 
     // Full-screen death overlay -- matches ui_desktop's combat.py
-    // _show_death_screen(), triggered by 3 failed death saves or
-    // exhaustion level 6.
+    // _show_death_screen(), triggered by 3 failed death saves, massive
+    // damage or exhaustion level 6 (and it says which).
     Rectangle {
         anchors.fill: parent
         visible: sheetBridge.isDead
@@ -1039,10 +1048,17 @@ Page {
                 font.bold: true
                 Layout.alignment: Qt.AlignHCenter
             }
+            // What killed them. Plain light text under the title (dark red
+            // vanished into the black overlay; fixed colour, since the
+            // overlay is black on every theme).
             Label {
-                text: "Instant death: damage ≥ 2× max HP in one hit"
-                color: "#aa3333"
-                font.pixelSize: Theme.fsSmall
+                text: sheetBridge.deathCauseText
+                color: "#e6d3d3"
+                font.pixelSize: Theme.fsBody + 1
+                font.weight: Font.DemiBold
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
+                Layout.maximumWidth: root.width - 48
                 Layout.alignment: Qt.AlignHCenter
             }
             MButton {

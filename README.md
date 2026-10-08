@@ -29,12 +29,17 @@ MIMIC is a Dungeons & Dragons 5th Edition app that brings together everything a 
 - **Starting equipment picker** with class-appropriate options — every chosen item lands correctly in your inventory, alongside your background's own equipment and starting gold
 - **Level-up wizard** — walks through each level's choices, including nested sub-choices
 - **Multiclassing support** — full rules for combining classes
+- **Level changes stay consistent** — Level Up stops at 20, a class that drops below its subclass level loses the subclass until it gets back there, and Level Up / Level Down / Remove Class grey out (saying why) when they can't apply
 
 ### Spell Management
 - **Prepared/known spell tracking**
 - **Spell slots by level** — automatically calculated and tracked
 - **Concentration tracking** — with save prompts when you take damage
 - **Ritual and quick-cast markers**
+- **Granted spells stay put** — domain, oath, patron, racial and feat spells are always prepared and can't be removed (no remove button or menu entry, on either app)
+- **Spells follow your classes** — removing a class takes the spells only it could cast; spells on a class list you still have, and anything from your race, a feat or a subclass, stay. A Cleric, Druid, Paladin or Artificer that levels down loses the list spells beyond its new level (they return on level up); spells you picked yourself are never touched
+- **Only ready spells cast** — an unprepared spell can't be cast until you prepare it, and rituals follow each class's own rule (a Wizard's from the spellbook, a Cleric's or Druid's only once prepared)
+- **Your limits on both apps** — each casting class shows spells known / prepared against its cap, plus cantrips (e.g. "Cleric Lv5: 3 / 8 prepared (WIS+lvl) · Cantrips 3 / 4")
 - **Free daily casts** — spells from your race or a feat (a Tiefling's Hellish Rebuke and Darkness, Fey Touched's Misty Step, Firbolg Magic, Telepathic's Detect Thoughts...) each get a once-per-rest counter, and Cast uses it before a spell slot — so a Fighter can still throw their Hellish Rebuke. Long (or short) rests bring them back
 - **Searchable spell browser** — the search box gets the whole row; class and level filters sit behind a funnel button
 - **Auto-prepared spells** for domains, oaths, circles, patrons, and sorcerer origins (Aberrant Mind, Clockwork Soul, Lunar Sorcery), each from a verified spell list
@@ -57,6 +62,10 @@ MIMIC is a Dungeons & Dragons 5th Edition app that brings together everything a 
 - **Class resource tracking** — Rage, Ki, Sorcery Points, Superiority Dice, Channel Divinity, and every other class resource
 - **Short and long rest auto-reset**
 - **Death saves, condition tracking, and exhaustion**, with real mechanical effects on saves, attack rolls, ability checks, and movement — not just a checkbox
+- **Dying by the book, on both apps** — temp HP soak damage first; massive damage (enough left over after hitting 0 HP to equal your maximum) kills outright; at 0 HP you're unconscious and a hit is a failed death save; three successes leave you stable, still out cold at 0 HP until healed (or 1 HP after 1d4 hours); the dead can't be healed until revived, and the death screen says what killed you
+- **Rage that plays by the rules** — no casting while raging, and starting a Rage ends concentration; no raging in heavy armor; Relentless Rage rolls its CON save for you
+- **Armor Class you can check** — the AC breakdown is the AC: armor, DEX cap, shield, items, spells and features add up to the number shown
+- **Rests and slots stay honest** — a long rest needs at least 1 HP to start, and used slots or resource uses never exceed what you have after a level change
 - **Surprised** tracked as a condition (the PHB surprise rule: no moving, acting or reacting until your first turn ends)
 - **Weapon and armor equipping** with computed attack bonuses and damage
 - **On-hit damage bonuses shown separately by type**, since a different damage type genuinely matters against resistance/immunity
@@ -212,6 +221,8 @@ dnd_app/
     builder.py                        #   Re-derives grants from race/class/background
     calculator.py                     #   AC, saves, skills, HP, slots... (update_all)
     magic_items.py                    #   Item effects, attunement, owned copies, manuals
+    dying.py                          #   Damage, death saves, stable, dying (both apps)
+    free_casts.py                     #   Free daily casts from a race or feat
     spell_scrolls.py                  #   Spell scroll rules (DMG p.200)
     save_load.py                      #   Save folder, files, duplicate-name guard
     pdf_export.py / pdf_import.py     #   Fill / read the official 5e PDF sheet

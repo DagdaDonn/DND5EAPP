@@ -357,6 +357,143 @@ def set_class_level(char: dict, class_name: str, level: int) -> None:
         add_class(char, class_name, level)
 
 
+def level_up_block_reason(char: dict, class_name: str = "") -> str:
+    """Why the character can't gain a level (in `class_name`, if given):
+    character level 20 is the most there is, across every class combined,
+    and no single class goes past 20 either. "" when a level is fine."""
+    if total_level(char) >= 20:
+        return "you're at character level 20, the maximum"
+    entry = get_class_entry(char, class_name) if class_name else None
+    if entry and entry.get("level", 0) >= 20:
+        return f"{class_name} is already at level 20"
+    return ""
+
+
+def drop_subclasses_below_level(char: dict) -> list:
+    """After a level down: a class that's now below the level it gets its
+    subclass at (Fighter 3, Wizard 2, ...) can't keep one -- a "Fighter 2,
+    Champion" contradicts itself. Clears those subclasses and returns
+    [(class, the subclass it had, the level it comes back at)], so the
+    caller can say so. Levelling back up asks for the subclass again."""
+    from dnd_app.data.phb2014.classes import CLASS_DICT as _D14
+    try:
+        from dnd_app.data.phb2024.classes_2024 import CLASS_DICT_2024 as _D24
+    except Exception:
+        _D24 = {}
+    table = _D24 if char.get("edition") == "2024" else _D14
+    dropped = []
+    for entry in char.get("classes", []):
+        sub = entry.get("subclass", "")
+        need = table.get(entry.get("class", ""), {}).get("subclass_level", 3)
+        if sub and entry.get("level", 1) < need:
+            dropped.append((entry["class"], sub, need))
+            entry["subclass"] = ""
+    return dropped
+
+
+# Classes that prepare from their whole list (rebuild() adds the list to
+# spells_known by level) -- the rest pick their spells one by one.
+FULL_LIST_CLASSES = ("Cleric", "Druid", "Paladin", "Artificer")
+
+
+def _spell_lists_of(entry: dict) -> set:
+    """The class spell lists a class entry learns spells from: its own,
+    the Wizard's for an Eldritch Knight or Arcane Trickster, and the
+    Cleric's as well for a Divine Soul sorcerer."""
+    cn = entry.get("class", "")
+    sub = (entry.get("subclass") or "").lower()
+    if cn == "Fighter":
+        return {"Wizard"} if "eldritch knight" in sub else set()
+    if cn == "Rogue":
+        return {"Wizard"} if "arcane trickster" in sub else set()
+    if cn == "Sorcerer" and "divine soul" in sub:
+        return {"Sorcerer", "Cleric"}
+    return {cn}
+
+
+def picking_spell_lists(char: dict) -> set:
+    """Spell lists of the character's classes that pick spells one by one
+    (Wizard, Sorcerer, Bard, Warlock, Ranger, Eldritch Knight...)."""
+    out = set()
+    for entry in char.get("classes", []):
+        if entry.get("class") not in FULL_LIST_CLASSES:
+            out |= _spell_lists_of(entry)
+    return out
+
+
+def protected_spells(char: dict) -> set:
+    """Spells something other than a class's own list gives the character,
+    so taking a class away (or a level of one) never takes them:
+      * granted spells -- race, feat, subclass, fighting style, invocation
+        (char["bonus_spells"])
+      * anything a race or feat lets them cast for free (core/free_casts.py)
+      * any spell picked through a race or feat choice"""
+    out = set(char.get("bonus_spells", []))
+    from .free_casts import free_spells_of
+    for res in char.get("resources", []):
+        out |= set(free_spells_of(char, res))
+    for key, picked in char.get("_choices", {}).items():
+        if key.startswith(("feat_", "race_", "racial_", "astral_elf_")) and isinstance(picked, list):
+            out |= {p for p in picked if isinstance(p, str)}
+    return out
+
+
+def drop_spells_of_removed_class(char: dict, removed: dict) -> list:
+    """After a class is removed from char["classes"]: the known spells that
+    came with it and that nothing left could give -- a Fighter who drops
+    their Wizard levels doesn't keep Fireball. Takes them out of
+    spells_known and returns their names (the rebuild that follows trims
+    the prepared and quick lists to match). Call it before the removed
+    class's choices are pruned, so its Magical Secrets picks still show.
+      1. Lists the removed class learned from, and the lists still left.
+         A spell on a list that's left stays (shared lists, like Fireball
+         for a Sorcerer/Wizard).
+      2. Its any-list picks (Magical Secrets) went with a removed Bard.
+      3. A Bard who stays (Magical Secrets at 10, Lore at 6) could have
+         picked a spell from any list, so nothing is taken from them.
+      4. Spells from a race, feat or subclass are never touched."""
+    from dnd_app.data.phbCommon.spells import get_spell
+    gone = _spell_lists_of(removed)
+    left = set()
+    for entry in char.get("classes", []):
+        left |= _spell_lists_of(entry)
+    secrets = set()
+    if removed.get("class") == "Bard":
+        secrets |= set(char.get("magical_secrets_spells", []))
+        for key, picked in char.get("_choices", {}).items():
+            if key.startswith(("bard_magical_secrets", "bard_lore_secrets")):
+                secrets |= set(picked)
+        char.pop("magical_secrets_spells", None)
+    for entry in char.get("classes", []):
+        sub = (entry.get("subclass") or "").lower()
+        lvl = entry.get("level", 0)
+        if entry.get("class") == "Bard" and (lvl >= 10 or ("lore" in sub and lvl >= 6)):
+            return []
+    keep = protected_spells(char)
+    lost = []
+    for name in char.get("spells_known", []):
+        if name in keep:
+            continue
+        sp = get_spell(name)
+        lists = set(sp.get("classes", [])) if sp else set()
+        came_with_it = bool(lists & gone) or name in secrets
+        if came_with_it and not (lists & left):
+            lost.append(name)
+    if lost:
+        char["spells_known"] = [n for n in char.get("spells_known", []) if n not in lost]
+    return lost
+
+
+def name_list(names: list, limit: int = 3) -> str:
+    """"Fireball, Shield and Sleep" / "Fireball, Shield, Sleep and 2 more"."""
+    names = list(names)
+    if not names:
+        return ""
+    if len(names) <= limit + 1:
+        return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+    return ", ".join(names[:limit]) + f" and {len(names) - limit} more"
+
+
 def set_subclass(char: dict, class_name: str, subclass: str) -> None:
     entry = get_class_entry(char, class_name)
     if entry:
@@ -408,6 +545,17 @@ def restore_spell_slot(char: dict, level: int) -> bool:
         char["spell_slots_used"][idx] -= 1
         return True
     return False
+
+
+def long_rest_block_reason(char: dict) -> str:
+    """Why a long rest can't happen right now ("" if it can). A character
+    needs at least 1 hit point when the rest starts to gain its benefits
+    (PHB p.186) -- one at 0 HP is dying or stable, not resting."""
+    if char.get("is_dead"):
+        return "you're dead"
+    if char.get("current_hp", 0) <= 0 and not char.get("_wildshape_active"):
+        return "you need at least 1 HP to start one"
+    return ""
 
 
 def long_rest(char: dict) -> None:

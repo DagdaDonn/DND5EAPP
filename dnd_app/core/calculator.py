@@ -203,12 +203,28 @@ def spell_preparing_classes(char: dict, spell: dict) -> list:
     return [c for c in mine if c in sp_classes]
 
 
+def spell_needs_preparing(char: dict, spell: dict) -> bool:
+    """True when this leveled spell can't be cast (normally) until it's
+    prepared: one of the character's preparing classes (Wizard, Cleric,
+    Druid, Paladin, Artificer) could prepare it, and it isn't prepared --
+    nor granted (domain, oath, racial and feat spells are always prepared).
+    Cantrips and spells only a known-caster class has never need it.
+    The same rule the Combat tab's quick spells follow."""
+    if not spell or spell.get("level", 0) == 0:
+        return False
+    name = spell.get("name", "")
+    if name in char.get("spells_prepared", []) or name in char.get("bonus_spells", []):
+        return False
+    return bool(spell_preparing_classes(char, spell))
+
+
 def can_ritual_cast(char: dict, spell: dict) -> bool:
     """Whether the character can cast this spell as a ritual (no slot
     expended, +10 min casting time) per the real 5e rules.
 
-    Bard, Cleric, Druid, Wizard, and Artificer can ritual-cast any ritual
-    spell they know/have prepared. Other classes need either the Ritual
+    Wizards can ritual-cast any wizard ritual in their spellbook (prepared
+    or not), Bards any ritual they know; Clerics, Druids and Artificers only
+    a ritual they have prepared. Other classes need either the Ritual
     Caster feat (grants ritual casting for a specific chosen list, tracked
     separately in char["_choices"]) or, for Warlocks specifically, the
     Book of Ancient Secrets invocation (lets them ritual-cast spells
@@ -219,8 +235,18 @@ def can_ritual_cast(char: dict, spell: dict) -> bool:
         return False
     name = spell.get("name", "")
     my_classes = {c["class"] for c in char.get("classes", [])}
-    RITUAL_CASTER_CLASSES = {"Bard", "Cleric", "Druid", "Wizard", "Artificer"}
-    if my_classes & RITUAL_CASTER_CLASSES:
+    known = name in char.get("spells_known", [])
+    prepared = name in char.get("spells_prepared", []) or name in char.get("bonus_spells", [])
+    # Each class's own ritual rule -- "can ritual-cast" isn't the same as
+    # "has the class":
+    #   Wizard: any wizard ritual in the spellbook, prepared or not
+    #   Bard: any spell they know (Magical Secrets ones count as bard spells)
+    #   Cleric / Druid / Artificer: only a ritual they have prepared
+    if "Wizard" in my_classes and known and "Wizard" in spell.get("classes", []):
+        return True
+    if "Bard" in my_classes and known:
+        return True
+    if my_classes & {"Cleric", "Druid", "Artificer"} and prepared:
         return True
     if "Ritual Caster" in char.get("feats", []):
         chosen = char.get("_choices", {}).get("feat_ritual_caster_spells", [])
@@ -583,146 +609,166 @@ def get_passive_skill(char: dict, skill: str) -> int:
 
 def get_ac(char: dict) -> int:
     """Calculate AC based on armor worn and relevant abilities,
-    plus any active spell effects (Haste, Shield of Faith, Barkskin…)."""
-    # Wild Shape: AC is the beast's own listed AC directly, not computed
-    # from armor/Unarmored Defense — you also can't wear armor while
-    # transformed (it doesn't fit, and RAW gear either merges into the
-    # new form or falls away), so no armor-based bonus applies on top of
-    # it either. Using the beast's own AC number avoids relying on the
-    # ability-score override to reproduce the right value through
-    # Unarmored Defense's formula, which only happens to match for
-    # Barbarian/Monk and omits the beast's own natural armor bonus for
-    # every other class.
+    plus any active spell effects (Haste, Shield of Faith, Barkskin…).
+    It is exactly the sum of get_ac_breakdown(), so the AC shown and the
+    right-click breakdown of it can never disagree."""
+    return sum(v for _, v in get_ac_breakdown(char))
+
+
+def armor_type_worn(char: dict) -> str:
+    """What the worn armor is: "none", "light", "medium" or "heavy" --
+    read from the armor table, with any +N or material stripped
+    ("Plate +1", "Adamantine Splint"). Half Plate is medium."""
+    from .magic_items import parse_magic_suffix, parse_material_prefix
+    worn = char.get("armor_worn") or "No Armor"
+    base, _ = parse_magic_suffix(worn)
+    base, _ = parse_material_prefix(base)
+    armor = ARMOR_DICT.get(base) or ARMOR_DICT.get(worn)
+    kind = (armor or {}).get("type", "none")
+    return kind if kind in ("light", "medium", "heavy") else "none"
+
+
+def _unarmored_ac_options(char: dict) -> list:
+    """Every way an unarmored character can work out their AC, each as
+    [(label, value)] (before a shield, magic items and other flat
+    bonuses) -- AC uses whichever is highest, the same as a player would.
+      - Unarmored Defense: Barbarian 10 + DEX + CON; Monk 10 + DEX + WIS,
+        and the Monk's only while no shield is carried. A Barbarian/Monk
+        has just the one from the class they took first (you can't gain
+        Unarmored Defense twice).
+      - plain 10 + DEX
+      - Mage Armor (or Armor of Shadows), Draconic Resilience, and racial
+        natural armor (Lizardfolk, Loxodon, Autognome, Thri-kreen)."""
+    dex = ability_mod(char, "DEX"); con = ability_mod(char, "CON"); wis = ability_mod(char, "WIS")
+    shield = bool(char.get("shield", False))
+    cl = class_levels(char)
+    order = [c.get("class", "") for c in char.get("classes", [])]
+    ud = next((c for c in order if c in ("Barbarian", "Monk") and cl.get(c, 0) > 0), None)
+    opts = []
+    if ud == "Barbarian":
+        opts.append([("Base (Unarmored Defense)", 10), ("Dexterity modifier", dex),
+                     ("Constitution modifier", con)])
+    elif ud == "Monk" and not shield:
+        opts.append([("Base (Unarmored Defense)", 10), ("Dexterity modifier", dex),
+                     ("Wisdom modifier", wis)])
+    opts.append([("Base (unarmored)", 10), ("Dexterity modifier", dex)])
+    if "Mage Armor" in char.get("active_effects", []) or char.get("_armor_of_shadows", False):
+        opts.append([("Mage Armor (13 + DEX)", 13), ("Dexterity modifier", dex)])
+    if cl.get("Sorcerer", 0) > 0 and "draconic" in subclasses(char).get("Sorcerer", "").lower():
+        opts.append([("Draconic Resilience (13 + DEX)", 13), ("Dexterity modifier", dex)])
+    species = (char.get("species") or char.get("race", "")).strip().lower()
+    natural = {"lizardfolk": ("Natural Armor (13 + DEX)", 13, "Dexterity modifier", dex),
+               "loxodon": ("Natural Armor (12 + CON)", 12, "Constitution modifier", con),
+               "autognome": ("Armored Casing (13 + DEX)", 13, "Dexterity modifier", dex),
+               "thri-kreen": ("Chameleon Carapace (13 + DEX)", 13, "Dexterity modifier", dex)}
+    if species in natural:
+        lbl, base, mod_lbl, mod = natural[species]
+        opts.append([(lbl, base), (mod_lbl, mod)])
+    return opts
+
+
+def _ac_base_parts(char: dict) -> list:
+    """[(label, AC)] for armor, shield, items and always-on traits --
+    everything but active effects (see get_ac_breakdown)."""
+    override = char.get("ac_override")
+    if override is not None:
+        return [("AC set by hand", override)]
+    from .magic_items import parse_magic_suffix
+    armor_name = char.get("armor_worn", "No Armor") or "No Armor"
+    base_armor_name, armor_magic_bonus = parse_magic_suffix(armor_name)
+    dex = ability_mod(char, "DEX"); con = ability_mod(char, "CON"); wis = ability_mod(char, "WIS")
+
+    shield_parts = []
+    if char.get("shield", False):
+        sm = char.get("shield_magic_bonus", 0)
+        shield_parts = [("Shield" if not sm else f"Shield (+{sm} enchantment)", 2 + sm)]
+    # magic items (each listed), plus whatever else adds to it (infusions)
+    magic_parts = [(src, v) for src, v in char.get("_ac_bonus_sources", []) if v]
+    rest = char.get("magic_ac_bonus", 0) - sum(v for _, v in magic_parts)
+    if rest:
+        magic_parts.append(("Infusion", rest))
+    # always-on traits: Integrated Protection (Warforged, any armor) and
+    # Carapace (Simic Hybrid 5th-level choice, while not in heavy armor)
+    trait_parts = []
+    if (char.get("species") or char.get("race", "")) == "Warforged":
+        trait_parts.append(("Integrated Protection (Warforged)", 1))
+    if ("Carapace" in char.get("_choices", {}).get("simic_enhancement_5th", [])
+            and armor_type_worn(char) != "heavy"):
+        trait_parts.append(("Carapace (Simic Hybrid)", 1))
+
+    if base_armor_name == "No Armor":
+        best = max(_unarmored_ac_options(char), key=lambda opt: sum(v for _, v in opt))
+        return best + shield_parts + magic_parts + trait_parts
+    if base_armor_name in ("Unarmored (Barb)", "Unarmored Defense (Barb)"):
+        return ([("Base (Unarmored Defense)", 10), ("Dexterity modifier", dex),
+                 ("Constitution modifier", con)] + shield_parts + magic_parts + trait_parts)
+    if base_armor_name in ("Unarmored (Monk)", "Unarmored Defense (Monk)"):
+        return ([("Base (Unarmored Defense)", 10), ("Dexterity modifier", dex),
+                 ("Wisdom modifier", wis)] + magic_parts + trait_parts)
+
+    special = {"Mage Armor (spell)": ("Mage Armor (13 + DEX)", 13, "Dexterity modifier", dex),
+               "Natural Armor": ("Natural Armor (13 + CON)", 13, "Constitution modifier", con),
+               "Dragon Hide (feat)": ("Dragon Hide (13 + DEX)", 13, "Dexterity modifier", dex)}
+    armor = ARMOR_DICT.get(base_armor_name)
+    defense = []
+    if base_armor_name in special:
+        lbl, base, mod_lbl, mod = special[base_armor_name]
+        parts = [(lbl, base), (mod_lbl, mod)] + shield_parts
+    elif not armor:
+        parts = [("Base (unarmored)", 10), ("Dexterity modifier", dex)] + shield_parts
+    elif armor["type"] == "shield":
+        parts = [("Base (unarmored)", 10), ("Dexterity modifier", dex), ("Shield", armor["ac"])]
+    else:
+        parts = [(base_armor_name, armor["ac"])]
+        if armor_magic_bonus:
+            parts.append((f"{base_armor_name} (+{armor_magic_bonus} enchantment)", armor_magic_bonus))
+        dex_cap = armor.get("dex_cap")
+        # Medium Armor Master: with DEX 16+ (mod +3), medium armor's
+        # Dexterity cap rises from +2 to +3.
+        if dex_cap == 2 and dex >= 3 and "Medium Armor Master" in char.get("feats", []):
+            dex_cap = 3
+        if dex_cap is None:
+            parts.append(("Dexterity modifier", dex))
+        elif dex_cap > 0:
+            parts.append((f"Dexterity modifier (max +{dex_cap})", min(dex, dex_cap)))
+        parts += shield_parts
+        # Defense fighting style: +1 AC while wearing real armor (not a
+        # shield alone, Mage Armor, natural armor or Unarmored Defense)
+        if any("defense" in fs.lower() for fs in char.get("fighting_styles", [])):
+            defense = [("Defense fighting style", 1)]
+    return parts + magic_parts + defense + trait_parts
+
+
+def get_ac_breakdown(char: dict) -> list[tuple[str, int]]:
+    """
+    Return a list of (label, value) pairs explaining how AC was computed,
+    for use in a tooltip -- they add up to get_ac() exactly (get_ac sums
+    this). Does not include the running total.
+      1. Wild Shape: the beast's own AC, nothing else.
+      2. armor / unarmored option, shield, items, always-on traits
+      3. active effects (Shield of Faith, Bladesong, Dual Wielder...)
+      4. a minimum from an effect (Barkskin's 16) tops it up if higher
+    """
     active_beast = char.get("_wildshape_active")
     if active_beast:
         from dnd_app.data.phbCommon.statblocks import WILDSHAPE_BEASTS
         beast = WILDSHAPE_BEASTS.get(active_beast)
         if beast:
-            return beast["ac"]
-    from .effects import effect_ac_bonus, effect_ac_floor
-    base = _get_ac_base(char)
-    ac = base + effect_ac_bonus(char)
+            return [(f"{active_beast} (Wild Shape)", beast["ac"])]
+    from .effects import effect_ac_parts, effect_ac_floor, EFFECT_TABLE
+    parts = _ac_base_parts(char) + effect_ac_parts(char)
     floor = effect_ac_floor(char)
-    return max(ac, floor) if floor else ac
+    total = sum(v for _, v in parts)
+    if floor and floor > total:
+        src = next((n for n in char.get("active_effects", [])
+                    if EFFECT_TABLE.get(n, {}).get("ac_floor", 0) == floor), "effect")
+        parts.append((f"{src}: AC can't be lower than {floor}", floor - total))
+    return parts
 
 
 def _get_ac_base(char: dict) -> int:
-    override = char.get("ac_override")
-    if override is not None:
-        return override
-
-    armor_name = char.get("armor_worn", "No Armor")
-    # Strip a magic " +1"/"+2"/"+3" suffix (e.g. "Studded Leather +2") for lookup,
-    # adding the bonus on top of the base armor's AC.
-    from .magic_items import parse_magic_suffix
-    base_armor_name, armor_magic_bonus = parse_magic_suffix(armor_name)
-
-    # Defense fighting style: +1 AC while wearing armor. Checked here
-    # (not folded into magic_ac below) since it's conditional on actually
-    # wearing a real armor item — a positive check against ARMOR_DICT
-    # correctly excludes Unarmored Defense, Mage Armor, Natural Armor,
-    # Dragon Hide, and Warforged Plating, none of which are actually worn
-    # armor even though some of them produce an AC in the same range.
-    _armor_entry = ARMOR_DICT.get(base_armor_name)
-    has_defense_style = (_armor_entry is not None and _armor_entry.get("type") != "shield" and
-                          any("defense" in fs.lower() for fs in char.get("fighting_styles", [])))
-    defense_bonus = 1 if has_defense_style else 0
-
-    # Integrated Protection (Warforged): flat +1 AC, always, regardless
-    # of armor worn — the real rule has no armor-type condition at all,
-    # unlike the fake "Warforged Plating" armor option this replaces.
-    race_ac = char.get("species") or char.get("race", "")
-    warforged_bonus = 1 if race_ac == "Warforged" else 0
-
-    # Carapace (Simic Hybrid, 5th-level Animal Enhancement choice): +1 AC
-    # while not wearing heavy armor.
-    heavy_armors_ac = {"Plate", "Splint", "Ring Mail", "Chain Mail", "Half Plate"}
-    has_carapace = "Carapace" in char.get("_choices", {}).get("simic_enhancement_5th", [])
-    carapace_bonus = 1 if (has_carapace and base_armor_name not in heavy_armors_ac) else 0
-
-    shield = char.get("shield", False)
-    shield_bonus = (2 + char.get("shield_magic_bonus", 0)) if shield else 0
-    dex_mod = ability_mod(char, "DEX")
-    con_mod = ability_mod(char, "CON")
-    wis_mod = ability_mod(char, "WIS")
-    str_score = ability_score(char, "STR")
-
-    # Check for Unarmored Defense
-    cl = class_levels(char)
-    barbarian_lvl = cl.get("Barbarian", 0)
-    monk_lvl = cl.get("Monk", 0)
-
-    magic_ac = char.get("magic_ac_bonus", 0)
-    if base_armor_name == "No Armor":
-        # Mage Armor (PHB p.256): base AC becomes 13 + DEX while unarmored.
-        # It doesn't stack with Unarmored Defense — use whichever is higher,
-        # same as a player would choose in play. Armor of Shadows
-        # (Eldritch Invocation) grants this same benefit at will, without
-        # needing to actually cast/concentrate on the spell.
-        has_mage_armor = ("Mage Armor" in char.get("active_effects", [])
-                           or char.get("_armor_of_shadows", False))
-        candidates = []
-        if barbarian_lvl > 0:
-            candidates.append(10 + dex_mod + con_mod + shield_bonus + magic_ac)
-        elif monk_lvl > 0:
-            candidates.append(10 + dex_mod + wis_mod + magic_ac)
-        else:
-            candidates.append(10 + dex_mod + shield_bonus + magic_ac)
-        if has_mage_armor:
-            candidates.append(13 + dex_mod + shield_bonus + magic_ac)
-        # Draconic Resilience (Sorcerer, Draconic Bloodline, 1st level):
-        # AC 13 + DEX while unarmored, always-on.
-        sorc_lvl_ac = cl.get("Sorcerer", 0)
-        if sorc_lvl_ac > 0 and "draconic" in subclasses(char).get("Sorcerer", "").lower():
-            candidates.append(13 + dex_mod + shield_bonus + magic_ac)
-        # Racial Natural Armor / built-in AC formulas, always-on while
-        # unarmored.
-        species_ac = (char.get("species") or char.get("race", "")).strip().lower()
-        if species_ac == "lizardfolk":
-            candidates.append(13 + dex_mod + shield_bonus + magic_ac)
-        if species_ac == "loxodon":
-            candidates.append(12 + con_mod + shield_bonus + magic_ac)
-        if species_ac == "autognome":
-            candidates.append(13 + dex_mod + shield_bonus + magic_ac)
-        if species_ac == "thri-kreen":
-            candidates.append(13 + dex_mod + shield_bonus + magic_ac)
-        return max(candidates) + warforged_bonus + carapace_bonus
-
-    if base_armor_name in ("Unarmored (Barb)", "Unarmored Defense (Barb)"):
-        return 10 + dex_mod + con_mod + shield_bonus + magic_ac + warforged_bonus + carapace_bonus
-    if base_armor_name in ("Unarmored (Monk)", "Unarmored Defense (Monk)"):
-        return 10 + dex_mod + wis_mod + magic_ac + warforged_bonus + carapace_bonus
-
-    ac = None
-    if base_armor_name == "Mage Armor (spell)":
-        ac = 13 + dex_mod + shield_bonus
-    if ac is None and base_armor_name == "Natural Armor":
-        ac = 13 + con_mod + shield_bonus
-    if ac is None and base_armor_name == "Dragon Hide (feat)":
-        ac = 13 + dex_mod + shield_bonus
-
-    if ac is None:
-        armor = ARMOR_DICT.get(base_armor_name)
-        if not armor:
-            ac = 10 + dex_mod + shield_bonus
-        elif armor["type"] == "shield":
-            ac = 10 + dex_mod + armor["ac"]
-        else:
-            base_ac = armor["ac"] + armor_magic_bonus
-            dex_cap = armor.get("dex_cap")
-            # Medium Armor Master: with DEX 16+ (mod +3), medium armor's
-            # Dexterity cap rises from +2 to +3.
-            if (dex_cap == 2 and dex_mod >= 3
-                    and "Medium Armor Master" in char.get("feats", [])):
-                dex_cap = 3
-            if dex_cap is None:
-                ac = base_ac + dex_mod + shield_bonus
-            elif dex_cap == 0:
-                ac = base_ac + shield_bonus
-            else:
-                ac = base_ac + min(dex_mod, dex_cap) + shield_bonus
-
-    return ac + magic_ac + defense_bonus + warforged_bonus + carapace_bonus
+    """AC from armor, shield, items and traits, before active effects."""
+    return sum(v for _, v in _ac_base_parts(char))
 
 
 def get_speed_breakdown(char: dict) -> list[tuple[str, str]]:
@@ -802,8 +848,17 @@ def get_spell_attack_breakdown(char: dict, ability: str) -> list[tuple[str, int]
 INCAPACITATING = ("Paralyzed", "Petrified", "Stunned", "Unconscious")
 
 
+def _down_at_zero_hp(char: dict) -> bool:
+    """At 0 HP (and not dead or in a Wild Shape form) a character is
+    unconscious -- dying or stable -- even if nobody ticked the box."""
+    return (char.get("current_hp", 1) <= 0 and not char.get("is_dead")
+            and not char.get("_wildshape_active") and char.get("max_hp", 0) > 0)
+
+
 def effective_conditions(char: dict) -> set:
     active = set(char.get("conditions", []))
+    if _down_at_zero_hp(char):
+        active.add("Unconscious")
     if active & set(INCAPACITATING):
         active.add("Incapacitated")
     if "Unconscious" in active:
@@ -816,6 +871,9 @@ def implied_conditions(char: dict) -> dict:
     "Incapacitated (from Stunned)" without ticking it."""
     active = set(char.get("conditions", []))
     out = {}
+    if _down_at_zero_hp(char) and "Unconscious" not in active:
+        out["Unconscious"] = ["0 HP"]
+        active.add("Unconscious")
     causes = [c for c in INCAPACITATING if c in active]
     if causes and "Incapacitated" not in active:
         out["Incapacitated"] = causes
@@ -833,12 +891,59 @@ def get_turn_blocks(char: dict) -> dict:
     active = effective_conditions(char)
     if "Incapacitated" in active:
         cause = next((c for c in INCAPACITATING if c in active), "Incapacitated")
+        if cause == "Unconscious" and _down_at_zero_hp(char):
+            cause = "At 0 HP, unconscious"
         why = f"{cause} -- incapacitated, no actions or reactions"
         return {b: why for b in ("Action", "Bonus Action", "Reaction")}
     if "Surprised" in active:
         why = "Surprised -- nothing this turn; ends when your first turn does"
         return {b: why for b in ("Action", "Bonus Action", "Reaction")}
     return {}
+
+
+def wearing_heavy_armor(char: dict) -> bool:
+    """True when the armor worn is heavy (Ring Mail, Chain Mail, Splint,
+    Plate -- with any +N or material: "Plate +1", "Adamantine Splint")."""
+    return armor_type_worn(char) == "heavy"
+
+
+def spellcasting_block_reason(char: dict) -> str:
+    """Why the character can't cast a spell right now ("" if they can):
+    raging (Rage: no casting, no concentrating), or a condition that takes
+    away actions (Incapacitated, Stunned, Paralyzed, Unconscious,
+    Petrified, Surprised). Checked before any slot or free use is spent."""
+    if "Rage" in char.get("active_effects", []):
+        return "you're raging"
+    active = effective_conditions(char)
+    if "Incapacitated" in active:
+        cause = next((c for c in INCAPACITATING if c in active), "Incapacitated")
+        if cause == "Unconscious" and _down_at_zero_hp(char):
+            return "you're unconscious at 0 HP"
+        return f"you're {cause.lower()}"
+    if "Surprised" in active:
+        return "you're surprised"
+    return ""
+
+
+def effect_start_problem(char: dict, name: str) -> str:
+    """Why an effect can't be switched on ("" if it can) -- checked before
+    a use is spent. Rage does nothing in heavy armor."""
+    if name == "Rage" and wearing_heavy_armor(char):
+        return "not in heavy armor -- take it off first"
+    return ""
+
+
+def on_effect_started(char: dict, name: str) -> str:
+    """What else switching an effect on changes; returns a note for the
+    message ("" for nothing). Entering a Rage ends concentration -- you
+    can't concentrate while raging."""
+    if name == "Rage":
+        conc = (char.get("concentration") or {}).get("spell")
+        if conc:
+            from dnd_app.core.magic_items import drop_concentration
+            drop_concentration(char)
+            return f"you stop concentrating on {conc}"
+    return ""
 
 
 def get_condition_check_status(char: dict, ability: str = "") -> dict:
@@ -956,74 +1061,6 @@ def get_weapon_attack_breakdown(char: dict, ability: str, proficient: bool,
         parts.append(("Magic weapon bonus", magic_bonus))
     return parts
 
-
-def get_ac_breakdown(char: dict) -> list[tuple[str, int]]:
-    """
-    Return a list of (label, value) pairs explaining how AC was computed,
-    for use in a tooltip. Does not include the running total.
-    """
-    from .magic_items import parse_magic_suffix
-    armor_name = char.get("armor_worn", "No Armor")
-    base_armor_name, armor_magic_bonus = parse_magic_suffix(armor_name)
-    dex_mod = ability_mod(char, "DEX")
-    con_mod = ability_mod(char, "CON")
-    wis_mod = ability_mod(char, "WIS")
-    cl = class_levels(char)
-    barbarian_lvl = cl.get("Barbarian", 0)
-    monk_lvl = cl.get("Monk", 0)
-    shield = char.get("shield", False)
-    shield_magic = char.get("shield_magic_bonus", 0)
-
-    parts: list[tuple[str, int]] = []
-
-    if base_armor_name == "No Armor":
-        if barbarian_lvl > 0:
-            parts.append(("Base (Unarmored Defense)", 10))
-            parts.append(("Dexterity modifier", dex_mod))
-            parts.append(("Constitution modifier", con_mod))
-        elif monk_lvl > 0:
-            parts.append(("Base (Unarmored Defense)", 10))
-            parts.append(("Dexterity modifier", dex_mod))
-            parts.append(("Wisdom modifier", wis_mod))
-        else:
-            parts.append(("Base (unarmored)", 10))
-            parts.append(("Dexterity modifier", dex_mod))
-    else:
-        armor = ARMOR_DICT.get(base_armor_name)
-        if armor and armor["type"] != "shield":
-            parts.append((base_armor_name, armor["ac"]))
-            if armor_magic_bonus:
-                parts.append((f"{base_armor_name} (+{armor_magic_bonus} enchantment)", armor_magic_bonus))
-            dex_cap = armor.get("dex_cap")
-            if dex_cap is None:
-                parts.append(("Dexterity modifier", dex_mod))
-            elif dex_cap == 0:
-                pass
-            else:
-                parts.append((f"Dexterity modifier (max +{dex_cap})", min(dex_mod, dex_cap)))
-        else:
-            parts.append(("Base (unarmored)", 10))
-            parts.append(("Dexterity modifier", dex_mod))
-
-    if shield:
-        label = "Shield" if not shield_magic else f"Shield (+{shield_magic} enchantment)"
-        parts.append((label, 2 + shield_magic))
-
-    for source, value in char.get("_ac_bonus_sources", []):
-        if value:
-            parts.append((source, value))
-
-    from .effects import EFFECT_TABLE
-    heavy_armors = {"Plate", "Splint", "Ring Mail", "Chain Mail", "Half Plate"}
-    wearing_heavy = base_armor_name in heavy_armors
-    for name in char.get("active_effects", []):
-        e = EFFECT_TABLE.get(name, {})
-        if e.get("ac"):
-            parts.append((name, e["ac"]))
-        if "ac_no_heavy_armor" in e and not wearing_heavy:
-            parts.append((f"{name} (no heavy armor)", e["ac_no_heavy_armor"]))
-
-    return parts
 
 def get_save_bonus_breakdown(char: dict) -> list[tuple[str, int]]:
     """Return [(source, value), ...] of magic items contributing to saving throws."""
@@ -1472,14 +1509,12 @@ def get_innate_movement_grants(char: dict) -> dict:
     subrace = char.get("subrace", "")
     total_level = sum(c.get("level", 0) for c in char.get("classes", []))
 
-    heavy_armors = {"Plate", "Splint", "Ring Mail", "Chain Mail", "Half Plate"}
-    medium_armors = {"Hide", "Chain Shirt", "Scale Mail", "Breastplate"}
-    worn = char.get("armor_worn", "")
+    in_medium_or_heavy = armor_type_worn(char) in ("medium", "heavy")
 
     for grant in RACIAL_MOVEMENT.get(race, []):
-        if grant.get("no_medium_heavy_armor") and worn in (heavy_armors | medium_armors):
+        if grant.get("no_medium_heavy_armor") and in_medium_or_heavy:
             continue
-        if grant.get("no_heavy_armor") and worn in heavy_armors:
+        if grant.get("no_heavy_armor") and armor_type_worn(char) == "heavy":
             continue
         _consider(grant["kind"], grant["speed"])
 
@@ -2423,6 +2458,16 @@ def update_all(char: dict) -> dict:
         ws = slot_info["warlock_slots"]
         char["pact_slots_max"] = ws["count"]
         char["pact_slot_level"] = ws["level"]
+    else:
+        # no Warlock levels (any more): no pact slots
+        char["pact_slots_max"] = 0
+        char["pact_slot_level"] = 0
+    # Used can't exceed what you have -- after a level down (or a removed
+    # class) a used 3rd-level slot at a level with none left would read
+    # "2 of 0 used".
+    used = list(char.get("spell_slots_used") or [0] * 9) + [0] * 9
+    char["spell_slots_used"] = [max(0, min(u, m)) for u, m in zip(used[:9], char["spell_slots_max"])]
+    char["pact_slots_used"] = max(0, min(char.get("pact_slots_used", 0), char["pact_slots_max"]))
 
     # Saving throws are set by rebuild(); do not overwrite here.
 
@@ -2526,9 +2571,9 @@ def update_all(char: dict) -> dict:
     # heavy armor. Shown alongside resistances per design — labeled
     # clearly as a reduction, not folded into any resistance-halving
     # calculation, since the two are mechanically different things.
-    heavy_armors_ham = {"Plate", "Splint", "Ring Mail", "Chain Mail", "Half Plate"}
-    if ("Heavy Armor Master" in char.get("feats", [])
-            and char.get("armor_worn") in heavy_armors_ham):
+    # (Half Plate is medium armor, so it doesn't count; a +1 or adamantine
+    # heavy armor does)
+    if "Heavy Armor Master" in char.get("feats", []) and wearing_heavy_armor(char):
         res = char.setdefault("damage_resistances", [])
         entry = ("bludgeoning/piercing/slashing (nonmagical) \u22123 damage", "Heavy Armor Master")
         if entry not in res:
@@ -2615,6 +2660,13 @@ def update_all(char: dict) -> dict:
     if char.get("exhaustion", 0) >= 6 and char.get("current_hp", 1) > 0:
         char["current_hp"] = 0
         char["_died_of_exhaustion"] = True
+    # The dead stay at 0 HP until revived. And death saves only exist at
+    # 0 HP: any hit points back (a potion, Second Wind, a hit die) mean
+    # the count starts fresh the next time you drop (core/dying.py).
+    if char.get("is_dead"):
+        char["current_hp"] = 0
+    elif char.get("current_hp", 0) > 0 and any((char.get("death_saves") or {}).values()):
+        char["death_saves"] = {"successes": 0, "failures": 0}
 
     # ── Hit Dice ──────────────────────────────────────────────────────────────
     # One pool per die size, summed across classes that share it (Fighter
@@ -3381,12 +3433,28 @@ def update_all(char: dict) -> dict:
     merged = []
     for res in new_resources:
         key = res.get("key", "")
+        new_max = res.get("current_max", 0)
         if key in existing_resources:
-            # Preserve current tracking value, update max
+            # Keep how much is left, against the new maximum:
+            #   - a numeric pool keeps its spent uses: a level up adds the
+            #     new uses (5 of 6 Ki -> 6 of 7), a level down caps it
+            #     (6 of 6 -> 4 of 4), never above max or below 0
+            #   - a non-numeric entry (the Martial Arts die "d6") is just
+            #     information, so it always shows the current value
             existing = existing_resources[key]
-            res["current"] = existing.get("current", res.get("current_max", 0))
+            cur = existing.get("current", new_max)
+            old_max = existing.get("current_max", new_max)
+            nums = (int, float)
+            if "current_max" not in res:
+                res["current"] = cur   # no maximum to measure against (Crimson Rite, Pact Slots)
+            elif isinstance(cur, nums) and isinstance(new_max, nums) and not isinstance(cur, bool):
+                if isinstance(old_max, nums) and new_max > old_max:
+                    cur += new_max - old_max
+                res["current"] = max(0, min(cur, new_max))
+            else:
+                res["current"] = new_max
         else:
-            res["current"] = res.get("current_max", 0)
+            res["current"] = new_max
         merged.append(res)
     char["resources"] = merged
 

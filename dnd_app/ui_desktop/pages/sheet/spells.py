@@ -345,6 +345,7 @@ class SpellsMixin:
                  text_color=CRIM2, hover_text="white", font_size=FS_SMALL,
                  padding="0px").styleSheet())
         drop_btn.clicked.connect(self._drop_concentration)
+        self._conc_drop_btn = drop_btn   # enabled only while concentrating (_refresh_concentration)
         cf.addWidget(drop_btn)
         self._conc_save_btn = QPushButton("Conc. Save")
         self._conc_save_btn.setFixedSize(90, 30)
@@ -548,6 +549,8 @@ class SpellsMixin:
         self._relayout_my_spells_by_class(spell_to_class, class_order)
         self._refresh_my_spells_class_filter(class_order)
         self._filter_my_spells()   # re-applies any filters, and the empty state
+        if hasattr(self, "_sp_browser"):
+            self._filter_spell_browser()   # known spells drop out of the browser
 
     def _compute_spell_class_attribution(self):
         """{spell_name: class_name} for every entry in spells_known, plus
@@ -889,57 +892,72 @@ class SpellsMixin:
             lay.addWidget(hint, row_i, 0, 1, 4)
             self._dc_row_widgets.append(hint)
 
-    def _refresh_spell_count_labels(self):
-        """Show how many spells and cantrips each class can currently know/prepare.
-        Multiclass known-spell casters (Sorcerer/Warlock, Bard/Warlock, etc.)
-        are tracked SEPARATELY per class and summed additively for the total —
-        never pooled into one shared count checked against every class's cap."""
-        if not hasattr(self, "_spell_count_lbl"): return
+    def _spell_limits(self) -> list[dict]:
+        """How many spells and cantrips each casting class can know or
+        prepare, and how many it has -- plain data, shared by desktop's
+        Spells Known / Prepared card and the Android Spells screen.
+        One dict per casting class:
+          label      "Wizard Lv5" / "EK Fighter Lv3" / "AT Rogue Lv3"
+          kind       "known" (Sorcerer/Bard/...) or "prepared" (Wizard/Cleric/...)
+          current, max      leveled spells known / prepared vs the cap
+          ability    the ability the prepared cap uses ("INT"), else ""
+          cantrips, cantrip_max   (cantrip_max 0 = the class gets none)
+        Multiclass known-spell casters (Sorcerer/Warlock, Bard/Warlock...)
+        are counted SEPARATELY per class -- never pooled into one shared
+        count checked against every class's cap. Granted spells (domain,
+        racial, feat) don't count, so they're left out of `current`."""
         from dnd_app.core.character import ability_mod as _am
         char = self.char
         SPELLS_KNOWN, CANTRIPS, EK_AT, PREPARE_AB = self._spell_progression_tables()
         attributed = self._attribute_known_spells()
         prepared_attributed = self._attribute_prepared_spells()
-        lines = []
-        for c in char.get("classes",[]):
+        rows = []
+        for c in char.get("classes", []):
             cname = c["class"]; lvl = c["level"]
-            sub = c.get("subclass","").lower()
-            ctbl = CANTRIPS.get(cname,{})
-            cmax = max((v for k,v in ctbl.items() if k<=lvl), default=0)
-            is_ek = cname=="Fighter" and "eldritch knight" in sub
-            is_at = cname=="Rogue" and "arcane trickster" in sub
+            sub = c.get("subclass", "").lower()
+            cmax = max((v for k, v in CANTRIPS.get(cname, {}).items() if k <= lvl), default=0)
+            is_ek = cname == "Fighter" and "eldritch knight" in sub
+            is_at = cname == "Rogue" and "arcane trickster" in sub
             if is_ek or is_at:
                 # EK/AT aren't in the CANTRIPS table (it's keyed by full
-                # caster class names) — they get 2 cantrips at 3rd level,
-                # 3 at 10th, same formula used in _known_spell_classes().
+                # caster class names) -- 2 cantrips at 3rd level, 3 at 10th
                 cmax = 2 + (1 if lvl >= 10 else 0)
-            # This class's OWN attributed spells only — not the whole
-            # character's flat spells_known list.
-            bucket_key = ("Fighter (EK)" if cname=="Fighter" and "eldritch knight" in sub
-                         else "Rogue (AT)" if cname=="Rogue" and "arcane trickster" in sub
-                         else cname)
-            my_bucket = attributed.get(bucket_key, {"cantrips":[], "leveled":[]})
-            cur_cantrips = len(my_bucket["cantrips"])
-            cur_noncant  = len(my_bucket["leveled"])
-            cantrip_line = (f"  <span style='color:{TEXT3};'>Cantrips: {cur_cantrips}/{cmax}</span>" if cmax else "")
+            # this class's OWN attributed spells, not the flat spells_known list
+            bucket_key = "Fighter (EK)" if is_ek else "Rogue (AT)" if is_at else cname
+            mine = attributed.get(bucket_key, {"cantrips": [], "leveled": []})
+            row = {"cantrips": len(mine["cantrips"]), "cantrip_max": cmax, "ability": ""}
             if cname in SPELLS_KNOWN:
-                tbl = SPELLS_KNOWN[cname]
-                best = max((v for k,v in tbl.items() if k<=lvl), default=0)
-                lines.append(f"<b>{cname} Lv{lvl}</b>: {cur_noncant}/{best} spells known{cantrip_line}")
-            elif cname == "Fighter" and "eldritch knight" in sub:
-                best = max((v for k,v in EK_AT.items() if k<=lvl), default=0)
-                lines.append(f"<b>EK Fighter Lv{lvl}</b>: {cur_noncant}/{best} spells{cantrip_line}")
-            elif cname == "Rogue" and "arcane trickster" in sub:
-                best = max((v for k,v in EK_AT.items() if k<=lvl), default=0)
-                lines.append(f"<b>AT Rogue Lv{lvl}</b>: {cur_noncant}/{best} spells{cantrip_line}")
+                best = max((v for k, v in SPELLS_KNOWN[cname].items() if k <= lvl), default=0)
+                row.update(label=f"{cname} Lv{lvl}", kind="known", current=len(mine["leveled"]), max=best)
+            elif is_ek or is_at:
+                best = max((v for k, v in EK_AT.items() if k <= lvl), default=0)
+                row.update(label=f"{'EK Fighter' if is_ek else 'AT Rogue'} Lv{lvl}", kind="known",
+                           current=len(mine["leveled"]), max=best)
             elif cname in PREPARE_AB:
                 ab = PREPARE_AB[cname]
-                mod = _am(char, ab)
-                eff = lvl if cname not in ("Paladin","Artificer") else max(1, lvl//2)
-                max_prep = max(1, mod + eff)
-                cur_prep = len(prepared_attributed.get(cname, []))
-                lines.append(f"<b>{cname} Lv{lvl}</b>: {cur_prep}/{max_prep} prepared"
-                              f"<span style='color:{TEXT3};'> ({ab}+lvl)</span>{cantrip_line}")
+                eff = lvl if cname not in ("Paladin", "Artificer") else max(1, lvl // 2)
+                row.update(label=f"{cname} Lv{lvl}", kind="prepared", ability=ab,
+                           current=len(prepared_attributed.get(cname, [])),
+                           max=max(1, _am(char, ab) + eff))
+            else:
+                continue
+            rows.append(row)
+        return rows
+
+    def _refresh_spell_count_labels(self):
+        """Show how many spells and cantrips each class can currently
+        know/prepare (see _spell_limits)."""
+        if not hasattr(self, "_spell_count_lbl"): return
+        lines = []
+        for r in self._spell_limits():
+            cantrip_line = (f"  <span style='color:{TEXT3};'>Cantrips: {r['cantrips']}/{r['cantrip_max']}</span>"
+                            if r["cantrip_max"] else "")
+            if r["kind"] == "prepared":
+                lines.append(f"<b>{r['label']}</b>: {r['current']}/{r['max']} prepared"
+                             f"<span style='color:{TEXT3};'> ({r['ability']}+lvl)</span>{cantrip_line}")
+            else:
+                noun = "spells known" if not r["label"].startswith(("EK ", "AT ")) else "spells"
+                lines.append(f"<b>{r['label']}</b>: {r['current']}/{r['max']} {noun}{cantrip_line}")
         self._spell_count_lbl.setText("<br>".join(lines) if lines else "No spellcasting classes.")
         self._refresh_spell_class_badges()
         self._refresh_spellcasting_table()
@@ -1090,10 +1108,12 @@ class SpellsMixin:
         lv = self._sp_lvl_f.currentText()
         homebrew = self._sp_homebrew.isChecked()
         max_castable = None if homebrew else self._max_castable_spell_level()
+        # spells already on your list aren't offered again (same as Android)
+        known = set(self.char.get("spells_known", []))
         for i in range(self._sp_browser.count()):
             item = self._sp_browser.item(i); sp = item.data(Qt.UserRole)
             if not sp: continue
-            ok = not q or q in sp["name"].lower()
+            ok = (not q or q in sp["name"].lower()) and sp["name"] not in known
             if cl != "All Classes": ok = ok and cl in sp.get("classes",[])
             if not homebrew:
                 mine = self._char_spell_classes()
@@ -1246,6 +1266,8 @@ class SpellsMixin:
         spell_to_class, class_order = self._compute_spell_class_attribution()
         self._relayout_my_spells_by_class(spell_to_class, class_order)
         self._refresh_my_spells_class_filter(class_order)
+        self._filter_my_spells()        # the empty state goes once a spell is added
+        self._filter_spell_browser()    # ...and the browser stops offering it
         self._mark_dirty()
 
     def _filter_my_spells(self, text: str = None):
@@ -1361,9 +1383,11 @@ class SpellsMixin:
         room left for Druid spells as a result, and vice versa."""
         name = row.spell.get("name", "")
         prepared = self.char.setdefault("spells_prepared", [])
+        from dnd_app.core.calculator import can_ritual_cast as _crc
         if not checked:
             if name in prepared:
                 prepared.remove(name)
+            row.set_can_ritual(_crc(self.char, row.spell))   # a Cleric's ritual needs preparing
             self._refresh_spell_count_labels()
             self._regroup_after_prep_change()
             self._mark_dirty()
@@ -1388,6 +1412,7 @@ class SpellsMixin:
                                 f"— unprepare another {target} spell first")
                     return
         prepared.append(name)
+        row.set_can_ritual(_crc(self.char, row.spell))
         self._refresh_spell_count_labels()
         self._regroup_after_prep_change()
         self._mark_dirty()
@@ -1475,6 +1500,11 @@ class SpellsMixin:
     def _remove_spell_row(self, row):
         lvl = row.spell["level"]
         name = row.spell["name"]
+        # granted spells (domain, oath, racial, feat...) aren't removable --
+        # the row has no remove button, this is the backstop
+        if name in self.char.get("bonus_spells", []):
+            self._toast(f"{name} comes from your class, race or a feat — it can't be removed")
+            return
         self._spell_rows.remove(row)
         self._my_spells_lay.removeWidget(row); row.setParent(None); row.deleteLater()
         if name in self.char.get("spells_known",[]): self.char["spells_known"].remove(name)
@@ -1487,6 +1517,7 @@ class SpellsMixin:
         # Was missing: the known/prepared count label never updated on removal,
         # so it looked like the spell was still "counted" even after deletion.
         self._refresh_spell_count_labels()
+        self._filter_spell_browser()   # it can be learned again, so the browser offers it
         self._mark_dirty()
 
     def _spell_tooltip_text(self, spell: dict) -> str:
@@ -1525,6 +1556,15 @@ class SpellsMixin:
         if block_reason:
             self._toast(f"Can't cast {spell['name']} — {block_reason}")
             return
+        from dnd_app.core.calculator import can_ritual_cast, spellcasting_block_reason
+        why = spellcasting_block_reason(self.char)   # raging, incapacitated...
+        if why:
+            self._toast(f"Can't cast {spell['name']} — {why}")
+            return
+        if not can_ritual_cast(self.char, spell):
+            self._toast(f"Can't cast {spell['name']} as a ritual — Cleric, Druid and Artificer "
+                        f"rituals must be prepared first")
+            return
         base_time = spell.get("casting_time", spell.get("cast_time", "1 action"))
         # a ritual casting still needs concentration (Detect Magic, ...)
         if spell.get("concentration"):
@@ -1543,6 +1583,14 @@ class SpellsMixin:
         block_reason = spell_component_block_reason(self.char, spell)
         if block_reason:
             self._toast(f"Can't cast {spell['name']} — {block_reason}")
+            return
+        from dnd_app.core.calculator import spell_needs_preparing, spellcasting_block_reason
+        why = spellcasting_block_reason(self.char)   # raging, incapacitated...
+        if why:
+            self._toast(f"Can't cast {spell['name']} — {why}")
+            return
+        if spell_needs_preparing(self.char, spell):
+            self._toast(f"{spell['name']} isn't prepared — prepare it first to cast it")
             return
         lvl = spell["level"]
         is_cantrip = (lvl == 0)
@@ -1755,6 +1803,11 @@ class SpellsMixin:
             self._conc_lbl.setText("—")
             self._conc_lbl.setToolTip("")
             self._conc_lbl.setStyleSheet(f"color:{TEXT2};font-size:{FS_BODY}px;background:transparent;border:none;")
+        # nothing to drop or save for while not concentrating
+        for b in (getattr(self, "_conc_drop_btn", None), getattr(self, "_conc_save_btn", None)):
+            if b is not None:
+                b.setEnabled(bool(spell))
+                b.setToolTip("" if spell else "Not concentrating on anything")
         if hasattr(self, "_combat_conc_lbl"):
             if spell:
                 self._combat_conc_lbl.setText(f"Concentrating: {spell}")

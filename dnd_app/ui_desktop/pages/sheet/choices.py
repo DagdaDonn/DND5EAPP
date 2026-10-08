@@ -310,6 +310,9 @@ class ChoicesMixin:
                 _icons.set_button_icon(b, icon, 13)
             b.clicked.connect(fn)
             title_row.addWidget(b)
+            # kept so _refresh_class_buttons() can grey out the ones that
+            # can't do anything right now (level 20, a lone level-1 class...)
+            self.__dict__.setdefault("_class_action_btns", {})[label] = (b, tip)
         cls_cl.addLayout(title_row)
 
         # Subclass selectors — one per active class
@@ -426,8 +429,29 @@ class ChoicesMixin:
         column.addWidget(bottom_half)
         column.addStretch(1)   # spare height goes below the last card
         self._choices_top_half = top_half
+        self._refresh_class_buttons()
 
         return tab
+
+    def _refresh_class_buttons(self):
+        """Level Up / Level Down / Remove Class only when they can act:
+        no levelling past character level 20, no levelling down a single
+        level-1 class, no removing your only class."""
+        btns = getattr(self, "_class_action_btns", {})
+        if not btns:
+            return
+        from dnd_app.core.character import level_up_block_reason
+        classes = self.char.get("classes", [])
+        states = {
+            "Level Up / Multiclass": level_up_block_reason(self.char),
+            "Level Down": ("" if any(c.get("level", 1) > 1 for c in classes)
+                           else "Every class is at level 1 — nothing to level down"),
+            "Remove Class": "" if len(classes) > 1 else "You can't remove your only class",
+        }
+        for label, (b, tip) in btns.items():
+            why = states.get(label, "")
+            b.setEnabled(not why)
+            b.setToolTip(why[0].upper() + why[1:] if why else tip)
 
     def _on_choices_changed(self):
         """Called when choices are made in the LevelUpPanel."""

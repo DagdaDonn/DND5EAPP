@@ -35,6 +35,10 @@ from dnd_app.core.multiclass import (
 from dnd_app.core.builder import rebuild
 from dnd_app.core.controller import CharacterController
 from dnd_app.core.magic_items import concentration_save, start_concentration, drop_concentration
+from dnd_app.core.dying import (
+    take_damage, heal, heal_block_reason, set_death_saves,
+    revive, death_cause, death_status_text, STABLE_MESSAGE,
+)
 from dnd_app.core.spell_components import spell_component_block_reason
 from dnd_app.core.save_load import (
     save_character, load_character, list_saved_characters, character_filename, validate_character,
@@ -80,31 +84,21 @@ class CombatMixin:
 
     @staticmethod
     def _death_status_text(succ: int, fail: int) -> str:
-        if fail >= 3:
-            return "DEAD"
-        if succ >= 3:
-            return "STABLE"
-        if fail == 2:
-            return "1 more failure = death"
-        if succ >= 1 or fail >= 1:
-            return f"{succ} success, {fail} failure" + ("s" if fail != 1 else "")
-        return "Rolling to live or die"
+        # core/dying.py, shared with Android (desktop text uses an em dash)
+        return death_status_text(succ, fail).replace(" -- ", " — ")
 
     def _on_death_save_changed(self):
+        """A death save pip was ticked: store it (core/dying.py) and show
+        what it means -- third failure, dead; third success, stable (still
+        at 0 HP and unconscious, so the pips stay up until healed)."""
         succ = sum(1 for cb in self._death_success if cb.isChecked())
         fail = sum(1 for cb in self._death_fail if cb.isChecked())
-        self.char["death_saves"] = {"successes": min(3, succ), "failures": min(3, fail)}
-        if hasattr(self, "_death_status_lbl"):
-            self._death_status_lbl.setText(self._death_status_text(succ, fail))
-        if fail >= 3:
+        verdict = set_death_saves(self.char, succ, fail)
+        self._refresh_death_and_conditions()
+        if verdict == "dead":
             self._show_death_screen()
-        elif succ >= 3:
-            # Stable at 1 HP
-            self.char["current_hp"] = 1
-            self._hp_current_hp.setValue(1)
-            self.char["death_saves"] = {"successes": 0, "failures": 0}
-            # Only update model — don't trigger full combat rebuild
-            QMessageBox.information(self, "Stable", "You are stable! You regain consciousness with 1 HP.")
+        elif verdict == "stable":
+            QMessageBox.information(self, "Stable", STABLE_MESSAGE.replace(" -- ", " — "))
         self._mark_dirty()
 
     def _show_death_screen(self):
@@ -134,10 +128,18 @@ class CombatMixin:
             "font-family:'Georgia','Times New Roman',serif;"
         )
         vl.addWidget(you_died)
-        # Massive damage rule note
-        note = _lbl("Instant death: damage ≥ 2× max HP in one hit", "#aa3333", FS_BODY,
-                    align=Qt.AlignCenter, wrap=False)
-        vl.addWidget(note)
+        # What killed them: failed saves, exhaustion 6 or massive damage.
+        # Plain light text under the title (dark red vanished into the
+        # black overlay). Fixed colour: the overlay is black on every theme.
+        note = QLabel(death_cause(self.char))
+        note.setAlignment(Qt.AlignCenter); note.setWordWrap(True)
+        # a fixed width, so the wrapped height is measured at the width it gets
+        note.setFixedWidth(min(720, max(260, self.width() - 80)))
+        note.setStyleSheet(
+            f"QLabel{{color:#e6d3d3;font-size:{FS_BODY + 2}px;font-weight:600;"
+            f"background:transparent;border:none;"
+            f"font-family:'Georgia','Times New Roman',serif;}}")
+        vl.addWidget(note, alignment=Qt.AlignCenter)
         vl.addSpacing(32)
         revive_btn = QPushButton("  Revive  ")
         revive_btn.setFixedSize(200, 56)
@@ -150,10 +152,7 @@ class CombatMixin:
             overlay.deleteLater()
             if hasattr(self, "_toast_lbl"):
                 self._toast_lbl.hide()
-            self.char["is_dead"] = False
-            self.char["current_hp"] = 1
-            self.char["death_saves"] = {"successes": 0, "failures": 0}
-            self.char["exhaustion"] = 0          # reviving clears exhaustion
+            revive(self.char)                    # 1 HP, saves and exhaustion cleared
             self._hp_current_hp.setValue(1)
             if hasattr(self, "_exh_combo"):
                 self._exh_combo.blockSignals(True)
@@ -200,10 +199,13 @@ class CombatMixin:
         Never rebuilds widgets — only calls setChecked. Never touches HP spinboxes."""
         if not hasattr(self, "_death_success"):
             return
-        # Show/hide the death-saves container based on HP
+        # Show/hide the death-saves container based on HP -- and when it
+        # comes or goes, make room for it (or give the room back)
         at_zero = self.char.get("current_hp", 1) <= 0
         if hasattr(self, "_death_saves_container"):
-            self._death_saves_container.setVisible(at_zero)
+            if self._death_saves_container.isHidden() == at_zero:
+                self._death_saves_container.setVisible(at_zero)
+                QTimer.singleShot(0, lambda down=at_zero: self._make_room_for_death_saves(down))
         ds = self.char.get("death_saves", {"successes": 0, "failures": 0})
         for i, cb in enumerate(self._death_success):
             cb.blockSignals(True)
@@ -222,6 +224,30 @@ class CombatMixin:
                 cb.blockSignals(True)
                 cb.setChecked(cond in active)
                 cb.blockSignals(False)
+
+    def _make_room_for_death_saves(self, down: bool):
+        """At 0 HP the death saves card appears under the HP boxes, and on a
+        laptop-height window the combat tab's top half is too short for it.
+          1. Going down: if the top half is shorter than it now needs, take
+             the height from the action list (no actions while unconscious
+             anyway) and remember the old split.
+          2. Back up: put the old split back."""
+        th = getattr(self, "_combat_top_half", None)
+        sp = th.parentWidget() if th is not None else None
+        if not isinstance(sp, QSplitter):
+            return
+        if down:
+            sizes = sp.sizes()
+            need = th.minimumSizeHint().height()
+            if not sum(sizes) or sizes[0] >= need:
+                return
+            self._split_before_down = sizes
+            self._action_tabs.setMinimumHeight(120)
+            sp.setSizes([need, max(120, sum(sizes) - need)])
+        elif getattr(self, "_split_before_down", None):
+            sp.setSizes(self._split_before_down)
+            self._split_before_down = None
+            self._action_tabs.setMinimumHeight(320)
 
     def _on_hd_changed(self, hd_key: str, value: int, total: int):
         """User changed a hit-dice spinbox."""
@@ -566,12 +592,13 @@ class CombatMixin:
         # live status line, and per-pip tooltips explaining the actual
         # rule.
         self._death_saves_container = QFrame()
+        self._death_saves_container.setObjectName("deathSaves")
         self._death_saves_container.setStyleSheet(
-            f"QFrame{{background:{qa(CRIMSON,0x14)};border:2px solid {qa(CRIMSON,0x66)};"
+            f"QFrame#deathSaves{{background:{qa(CRIMSON,0x14)};border:2px solid {qa(CRIMSON,0x66)};"
             f"border-radius:8px;}}")
         self._death_saves_container.setVisible(False)
         dsl = QVBoxLayout(self._death_saves_container)
-        dsl.setContentsMargins(12,10,12,10); dsl.setSpacing(6)
+        dsl.setContentsMargins(12,8,12,8); dsl.setSpacing(4)
 
         ds_hdr = QHBoxLayout(); ds_hdr.setSpacing(8)
         ds_hdr.addWidget(_icons.icon_header("skull", _lbl("DEATH SAVING THROWS", CRIM2, FS_SMALL, bold=True, wrap=False)))
@@ -584,39 +611,27 @@ class CombatMixin:
                    "taking no other action. 10 or higher: success. Below 10: failure. "
                    "A natural 20 regains 1 HP instead; a natural 1 counts as two failures. "
                    "3 successes: stable at 0 HP. 3 failures: dead.")
-        pips_row = QHBoxLayout(); pips_row.setSpacing(18)
+        # One row: SUCCESSES ooo   FAILURES ooo -- the card has to fit
+        # under the HP boxes on a laptop-height window.
+        pips_row = QHBoxLayout(); pips_row.setSpacing(6)
 
-        succ_block = QVBoxLayout(); succ_block.setSpacing(4)
-        succ_block.addWidget(_lbl("SUCCESSES", GREEN2, FS_TINY, bold=True, wrap=False))
-        succ_pips = QHBoxLayout(); succ_pips.setSpacing(5)
-        self._death_success = [QCheckBox() for _ in range(3)]
-        for cb in self._death_success:
-            cb.setFixedSize(24,24)
-            cb.setToolTip(pip_tip)
-            cb.setStyleSheet(
-                f"QCheckBox::indicator{{width:22px;height:22px;border-radius:11px;"
-                f"border:2px solid {GREEN};background:{BG};}}"
-                f"QCheckBox::indicator:hover{{border-color:{GREEN2};background:{qa(GREEN,0x22)};}}"
-                f"QCheckBox::indicator:checked{{background:{GREEN2};border-color:{GREEN2};}}")
-            succ_pips.addWidget(cb)
-        succ_block.addLayout(succ_pips)
-        pips_row.addLayout(succ_block)
+        def _pips(title, color, color2, attr):
+            pips_row.addWidget(_lbl(title, color2, FS_TINY, bold=True, wrap=False))
+            boxes = [QCheckBox() for _ in range(3)]
+            for cb in boxes:
+                cb.setFixedSize(24,24)
+                cb.setToolTip(pip_tip)
+                cb.setStyleSheet(
+                    f"QCheckBox::indicator{{width:22px;height:22px;border-radius:11px;"
+                    f"border:2px solid {color};background:{BG};}}"
+                    f"QCheckBox::indicator:hover{{border-color:{color2};background:{qa(color,0x22)};}}"
+                    f"QCheckBox::indicator:checked{{background:{color2};border-color:{color2};}}")
+                pips_row.addWidget(cb)
+            setattr(self, attr, boxes)
 
-        fail_block = QVBoxLayout(); fail_block.setSpacing(4)
-        fail_block.addWidget(_lbl("FAILURES", CRIM2, FS_TINY, bold=True, wrap=False))
-        fail_pips = QHBoxLayout(); fail_pips.setSpacing(5)
-        self._death_fail = [QCheckBox() for _ in range(3)]
-        for cb in self._death_fail:
-            cb.setFixedSize(24,24)
-            cb.setToolTip(pip_tip)
-            cb.setStyleSheet(
-                f"QCheckBox::indicator{{width:22px;height:22px;border-radius:11px;"
-                f"border:2px solid {CRIMSON};background:{BG};}}"
-                f"QCheckBox::indicator:hover{{border-color:{CRIM2};background:{qa(CRIMSON,0x22)};}}"
-                f"QCheckBox::indicator:checked{{background:{CRIM2};border-color:{CRIM2};}}")
-            fail_pips.addWidget(cb)
-        fail_block.addLayout(fail_pips)
-        pips_row.addLayout(fail_block)
+        _pips("SUCCESSES", GREEN, GREEN2, "_death_success")
+        pips_row.addSpacing(14)
+        _pips("FAILURES", CRIMSON, CRIM2, "_death_fail")
         pips_row.addStretch()
         dsl.addLayout(pips_row)
         hpcl.addWidget(self._death_saves_container)
@@ -972,144 +987,83 @@ class CombatMixin:
 
 
     def _do_damage(self):
+        """Damage button. A Wild Shape beast form takes it from its own
+        pool first; everything about your own hit points (temp HP, massive
+        damage, death saves, rage, concentration) is core/dying.py's
+        take_damage(), the same rules as the Android sheet."""
         amt = self._hp_amt.value()
-        cur = self._hp_current_hp.value()
-        wild = self.char.get("_wildshape_active")
-        max_hp = self.char.get("max_hp", 1)
-        if wild:
-            from dnd_app.data.phbCommon.statblocks import WILDSHAPE_BEASTS
-            beast = WILDSHAPE_BEASTS.get(wild, {})
-            max_hp = beast.get("hp", 1)
-        # Instant death: damage ≥ 2× max HP (PHB p.197) — while Wild Shaped,
-        # this checks against the BEAST's max HP (the creature actually
-        # taking the hit), and simply reverts you to your normal form at
-        # full awareness rather than killing you outright, per the Wild
-        # Shape reversion rule; it only threatens actual death once
-        # applied to your own HP after reverting.
-        if amt >= max_hp * 2 and not wild:
-            self.char["current_hp"] = 0
-            self._hp_current_hp.setValue(0)
-            self.ctrl.update("current_hp", 0, rebuild_char=False)
-            self._show_death_screen()
+        if amt <= 0:
             return
-        # Temporary HP absorbs damage first (PHB p.198) — beast forms
-        # don't have their own temp HP pool, only your own does, so this
-        # only applies when not Wild Shaped.
-        temp = self._hp_temp_hp.value()
-        absorbed = 0
-        if temp > 0 and not wild:
-            absorbed = min(temp, amt)
-            new_temp = temp - absorbed
-            self._hp_temp_hp.setValue(new_temp)
-            self.char["temp_hp"] = new_temp
-            amt -= absorbed
-
-        if wild:
-            # Wild Shape (PHB p.66): if this damage would reduce the beast
-            # to 0 HP or below, you revert to your normal form immediately,
-            # and any EXCESS damage (beyond what the beast's remaining HP
-            # could absorb) carries over to your own HP. You aren't
-            # knocked unconscious unless that excess itself drops your own
-            # HP to 0.
+        if self.char.get("_wildshape_active"):
+            # Wild Shape (PHB p.66): the beast's hit points take the hit.
+            # Reaching 0 reverts you to your normal form, and the damage
+            # left over carries on to your own hit points.
+            cur = self._hp_current_hp.value()          # the beast's HP
             if amt >= cur:
                 excess = amt - cur
                 self._wildshape_revert()
-                own_max = self.char.get("max_hp", 1)
-                own_cur = self.char.get("current_hp", own_max)
-                own_new = max(0, own_cur - excess)
-                self._hp_current_hp.setValue(own_new)
-                self.ctrl.update("current_hp", own_new, rebuild_char=False)
-                self._toast(f"Beast form dropped to 0 HP — reverted to normal form, "
-                            f"{excess} excess damage carried over")
-                if excess >= own_max * 2:
-                    self._show_death_screen()
-                    return
-            else:
-                new_hp = cur - amt
-                self._hp_current_hp.setValue(new_hp)
-                self.char["_wildshape_hp"] = new_hp
-                self._mark_dirty()
-            self._toast(f"Beast form took {amt} damage" if amt else "No damage")
-            return
-
-        # Rage Beyond Death (Zealot Barbarian, 14th level): while raging,
-        # damage that would drop you to 0 instead leaves you at 1 — unless
-        # the overkill portion of the damage (what's left after your
-        # current HP is exhausted) itself exceeds your max HP, in which
-        # case you're killed outright even through this protection.
-        # Doesn't apply if Rage isn't currently active (toggled off = the
-        # protection ends with it).
-        from dnd_app.core.character import class_levels
-        barb_lvl = class_levels(self.char).get("Barbarian", 0)
-        is_zealot_14 = (barb_lvl >= 14
-                         and any("zealot" in sub.lower()
-                                 for cl in self.char.get("classes", [])
-                                 for sub in [cl.get("subclass", "")]))
-        is_raging = "Rage" in self.char.get("active_effects", [])
-        overkill = amt - cur
-        would_drop_to_0 = cur - amt <= 0
-
-        if is_zealot_14 and is_raging and would_drop_to_0 and overkill < max_hp:
-            new_hp = 1
-            self._toast("Rage Beyond Death: damage would drop you to 0, but your rage "
-                        "keeps you standing at 1 HP")
-        elif (barb_lvl >= 11 and is_raging and would_drop_to_0 and overkill < max_hp):
-            # Relentless Rage: a CON save (not a guarantee like Rage Beyond
-            # Death) to drop to 1 HP instead of 0. DC starts at 10 and
-            # rises by 5 each use since the last short/long rest.
-            import random
-            uses = self.char.get("_relentless_rage_uses", 0)
-            dc = 10 + 5 * uses
-            con_mod = ability_mod(self.char, "CON")
-            roll = random.randint(1, 20)
-            total = roll + con_mod
-            self.char["_relentless_rage_uses"] = uses + 1
+                lead = (f"Beast form dropped to 0 HP — reverted to normal form, "
+                        f"{excess} excess damage carried over")
+                self._after_damage(take_damage(self.char, excess), lead)
+                return
+            self._hp_current_hp.setValue(cur - amt)
+            self.char["_wildshape_hp"] = cur - amt
             self._mark_dirty()
-            if total >= dc:
-                new_hp = 1
-                self._toast(f"Relentless Rage: DC {dc} CON save — rolled {roll}{sign(con_mod)}"
-                            f" = {total}, SUCCESS — you drop to 1 HP instead of 0")
-            else:
-                new_hp = 0
-                self._toast(f"Relentless Rage: DC {dc} CON save — rolled {roll}{sign(con_mod)}"
-                            f" = {total}, FAILED — you drop to 0 HP")
-        else:
-            new_hp = max(0, cur - amt)
-        self._hp_current_hp.setValue(new_hp)
-        self.ctrl.update("current_hp", new_hp, rebuild_char=False)
-        if absorbed and amt == 0:
-            self._toast(f"Temp HP absorbed all {absorbed} damage")
-        elif absorbed:
-            self._toast(f"Temp HP absorbed {absorbed}, took {amt} damage")
+            self._toast(f"Beast form took {amt} damage")
+            if self.char.get("concentration", {}).get("spell"):
+                self._concentration_save_prompt(max(10, amt // 2))
+            return
+        self._after_damage(take_damage(self.char, amt))
 
+    def _after_damage(self, res: dict, lead: str = ""):
+        """Show what take_damage() did: the HP boxes, one toast, the death
+        screen, and the concentration save it asks for."""
+        # 1. Every HP widget follows the character (one controller refresh).
+        self.ctrl.update("current_hp", self.char.get("current_hp", 0), rebuild_char=False)
+        self._refresh_concentration()
+        self._mark_dirty()
+        # 2. Dead: the YOU DIED screen says why.
+        if res["died"]:
+            self._show_death_screen()
+            return
+        # 3. One toast with everything that happened, in order.
+        notes = ([lead] if lead else []) + [n.replace(" -- ", " — ") for n in res["notes"]]
+        if notes:
+            self._toast("\n".join(notes))
+        # 4. Still concentrating: roll to keep it.
+        if res["concentration_dc"]:
+            self._concentration_save_prompt(res["concentration_dc"])
+
+    def _concentration_save_prompt(self, dc: int):
+        """Took damage while concentrating: enter the d20, the CON save
+        bonus is added, and the spell drops on a miss."""
         conc_spell = self.char.get("concentration", {}).get("spell")
-        if conc_spell:
-            roll, ok = QInputDialog.getInt(
-                self, "Concentration Save",
-                f"Concentrating on {conc_spell}. Enter your d20 roll (modifier applied automatically):",
-                10, 1, 30,
+        if not conc_spell:
+            return
+        roll, ok = QInputDialog.getInt(
+            self, "Concentration Save",
+            f"Concentrating on {conc_spell} — DC {dc}. Enter your d20 roll "
+            f"(modifier applied automatically):",
+            10, 1, 30,
+        )
+        if not ok:
+            return
+        from dnd_app.core.calculator import get_saving_throw_bonus
+        total = roll + get_saving_throw_bonus(self.char, "CON")
+        if total >= dc:
+            QMessageBox.information(
+                self, "Concentration",
+                f"Maintained on {conc_spell}.\n{roll} + modifier = {total} vs DC {dc}",
             )
-            if ok:
-                from dnd_app.core.calculator import get_saving_throw_bonus
-                import random
-                if roll <= 0:
-                    roll = random.randint(1, 20)
-                dc = max(10, amt // 2)
-                total = roll + get_saving_throw_bonus(self.char, "CON")
-                if total >= dc:
-                    QMessageBox.information(
-                        self, "Concentration",
-                        f"Maintained on {conc_spell}.\n{roll} + modifier = {total} vs DC {dc}",
-                    )
-                else:
-                    drop_concentration(self.char)
-                    self.ctrl.update("concentration", self.char["concentration"], rebuild_char=False)
-                    QMessageBox.warning(
-                        self, "Concentration Broken",
-                        f"Failed ({total} vs DC {dc}). Dropped {conc_spell}.",
-                    )
-                    self._refresh_concentration()
-                    self._toast("Your focus shatters like cheap glass.")
+            return
+        drop_concentration(self.char)
+        self.ctrl.update("concentration", self.char["concentration"], rebuild_char=False)
+        QMessageBox.warning(
+            self, "Concentration Broken",
+            f"Failed ({total} vs DC {dc}). Dropped {conc_spell}.",
+        )
+        self._refresh_concentration()
+        self._toast("Your focus shatters like cheap glass.")
         self._mark_dirty()
 
     def _roll_initiative(self):
@@ -1128,16 +1082,17 @@ class CombatMixin:
             self.char["_wildshape_hp"] = new_hp
             self._mark_dirty()
             return
-        mx = self._hp_max_hp.value()
-        new_hp = min(mx, cur + amt)
-        # Healing from 0 HP: regain consciousness, death saves reset (PHB p.197)
-        if cur == 0 and new_hp > 0:
-            self.char["death_saves"] = {"successes": 0, "failures": 0}
-            for cb in self._death_success + self._death_fail:
-                cb.setChecked(False)
-            self._toast(f"Back on your feet! Death saves reset")
-        self._hp_current_hp.setValue(new_hp)
-        self.ctrl.update("current_hp", new_hp, rebuild_char=False)
+        # The dead need Revive, not a potion. Otherwise core/dying.py's
+        # heal(): up to max HP, and back up from 0 resets the death saves.
+        why = heal_block_reason(self.char)
+        if why:
+            self._toast(why.replace(" -- ", " — "))
+            return
+        note = heal(self.char, amt)
+        self.ctrl.update("current_hp", self.char["current_hp"], rebuild_char=False)
+        self._mark_dirty()
+        if note:
+            self._toast(note)
 
     def _attack_d20(self):
         """The d20 for an attack roll, with condition advantage/disadvantage
@@ -1321,12 +1276,18 @@ class CombatMixin:
         if name is None:
             self._toast(f"\"{typed}\" isn't a recognized effect — pick one from the list")
             return
+        from dnd_app.core.calculator import effect_start_problem, on_effect_started
+        why = effect_start_problem(self.char, name)   # Rage in heavy armor
+        if why:
+            self._toast(f"{name}: {why}".replace(" -- ", " — "))
+            return
         self.char.setdefault("active_effects", []).append(name)
+        note = on_effect_started(self.char, name)       # Rage ends concentration
         self.ctrl.refresh()          # AC pill etc. recompute
         self._refresh_effects_list()
         self._apply_turn_state()     # haste chip
         self._mark_dirty()
-        self._toast(f"{name} applied")
+        self._toast(f"{name} applied" + (f" — {note}" if note else ""))
 
     def _remove_active_effect(self, name: str):
         fx = self.char.get("active_effects", [])

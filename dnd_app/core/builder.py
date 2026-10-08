@@ -577,6 +577,28 @@ def rebuild(char: dict) -> None:
         for name in dumped:
             if name not in char.get("spells_known", []):
                 char.setdefault("spells_known", []).append(name)
+    # The list shrinks too: after a level down (or with the class removed)
+    # a Cleric 4 doesn't keep its 3rd-level spells. What the list no longer
+    # reaches goes -- unless something else gives it: a race, feat or
+    # subclass, or a class that picks spells from a list it's on (a
+    # Bard's own pick). Only names this list itself added are looked at,
+    # so the player's own picks are never touched. (_full_list_dump isn't
+    # saved; it covers changes made since the sheet was opened.)
+    from dnd_app.core.character import picking_spell_lists, protected_spells
+    from dnd_app.data.phbCommon.spells import get_spell as _get_spell
+    now_dumped = set()
+    for dumped in full_list_dumped_names.values():
+        now_dumped |= set(dumped)
+    shrunk = set(char.get("_full_list_dump", [])) - now_dumped
+    if shrunk:
+        keep = protected_spells(char)
+        picking = picking_spell_lists(char)
+        def _still_had(name):
+            sp = _get_spell(name)
+            return name in keep or bool(set(sp.get("classes", []) if sp else []) & picking)
+        char["spells_known"] = [n for n in char.get("spells_known", [])
+                                if n not in shrunk or _still_had(n)]
+    char["_full_list_dump"] = sorted(now_dumped)
 
     # ── Known casters: Sorcerer, Bard, Warlock, Ranger, and Eldritch
     # Knight/Arcane Trickster's limited Wizard-list spells ─────────────────
@@ -634,6 +656,13 @@ def rebuild(char: dict) -> None:
                     and sp_name not in prepared_caster_spell_names
                     and sp_name not in char.get("spells_prepared", [])):
                 char.setdefault("spells_prepared", []).append(sp_name)
+
+    # Prepared and starred spells have to be spells the character has: one
+    # dropped from the list (a level down, a removed class, removed by hand)
+    # can't stay prepared, or starred on the Combat tab.
+    have = set(char.get("spells_known", [])) | set(char.get("bonus_spells", []))
+    char["spells_prepared"] = [s for s in char.get("spells_prepared", []) if s in have]
+    char["quick_spells"] = [s for s in char.get("quick_spells", []) if s in have]
 
 
 def _apply_class_feature_mechanics(char: dict, classes: list, edition: str):

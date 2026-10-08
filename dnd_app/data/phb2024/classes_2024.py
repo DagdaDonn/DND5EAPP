@@ -546,7 +546,8 @@ ALL_CLASSES_2024 = [
         },
         subclasses=['Warrior of Mercy', 'Warrior of Shadow', 'Warrior of the Elements', 'Warrior of the Open Hand'],
         resources=[
-            dict(name="Focus Points (Ki)", key="ki", formula="level", reset="SR/LR", track="current_max"),
+            dict(name="Focus Points (Ki)", key="ki", formula="level", reset="SR/LR", track="current_max",
+                 available_at=2),   # Monk's Focus is a 2nd-level feature
             dict(name="Martial Arts Die", key="martial_arts_die", track="info",
                  by_level={1:"d6",5:"d8",11:"d10",17:"d12"}),
         ],

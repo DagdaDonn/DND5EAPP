@@ -37,7 +37,8 @@ from dnd_app.core.calculator import (
     count_active_companion_instances, get_max_active_infusions,
     restore_hit_dice_pool, get_superiority_die, get_infusion_bonus, get_infusion_min_level,
     get_rage_damage, get_onhit_damage_bonuses, get_condition_attack_status,
-    spell_preparing_classes, can_ritual_cast,
+    spell_preparing_classes, can_ritual_cast, spell_needs_preparing,
+    spellcasting_block_reason, effect_start_problem, on_effect_started,
 )
 from dnd_app.data.phbCommon.feature_ui_interactions import TOOLS as SWAP_TOOLS_POOL
 from dnd_app.core.magic_items import (
@@ -46,6 +47,10 @@ from dnd_app.core.magic_items import (
 )
 from dnd_app.core.effects import EFFECT_TABLE, INSTANT_POTION_EFFECTS
 from dnd_app.core.spell_components import spell_component_block_reason
+from dnd_app.core.dying import (
+    take_damage, heal, heal_block_reason, set_death_saves,
+    revive as _revive_char, death_cause, death_status_text, STABLE_MESSAGE,
+)
 from dnd_app.core.effects import has_extra_action
 from dnd_app.ui_desktop.style.theme import THEMES, FONT_SCALES
 from dnd_app.ui_desktop.style.immersive_spells import compute_display_spell_title
@@ -295,6 +300,10 @@ class CharacterSheetBridge(QObject):
         # _sp_homebrew checkbox, which is also plain UI state never
         # saved into the character file.
         self._spell_homebrew = False
+        # DC of the concentration save the last hit is waiting on (0 = none)
+        # -- desktop asks for it straight after the damage; here the
+        # combat screen's concentration row shows a Save button.
+        self._pending_conc_dc = 0
 
     @Slot()
     def refresh(self):
@@ -1461,60 +1470,47 @@ class CharacterSheetBridge(QObject):
     # ── Simple HP adjustments (damage/heal/temp) ───────────────────
     @Slot(int)
     def applyDamage(self, amount: int):
+        """Damage button. A Wild Shape beast form takes it from its own
+        pool first; everything about your own hit points (temp HP, massive
+        damage, death saves, rage, concentration) is core/dying.py's
+        take_damage(), the same rules as desktop's _do_damage()."""
         if amount <= 0:
             return
         char = self.char
         beast = self._active_wildshape_beast()
         if beast:
-            # Wild Shape (PHB p.66): damage hits the beast's HP pool
-            # first. If it would drop the beast to 0 or below, you
-            # revert immediately and any EXCESS damage carries over to
-            # your own HP -- you aren't knocked unconscious unless that
-            # excess itself drops your own HP to 0.
+            # Wild Shape (PHB p.66): the beast's hit points take the hit.
+            # Reaching 0 reverts you to your normal form, and the damage
+            # left over carries on to your own hit points.
             cur = char.get("_wildshape_hp", beast["hp"])
-            if amount >= cur:
-                excess = amount - cur
-                self._revert_wildshape()
-                own_max = char.get("max_hp", 1)
-                own_new = max(0, char.get("current_hp", own_max) - excess)
-                char["current_hp"] = own_new
-                if excess >= own_max * 2:
-                    char["is_dead"] = True
-                    self._maybe_critical_flavor_toast()
-                self.toastRequested.emit(
-                    f"Beast form dropped to 0 HP -- reverted to normal form, "
-                    f"{excess} excess damage carried over")
-            else:
+            if amount < cur:
                 char["_wildshape_hp"] = cur - amount
-            self.statsChanged.emit()
+                if self.isConcentrating:
+                    self._pending_conc_dc = max(10, amount // 2)
+                self.toastRequested.emit(f"Beast form took {amount} damage")
+                self.statsChanged.emit()
+                return
+            excess = amount - cur
+            self._revert_wildshape()
+            self._show_damage(take_damage(char, excess),
+                              f"Beast form dropped to 0 HP -- reverted to normal form, "
+                              f"{excess} excess damage carried over")
             return
-        # Instant death: damage >= 2x max HP (PHB p.197) -- checked
-        # against the raw incoming damage, before temp HP absorption,
-        # matching desktop's _do_damage exactly.
-        max_hp = char.get("max_hp", 1)
-        if amount >= max_hp * 2:
-            char["current_hp"] = 0
-            char["is_dead"] = True
+        self._show_damage(take_damage(char, amount))
+
+    def _show_damage(self, res: dict, lead: str = ""):
+        """Tell the player what take_damage() did: one toast (the death
+        overlay says the rest), and a concentration save to roll."""
+        self._pending_conc_dc = res["concentration_dc"]
+        if res["died"]:
             self._maybe_critical_flavor_toast()
-            self.statsChanged.emit()
-            return
-        # Taking any damage while already at 0 HP is an automatic death
-        # save failure (PHB p.197) -- on top of whatever HP/temp-HP
-        # bookkeeping the hit still does below. Checked before that
-        # bookkeeping runs since dropping to 0 THIS hit doesn't itself
-        # count (only being hit again while ALREADY down does).
-        was_down = char.get("current_hp", 0) <= 0 and not char.get("is_dead")
-        remaining = amount
-        temp = char.get("temp_hp", 0)
-        if temp > 0:
-            absorbed = min(temp, remaining)
-            char["temp_hp"] = temp - absorbed
-            remaining -= absorbed
-        char["current_hp"] = max(0, char.get("current_hp", 0) - remaining)
-        if was_down:
-            self._set_death_saves(self.deathSaveSuccesses, self.deathSaveFailures + 1)
-            if not char.get("is_dead"):
-                self.toastRequested.emit("Damaged at 0 HP -- automatic death save failure")
+        else:
+            notes = ([lead] if lead else []) + res["notes"]
+            if res["concentration_dc"]:
+                notes.append(f"Concentrating on {self.concentratingSpell} -- "
+                             f"DC {res['concentration_dc']} CON save to keep it")
+            if notes:
+                self.toastRequested.emit("\n".join(notes))
         self.statsChanged.emit()
 
     @Slot(int)
@@ -1528,12 +1524,15 @@ class CharacterSheetBridge(QObject):
             char["_wildshape_hp"] = min(beast["hp"], cur + amount)
             self.statsChanged.emit()
             return
-        cur = char.get("current_hp", 0)
-        new_hp = min(char.get("max_hp", 0), cur + amount)
-        if cur == 0 and new_hp > 0:
-            char["death_saves"] = {"successes": 0, "failures": 0}
-            self.toastRequested.emit("Back on your feet! Death saves reset")
-        char["current_hp"] = new_hp
+        # The dead need Revive, not a potion. Otherwise core/dying.py's
+        # heal(): up to max HP, and back up from 0 resets the death saves.
+        why = heal_block_reason(char)
+        if why:
+            self.toastRequested.emit(why)
+            return
+        note = heal(char, amount)
+        if note:
+            self.toastRequested.emit(note)
         self.statsChanged.emit()
 
     @Slot(int)
@@ -1542,9 +1541,10 @@ class CharacterSheetBridge(QObject):
         self.statsChanged.emit()
 
     # ── Death saves ──────────────────────────────────────────────────
-    # Mirrors ui_desktop's combat.py exactly: 3 independent success/
-    # failure checkboxes, shown only at 0 HP, stabilizing at 1 HP on
-    # 3 successes and setting is_dead on 3 failures.
+    # Mirrors ui_desktop's combat.py exactly, both on core/dying.py: 3
+    # independent success/failure checkboxes, shown only at 0 HP. Three
+    # successes: stable (still 0 HP and unconscious until healed); three
+    # failures: dead.
     @Property(bool, notify=statsChanged)
     def showDeathSaves(self):
         return self.char.get("current_hp", 1) <= 0
@@ -1557,25 +1557,18 @@ class CharacterSheetBridge(QObject):
     def deathSaveFailures(self):
         return self.char.get("death_saves", {}).get("failures", 0)
 
-    @staticmethod
-    def _death_status_text(succ: int, fail: int) -> str:
-        if fail >= 3:
-            return "DEAD"
-        if succ >= 3:
-            return "STABLE"
-        if fail == 2:
-            return "1 more failure = death"
-        if succ >= 1 or fail >= 1:
-            return f"{succ} success, {fail} failure" + ("s" if fail != 1 else "")
-        return "Rolling to live or die"
-
     @Property(str, notify=statsChanged)
     def deathStatusText(self):
-        return self._death_status_text(self.deathSaveSuccesses, self.deathSaveFailures)
+        return death_status_text(self.deathSaveSuccesses, self.deathSaveFailures)
 
     @Property(bool, notify=statsChanged)
     def isDead(self):
         return bool(self.char.get("is_dead", False))
+
+    @Property(str, notify=statsChanged)
+    def deathCauseText(self):
+        """What killed them, for the YOU DIED overlay."""
+        return death_cause(self.char) if self.char.get("is_dead") else ""
 
     def _maybe_critical_flavor_toast(self):
         if self.char.get("optional_rules", {}).get("critical_flavor", False):
@@ -1583,15 +1576,11 @@ class CharacterSheetBridge(QObject):
             self.toastRequested.emit(random_death_message())
 
     def _set_death_saves(self, succ: int, fail: int):
-        char = self.char
-        char["death_saves"] = {"successes": min(3, succ), "failures": min(3, fail)}
-        if fail >= 3:
-            char["is_dead"] = True
+        verdict = set_death_saves(self.char, succ, fail)
+        if verdict == "dead":
             self._maybe_critical_flavor_toast()
-        elif succ >= 3:
-            char["current_hp"] = 1
-            char["death_saves"] = {"successes": 0, "failures": 0}
-            self.toastRequested.emit("Stable! You regain consciousness with 1 HP.")
+        elif verdict == "stable":
+            self.toastRequested.emit(STABLE_MESSAGE)
         self.statsChanged.emit()
 
     @Slot(int, bool)
@@ -1606,11 +1595,7 @@ class CharacterSheetBridge(QObject):
 
     @Slot()
     def revive(self):
-        char = self.char
-        char["is_dead"] = False
-        char["current_hp"] = 1
-        char["death_saves"] = {"successes": 0, "failures": 0}
-        char["exhaustion"] = 0
+        _revive_char(self.char)          # 1 HP, saves and exhaustion cleared
         self.statsChanged.emit()
 
     # ── Exhaustion ───────────────────────────────────────────────────
@@ -1848,7 +1833,15 @@ class CharacterSheetBridge(QObject):
         if effect in active:
             active.remove(effect)
         else:
+            why = effect_start_problem(self.char, effect)   # Rage in heavy armor
+            if why:
+                self.toastRequested.emit(f"{effect}: {why}")
+                self.statsChanged.emit()   # the toggle shows off again
+                return
             active.append(effect)
+            note = on_effect_started(self.char, effect)    # Rage ends concentration
+            if note:
+                self.toastRequested.emit(f"{effect}: {note}")
         self.ctrl.refresh()
         self.statsChanged.emit()
 
@@ -2226,6 +2219,7 @@ class CharacterSheetBridge(QObject):
     def knownSpells(self):
         prepared = set(self.char.get("spells_prepared", []))
         quick = set(self.char.get("quick_spells", []))
+        granted = set(self.char.get("bonus_spells", []))
         out = []
         # cantrips first, then by spell level, then by name
         names = sorted(self.char.get("spells_known", []),
@@ -2238,7 +2232,10 @@ class CharacterSheetBridge(QObject):
                 "level": sp.get("level", 0),
                 "levelText": "Cantrip" if sp.get("level", 0) == 0 else f"Level {sp.get('level')}",
                 "school": sp.get("school", ""),
-                "prepared": name in prepared,
+                # granted by a subclass/race/feat: always prepared, can't
+                # be removed (the hold menu leaves those options out)
+                "granted": name in granted,
+                "prepared": name in prepared or name in granted,
                 "concentration": bool(sp.get("concentration")),
                 "ritual": bool(sp.get("ritual")),
                 "pinned": name in quick,
@@ -2247,8 +2244,25 @@ class CharacterSheetBridge(QObject):
                 "preparable": bool(spell_preparing_classes(self.char, sp)),
                 # Cast offers "as a ritual" only when this character can
                 "canRitual": bool(sp) and can_ritual_cast(self.char, sp),
+                # a prepared caster's leveled spell must be prepared first
+                "needsPreparing": bool(sp) and spell_needs_preparing(self.char, sp),
             })
         return out
+
+    @Property(list, notify=statsChanged)
+    def spellLimits(self):
+        """How many spells/cantrips each casting class can know or prepare,
+        and how many it has -- the same numbers as desktop's Spells Known /
+        Prepared card (SpellsMixin._spell_limits). One map per class:
+        label, kind ("known"/"prepared"), current, max, ability,
+        cantrips, cantripMax."""
+        try:
+            rows = _SpellCapsHelper(self.char)._spell_limits()
+        except Exception:
+            return []
+        return [{"label": r["label"], "kind": r["kind"], "current": r["current"], "max": r["max"],
+                 "ability": r["ability"], "cantrips": r["cantrips"], "cantripMax": r["cantrip_max"]}
+                for r in rows]
 
     @Property(list, notify=statsChanged)
     def unavailableFavourites(self):
@@ -2536,10 +2550,16 @@ class CharacterSheetBridge(QObject):
     @Slot(str)
     def removeKnownSpell(self, name: str):
         char = self.char
+        if name in char.get("bonus_spells", []):
+            # a domain/oath/racial/feat spell is part of the character, not a pick
+            self.toastRequested.emit(f"{name} comes from your class, race or a feat -- it can't be removed")
+            return
         if name in char.get("spells_known", []):
             char["spells_known"].remove(name)
         if name in char.get("spells_prepared", []):
             char["spells_prepared"].remove(name)
+        if name in char.get("quick_spells", []):
+            char["quick_spells"].remove(name)   # no starring a spell you no longer have
         self.statsChanged.emit()
 
     @Slot(str, bool)
@@ -2738,16 +2758,24 @@ class CharacterSheetBridge(QObject):
                 if display in _desk.RESOURCE_POOL_TOGGLES and display in fx:
                     self.toastRequested.emit(f"{display} already active -- end it from its resource row")
                     return
+                # e.g. Rage in heavy armor -- refused before a use is spent
+                why = effect_start_problem(char, display)
+                if why:
+                    self.toastRequested.emit(f"{display}: {why}")
+                    return
                 cur = res.get("current", 0)
                 if cur <= 0:
                     self.toastRequested.emit(f"{display}: no uses left (recharges on {res.get('reset', 'rest')})")
                     return
                 res["current"] = cur - 1
+                note = ""
                 if display in _desk.RESOURCE_POOL_TOGGLES and display not in fx:
                     fx.append(display)
+                    note = on_effect_started(char, display)   # Rage ends concentration
                     self.ctrl.refresh()
                 self._mark_turn_used(bucket)
-                self.toastRequested.emit(f"Used {display} ({res['current']}/{res.get('current_max')} left)")
+                self.toastRequested.emit(f"Used {display} ({res['current']}/{res.get('current_max')} left)"
+                                         + (f" -- {note}" if note else ""))
                 self.statsChanged.emit()
                 return
         self._mark_turn_used(bucket)
@@ -2859,6 +2887,13 @@ class CharacterSheetBridge(QObject):
         if block_reason:
             self.toastRequested.emit(f"Can't cast {name} -- {block_reason}")
             return
+        why = spellcasting_block_reason(self.char)   # raging, incapacitated...
+        if why:
+            self.toastRequested.emit(f"Can't cast {name} -- {why}")
+            return
+        if spell_needs_preparing(self.char, spell):
+            self.toastRequested.emit(f"{name} isn't prepared -- prepare it first to cast it")
+            return
         lvl = spell.get("level", 0)
         is_cantrip = (lvl == 0)
         ct = (spell.get("cast_time") or "1 action").strip().lower()
@@ -2921,6 +2956,14 @@ class CharacterSheetBridge(QObject):
         if block_reason:
             self.toastRequested.emit(f"Can't cast {name} -- {block_reason}")
             return
+        why = spellcasting_block_reason(self.char)   # raging, incapacitated...
+        if why:
+            self.toastRequested.emit(f"Can't cast {name} -- {why}")
+            return
+        if not can_ritual_cast(self.char, spell):
+            self.toastRequested.emit(f"Can't cast {name} as a ritual -- Cleric, Druid and "
+                                     f"Artificer rituals must be prepared first")
+            return
         base_time = spell.get("cast_time", "1 action")
         # a ritual casting still needs concentration (Detect Magic, ...)
         if spell.get("concentration"):
@@ -2946,12 +2989,29 @@ class CharacterSheetBridge(QObject):
     @Slot(str)
     def startConcentration(self, spell_name: str):
         start_concentration(self.char, spell_name)
+        self._pending_conc_dc = 0
         self.statsChanged.emit()
 
     @Slot()
     def dropConcentration(self):
         drop_concentration(self.char)
+        self._pending_conc_dc = 0
         self.statsChanged.emit()
+
+    @Property(int, notify=statsChanged)
+    def concentrationSaveDc(self):
+        """DC of the concentration save the last hit asks for (0 = none)."""
+        return self._pending_conc_dc if self.isConcentrating else 0
+
+    @Slot()
+    def rollPendingConcentrationSave(self):
+        """Roll the save the last hit asked for (d20 + CON save bonus)."""
+        dc = self.concentrationSaveDc
+        if not dc:
+            return
+        self._pending_conc_dc = 0
+        # concentration_save() takes the damage; DC = max(10, damage // 2)
+        self.rollConcentrationSave(dc * 2)
 
     @Slot(int)
     def rollConcentrationSave(self, damage: int):
@@ -3072,12 +3132,24 @@ class CharacterSheetBridge(QObject):
             return
         old_ids = _desk._all_relevant_choice_ids(self.char)
         entry["level"] -= 1
+        # below its subclass level, a class can't keep a subclass
+        from dnd_app.core.character import drop_subclasses_below_level
+        dropped = drop_subclasses_below_level(self.char)
         new_ids = _desk._all_relevant_choice_ids(self.char)
         _desk._prune_stale_choices(self.char, old_ids - new_ids)
         self.ctrl.refresh()
-        self.toastRequested.emit(f"{class_name} is now level {entry['level']}")
+        msg = f"{class_name} is now level {entry['level']}"
+        for _cn, sub, need in dropped:
+            msg += f" -- {sub} removed until level {need}"
+        self.toastRequested.emit(msg)
         self.statsChanged.emit()
         self.autosaveRequested.emit()
+
+    @Property(bool, notify=statsChanged)
+    def atMaxLevel(self):
+        """Character level 20: Level Up / Multiclass In are greyed out."""
+        from dnd_app.core.character import total_level
+        return total_level(self.char) >= 20
 
     @Property(bool, notify=statsChanged)
     def canRemoveClass(self):
@@ -3089,11 +3161,18 @@ class CharacterSheetBridge(QObject):
         if len(classes) <= 1:
             return
         old_ids = _desk._all_relevant_choice_ids(self.char)
+        removed = next((c for c in classes if c["class"] == class_name), None)
         self.char["classes"] = [c for c in classes if c["class"] != class_name]
+        # Its spells go with it -- only the ones no remaining class could
+        # have (core/character.py). Before the prune, which would hide its
+        # Magical Secrets picks.
+        from dnd_app.core.character import drop_spells_of_removed_class, name_list
+        lost = drop_spells_of_removed_class(self.char, removed) if removed else []
         new_ids = _desk._all_relevant_choice_ids(self.char)
         _desk._prune_stale_choices(self.char, old_ids - new_ids)
         self.ctrl.refresh()
-        self.toastRequested.emit(f"{class_name} removed")
+        self.toastRequested.emit(f"{class_name} removed" + (
+            f", along with its spells: {name_list(lost)}" if lost else ""))
         self.statsChanged.emit()
         self.autosaveRequested.emit()
 
@@ -3605,6 +3684,19 @@ class CharacterSheetBridge(QObject):
         preview = self._preview_short_rest() if rest_type == "short" else self._preview_long_rest()
         return _desk.RestPreviewDialog._build_lines(rest_type, preview)
 
+    @Slot(str, result=str)
+    def restBlockReason(self, rest_type: str):
+        """Why this rest can't be taken right now ("" if it can) -- shown
+        as a toast, and RestFlowDialog doesn't open. A long rest needs at
+        least 1 HP when it starts (core/character.py)."""
+        if rest_type != "long":
+            return ""
+        from dnd_app.core.character import long_rest_block_reason
+        why = long_rest_block_reason(self.char)
+        if why:
+            self.toastRequested.emit(f"Can't take a long rest -- {why}")
+        return why
+
     @Slot(str, result=list)
     def restOptions(self, rest_type: str):
         return list(_desk.RestOptionsDialog._build_options(self.char, rest_type))
@@ -3681,6 +3773,9 @@ class CharacterSheetBridge(QObject):
         if not self.hasCharacter:
             return
         char = self.char
+        from dnd_app.core.character import long_rest_block_reason
+        if long_rest_block_reason(char):   # backstop -- RestFlowDialog checks first
+            return
         char["current_hp"] = char.get("max_hp", 0)
         char["temp_hp"] = 0
         restore_hit_dice_pool(char)
@@ -3888,10 +3983,13 @@ class CharacterSheetBridge(QObject):
 
     @Slot(str)
     def levelUpClass(self, class_name: str):
+        from dnd_app.core.character import level_up_block_reason
+        why = level_up_block_reason(self.char, class_name)   # level 20, total or class
+        if why:
+            self.toastRequested.emit(f"Can't gain a level -- {why}")
+            return
         entry = get_class_entry(self.char, class_name)
         if entry:
-            if entry["level"] >= 20:
-                return
             set_class_level(self.char, class_name, entry["level"] + 1)
         else:
             add_class(self.char, class_name, level=1)

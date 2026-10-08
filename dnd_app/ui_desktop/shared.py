@@ -455,6 +455,10 @@ class SpellRow(QFrame):
                  preparable=True):
         super().__init__(parent)
         self.spell = spell
+        # Granted outside normal choice (a domain/oath/patron spell, a racial
+        # or feat spell): always prepared, and it can't be removed -- it's
+        # part of the class/race/feat, not a pick.
+        self._locked = locked
         # False when none of the character's classes prepares spells from
         # this one's list (a Warlock/Sorcerer/Bard/Ranger spell): it's just
         # known, so there's no Prepared box to show.
@@ -551,6 +555,11 @@ class SpellRow(QFrame):
         rm.setStyleSheet(f"QPushButton{{background:transparent;border:none;border-radius:6px;min-height:0;padding:0;}}"
                          f"QPushButton:hover{{background:{qa(CRIMSON,0x55)};}}")
         rm.clicked.connect(lambda: self.remove.emit(self))
+        if locked:
+            # nothing to remove -- keep the gap, so the row's buttons still
+            # line up with everyone else's
+            sp_policy = rm.sizePolicy(); sp_policy.setRetainSizeWhenHidden(True); rm.setSizePolicy(sp_policy)
+            rm.setVisible(False)
         lay.addWidget(rm)
 
     def set_display_name(self, text: str):
@@ -607,15 +616,26 @@ class SpellRow(QFrame):
         detail_act = menu.addAction(_icons.icon("features"), f"Show Details: {self.spell['name']}")
         menu.addSeparator()
         cast_act  = menu.addAction(_icons.icon("spells"), f"Cast {self.spell['name']}")
+        if not self.is_ready():
+            # a prepared caster's leveled spell has to be prepared first
+            cast_act.setText(f"Cast {self.spell['name']} (prepare it first)")
+            cast_act.setEnabled(False)
         ritual_act = None
         if self.spell.get("ritual") and getattr(self, "_can_ritual", False):
             ritual_act = menu.addAction(
                 _icons.icon("features"), f"Cast {self.spell['name']} as Ritual (no slot, +10 min cast time)")
-        prep_act  = menu.addAction("✓  Toggle Prepared")
+        # cantrips and granted spells are always prepared -- nothing to toggle
+        prep_act = None
+        if self.spell.get("level", 0) > 0 and not self._locked and self._preparable:
+            prep_act = menu.addAction("✓  Toggle Prepared")
         star_act  = menu.addAction("★  Pin to Quick Spells" if not self._pinned else "☆  Unpin from Quick Spells")
-        menu.addSeparator()
-        rm_act    = menu.addAction(_icons.icon("trash"), "Remove from list")
+        rm_act = None
+        if not self._locked:
+            menu.addSeparator()
+            rm_act = menu.addAction(_icons.icon("trash"), "Remove from list")
         action = menu.exec(event.globalPos())
+        if action is None:   # dismissed (and skipped entries above are None too)
+            return
         if action == detail_act:
             from PySide6.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QLabel, QScrollArea, QWidget
             s = self.spell

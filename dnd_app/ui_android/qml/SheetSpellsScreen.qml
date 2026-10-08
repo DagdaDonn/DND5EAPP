@@ -224,6 +224,59 @@ Page {
                 }
             }
 
+            // ── Spells known / prepared: each casting class's limits ──
+            // (the same numbers as desktop's Spells Known / Prepared card)
+            Rectangle {
+                objectName: "spellLimitsCard"
+                visible: sheetBridge.spellLimits.length > 0
+                Layout.fillWidth: true
+                Layout.preferredHeight: limitsCol.implicitHeight + 20
+                radius: 10
+                color: Theme.surf
+                border.color: Theme.border
+                ColumnLayout {
+                    id: limitsCol
+                    x: 12; y: 10
+                    width: parent.width - 24
+                    spacing: 6
+                    Label {
+                        text: "SPELLS KNOWN / PREPARED"
+                        color: Theme.purple2
+                        font.pixelSize: Theme.fsSmall
+                        font.bold: true
+                    }
+                    Repeater {
+                        model: sheetBridge.spellLimits
+                        delegate: RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            Label {
+                                text: modelData.label
+                                color: Theme.text
+                                font.pixelSize: Theme.fsSmall
+                                font.bold: true
+                            }
+                            // over the limit shows in the warning colour
+                            Label {
+                                Layout.fillWidth: true
+                                text: modelData.current + " / " + modelData.max
+                                      + (modelData.kind === "prepared"
+                                         ? " prepared (" + modelData.ability + "+lvl)" : " known")
+                                color: modelData.current > modelData.max ? Theme.amber2 : Theme.text2
+                                font.pixelSize: Theme.fsSmall
+                                wrapMode: Text.WordWrap
+                            }
+                            Label {
+                                visible: modelData.cantripMax > 0
+                                text: "Cantrips " + modelData.cantrips + " / " + modelData.cantripMax
+                                color: modelData.cantrips > modelData.cantripMax ? Theme.amber2 : Theme.text3
+                                font.pixelSize: Theme.fsSmall
+                            }
+                        }
+                    }
+                }
+            }
+
             // ── Known spells ──────────────────────────────────────────
             Label { id: knownAnchor; text: "Known Spells"; color: Theme.gold; font.pixelSize: Theme.fsSmall; font.bold: true; Layout.topMargin: 6 }
             Label {
@@ -319,7 +372,24 @@ Page {
                                     wrapMode: Text.WordWrap
                                 }
                                 Label {
-                                    visible: modelData.level > 0 && modelData.preparable && modelData.prepared
+                                    // granted by a subclass/race/feat: no prep choice, can't be removed
+                                    visible: modelData.granted
+                                    text: "Always prepared"
+                                    color: Theme.teal2
+                                    font.pixelSize: Theme.fsSmall
+                                    font.bold: true
+                                }
+                                Label {
+                                    // why Cast is greyed out (or ritual-only)
+                                    visible: modelData.needsPreparing
+                                    text: modelData.canRitual ? "Not prepared -- castable as a ritual"
+                                                              : "Not prepared -- hold to prepare it"
+                                    color: Theme.text3
+                                    font.pixelSize: Theme.fsSmall
+                                }
+                                Label {
+                                    visible: !modelData.granted && modelData.level > 0
+                                             && modelData.preparable && modelData.prepared
                                     text: "Prepared"
                                     color: Theme.teal2
                                     font.pixelSize: Theme.fsSmall
@@ -342,6 +412,9 @@ Page {
                                 implicitWidth: 64
                                 implicitHeight: 34
                                 text: "Cast"
+                                // an unprepared spell can't be cast -- except as
+                                // a ritual (a Wizard's spellbook), which Cast offers
+                                enabled: !modelData.needsPreparing || modelData.canRitual
                                 onClicked: root.castSpell(modelData)
                             }
                         }
@@ -350,7 +423,7 @@ Page {
             }
             Label {
                 visible: sheetBridge.knownSpells.length > 0
-                text: "Press and hold a spell to prepare, favourite or remove it."
+                text: "Press and hold a spell to prepare, favourite or remove it. Spells marked Always prepared come from your class, race or a feat and stay."
                 color: Theme.text3
                 font.pixelSize: Theme.fsSmall
                 wrapMode: Text.WordWrap
@@ -537,11 +610,14 @@ Page {
         var opts = []
         // cantrips are never prepared, and neither is a spell only a
         // Warlock/Sorcerer/Bard/Ranger casts
-        if (sp.level > 0 && sp.preparable)
+        // Granted spells (domain/oath/racial/feat) are always prepared and
+        // part of the character, so they get neither Prepare nor Remove.
+        if (sp.level > 0 && sp.preparable && !sp.granted)
             opts.push({ key: "prepare", text: sp.prepared ? "Unprepare" : "Prepare" })
         opts.push({ key: "favourite", icon: sp.pinned ? "star" : "star_solid",
                     text: sp.pinned ? "Remove from favourites" : "Add to favourites" })
-        opts.push({ key: "remove", icon: "trash", text: "Remove from spell list" })
+        if (!sp.granted)
+            opts.push({ key: "remove", icon: "trash", text: "Remove from spell list" })
         root.optionsSpell = sp
         spellOptionsDialog.heading = sp.displayName || sp.name
         spellOptionsDialog.options = opts
@@ -566,6 +642,11 @@ Page {
     function castSpell(sp) {
         if (!sp.canRitual) {
             sheetBridge.castSpell(sp.name)
+            return
+        }
+        // not prepared: a ritual is the only way to cast it (a Wizard's spellbook)
+        if (sp.needsPreparing) {
+            sheetBridge.castSpellAsRitual(sp.name)
             return
         }
         root.optionsSpell = sp
