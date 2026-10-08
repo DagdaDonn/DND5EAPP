@@ -7,7 +7,7 @@ from a WSL terminal).
 
 | Script | What it does |
 |---|---|
-| `clean_build_android.bat` | Clean `buildozer android release`: kills leftover build processes, clears old outputs and `/tmp/mimic-app-staging`, re-stages `main.py` + `dnd_app/`, builds, and writes `dist/MIMIC-<version>-arm64-v8a-release.apk` to copy to your phone |
+| `clean_build_android.bat` | Clean `buildozer android release`: kills leftover build processes, clears old outputs and `/tmp/mimic-app-staging`, re-stages `main.py` + `dnd_app/`, builds, and writes `dist/MIMIC.apk` (replacing the last one) to copy to your phone |
 
 First time only (or after moving the repo / reinstalling the SDK or
 NDK), run `packaging\android\setup_buildozer_spec.bat` to write

@@ -101,7 +101,7 @@ p4a's template so `p4a_hook.py` re-patches it from scratch. It then
 dry-runs the hook's Java patch, stages the repo-root `main.py` plus
 `dnd_app/`, runs `buildozer android release` (log in
 `/tmp/mimic-build-*.log`) and converts the AAB into
-`dist/MIMIC-<version>-arm64-v8a-release.apk` with bundletool
+`dist/MIMIC.apk` (replacing the previous build) with bundletool
 (downloaded once to `~/.cache/mimic/`, since `/tmp` is wiped on WSL
 restart) and the debug keystore. It keeps
 `libs/arm64-v8a`, `_python_bundle*` and `other_builds`, so it is not a

@@ -226,11 +226,12 @@ fi
 if bash "$ROOT/deployment/make-android-apk.sh"; then
     APK="$(ls -t "$UI"/bin/*-universal.apk | head -1)"
     mkdir -p "$ROOT/dist"
-    DEST="$ROOT/dist/MIMIC-${APP_VERSION:-unknown}-arm64-v8a-release.apk"
+    # Always the same name, so the newest build replaces the last one
+    DEST="$ROOT/dist/MIMIC.apk"
     cp "$APK" "$DEST"
     echo
     echo "=== BUILD COMPLETE ==="
-    echo "APK: $DEST"
+    echo "APK: $DEST (version ${APP_VERSION:-unknown})"
     echo "Copy it to the phone (e.g. Google Drive) and tap it to install."
 else
     echo "Log: $LOG"
