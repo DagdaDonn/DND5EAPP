@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Entry point for MIMIC's touch-first (Qt Quick/QML) UI. Scaffold --
-currently launches straight into the Race step of the creation wizard;
-see dnd_app/ui_android/README.md for the overall plan.
+"""Entry point for MIMIC's touch-first (Qt Quick/QML) UI: sets up the
+bridges over core/, then loads qml/App.qml, which opens on the Start
+Menu. See dnd_app/ui_android/README.md for how the app is put together.
 """
 import os
 import sys
@@ -36,11 +36,10 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtCore import QUrl, QMetaObject, qInstallMessageHandler, QtMsgType
 
 from dnd_app.core.character import new_character
-from dnd_app.ui_android.bridge.race_wizard import RaceWizardBridge
-from dnd_app.ui_android.bridge.ability_wizard import AbilityWizardBridge
-from dnd_app.ui_android.bridge.class_wizard import ClassWizardBridge
-from dnd_app.ui_android.bridge.equipment_wizard import EquipmentWizardBridge
-from dnd_app.ui_android.bridge.save_load_wizard import SaveLoadBridge
+from dnd_app.ui_android.bridge.wizard import (
+    RaceWizardBridge, AbilityWizardBridge, ClassWizardBridge, EquipmentWizardBridge,
+)
+from dnd_app.ui_android.bridge.save_load import SaveLoadBridge
 from dnd_app.ui_android.bridge.character_sheet import CharacterSheetBridge
 from dnd_app.ui_android.bridge.dice_roller import DiceRollerBridge
 from dnd_app.ui_android.bridge.credits import CreditsBridge

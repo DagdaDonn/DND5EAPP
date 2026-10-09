@@ -83,7 +83,7 @@ def ammo_count(char: dict, kind: str) -> int:
 
 def _catalog_piece(kind: str) -> tuple:
     """(weight, cost) of one piece, from the catalog bundle's price."""
-    from dnd_app.data.phbCommon.items import ADVENTURING_GEAR
+    from dnd_app.data.items import ADVENTURING_GEAR
     bundle = AMMO_KINDS[kind][2]
     for name, weight, cost, *_ in ADVENTURING_GEAR:
         if name == bundle:

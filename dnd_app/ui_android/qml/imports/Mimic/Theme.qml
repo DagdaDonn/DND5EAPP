@@ -73,7 +73,7 @@ QtObject {
 
     // Magic item rarity colours -- card borders and their dialogs. Fixed
     // across themes so a rarity always reads the same. The same values as
-    // RARITY_COLORS in data/phbCommon/magic_items.py (the desktop's) --
+    // RARITY_COLORS in data/magic_items.py (the desktop's) --
     // change both together.
     function rarityColor(rarity) {
         switch (String(rarity || "").toLowerCase()) {

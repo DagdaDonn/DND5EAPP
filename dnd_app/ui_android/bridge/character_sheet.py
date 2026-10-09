@@ -41,57 +41,70 @@ from dnd_app.core.calculator import (
     spellcasting_block_reason, effect_start_problem, on_effect_started,
     ability_check_bonus,
 )
-from dnd_app.data.phbCommon.feature_ui_interactions import TOOLS as SWAP_TOOLS_POOL
+from dnd_app.data.feature_ui_interactions import TOOLS as SWAP_TOOLS_POOL
 from dnd_app.core.magic_items import (
     concentration_save, start_concentration, drop_concentration, parse_magic_suffix,
     parse_material_prefix, ABILITY_SCORE_MANUALS,
 )
 from dnd_app.core.effects import EFFECT_TABLE, INSTANT_POTION_EFFECTS
-from dnd_app.core.spell_components import spell_component_block_reason
+from dnd_app.core.spellcasting import spell_component_block_reason
 from dnd_app.core.ammo import ammo_kind, ammo_label, ammo_count, spend_ammo, set_ammo
 from dnd_app.core.dying import (
     take_damage, heal, heal_block_reason, set_death_saves,
     revive as _revive_char, death_cause, death_status_text, STABLE_MESSAGE,
 )
 from dnd_app.core.effects import has_extra_action
-from dnd_app.ui_desktop.style.theme import THEMES, FONT_SCALES
-from dnd_app.ui_desktop.style.immersive_spells import compute_display_spell_title
-from dnd_app.ui_desktop.action_abilities import build_action_abilities
-from dnd_app.data.phbCommon.items import WEAPON_DICT, ALL_WEAPONS, ARMOR, gear_icon, is_scroll_name, is_thrown_consumable
-from dnd_app.data.phbCommon.spells import (
+from dnd_app.data.themes import THEMES, FONT_SCALES
+from dnd_app.core.choices import (
+    _get_race_choices, _get_class_tool_choices, _get_feat_choices, _get_dm_reward_choices,
+    _get_subclass_choices, feat_prereq_met, ALL_SKILLS as _LEVELUP_ALL_SKILLS,
+    FIGHTING_STYLES as _MV_FIGHTING_STYLES, _all_relevant_choice_ids, _prune_stale_choices,
+    change_and_prune, RACE_SCOPED_CHOICE_IDS, BACKGROUND_SCOPED_CHOICE_IDS,
+)
+from dnd_app.core.effects import RESOURCE_POOL_TOGGLES, WILDSHAPE_BLOCKED_FEATURES
+from dnd_app.core.character import rest_options, rest_preview_lines
+from dnd_app.core.spellcasting import compute_display_spell_title
+from dnd_app.core.spellcasting import (
+    spell_progression_tables, char_spell_classes, max_castable_spell_level,
+    all_caster_classes, known_spell_classes, attribute_known_spells,
+    prepared_caster_caps, attribute_prepared_spells, spell_limits,
+)
+from dnd_app.core.actions import build_action_abilities
+from dnd_app.data.items import WEAPON_DICT, ALL_WEAPONS, ARMOR, gear_icon, is_scroll_name, is_thrown_consumable
+from dnd_app.data.spells import (
     get_spell, spells_for_class, spells_for_class_at_level, SPELL_DICT, SPELLS_BY_LEVEL,
     get_mark_expanded_spells,
 )
-from dnd_app.data.phbCommon.conditions import CONDITIONS
-from dnd_app.data.phbCommon.statblocks import (
+from dnd_app.data.conditions import CONDITIONS
+from dnd_app.data.statblocks import (
     WILDSHAPE_BEASTS, get_mount_statblock, get_vehicle_statblock,
     FIND_GREATER_STEED_OPTIONS, SCALING_SUMMONS, resolve_scaling_summon,
     COMPANION_STATBLOCKS,
 )
-from dnd_app.data.phbCommon.items import MOUNTS, VEHICLES, VEHICLES_AIR, VEHICLES_LAND, VEHICLES_BGDIA
-from dnd_app.data.phb2014.classes import (
+from dnd_app.data.items import MOUNTS, VEHICLES, VEHICLES_AIR, VEHICLES_LAND, VEHICLES_BGDIA
+from dnd_app.data.classes import (
     CLASS_DICT, ARTIFICER_INFUSION_TARGETS, ARTIFICER_REPLICABLE_ITEMS,
     WILD_MAGIC_SURGE_TABLE, WILD_MAGIC_BARBARIAN_TABLE, BATTLE_MASTER_MANEUVERS,
     METAMAGIC, ARTIFICER_INFUSIONS,
 )
-from dnd_app.data.phb2014.races import (
+from dnd_app.data.races import (
     get_race, RACE_NAMES, RACE_DICT, DRACONIC_ANCESTRY, ANCESTRY_BY_SUBRACE,
 )
-from dnd_app.data.phbCommon.backgrounds import get_background, BACKGROUND_NAMES
-from dnd_app.data.phbCommon.feats import get_feat, ALL_FEATS
-from dnd_app.data.phbCommon.class_features import SUBCLASS_FEATURES, CLASS_FEATURE_INDEX, OPTIONAL_CLASS_FEATURES
-from dnd_app.data.phbCommon.items import ARMOR_DICT, ADVENTURING_GEAR, ALL_TOOLS, WEAPON_NAMES
-from dnd_app.data.phbCommon.items import (
+from dnd_app.data.backgrounds import get_background, BACKGROUND_NAMES
+from dnd_app.data.feats import get_feat, ALL_FEATS
+from dnd_app.data.class_features import SUBCLASS_FEATURES, CLASS_FEATURE_INDEX, OPTIONAL_CLASS_FEATURES
+from dnd_app.data.items import ARMOR_DICT, ADVENTURING_GEAR, ALL_TOOLS, WEAPON_NAMES
+from dnd_app.data.items import (
     SIMPLE_MELEE, SIMPLE_RANGED, MARTIAL_MELEE, MARTIAL_RANGED, FIREARMS,
 )
-from dnd_app.data.phbCommon.magic_items import ALL_MAGIC_ITEMS, get_magic_item, get_item_effect
+from dnd_app.data.magic_items import ALL_MAGIC_ITEMS, get_magic_item, get_item_effect
 from dnd_app.core.magic_items import attunement_prereq_met
-from dnd_app.core.spell_scrolls import parse_spell_scroll, use_spell_scroll, bind_spell_scroll
+from dnd_app.core.spellcasting import parse_spell_scroll, use_spell_scroll, bind_spell_scroll
 from dnd_app.core.magic_items import (owned_magic_items, add_owned_magic_item, remove_owned_magic_item,
                                       set_owned_magic_item_qty, set_owned_magic_item_equipped,
                                       set_owned_magic_item_attuned, can_study_manual, study_owned_manual,
                                       find_magic_item, is_magic_ammunition)
-from dnd_app.data.phbCommon.dm_rewards import ALL_DM_REWARDS, DM_REWARD_CATEGORIES, get_dm_reward
+from dnd_app.data.dm_rewards import ALL_DM_REWARDS, DM_REWARD_CATEGORIES, get_dm_reward
 
 _CURRENCY_ORDER = ["PP", "GP", "EP", "SP", "CP"]
 
@@ -126,7 +139,7 @@ def _mi_sort_key(rarity: str, name: str):
 def _catalog_entry(name: str):
     """The magic item catalogue entry for an owned item -- a bound spell
     scroll ("Spell Scroll (3rd level) — Fireball") uses its level's entry."""
-    from dnd_app.core.spell_scrolls import parse_spell_scroll, scroll_base_name
+    from dnd_app.core.spellcasting import parse_spell_scroll, scroll_base_name
     entry = get_magic_item(name)
     if entry is None:
         scroll = parse_spell_scroll(name)
@@ -211,63 +224,6 @@ _RESOURCE_TOGGLE_MAP = {
     "radiant_consumption": "Radiant Consumption",
     "soul_of_the_storm_giant": "Maelstrom Aura",
 }
-
-
-class _DesktopHelpers:
-    """Pure helpers this bridge shares with the desktop UI, which live in
-    desktop modules that import QtWidgets. Imported on first use rather
-    than at module load, so starting the Android app doesn't pay for
-    loading QtWidgets and the desktop sheet package before the Start Menu
-    can show -- nothing here is needed until a sheet is actually used."""
-
-    def __getattr__(self, name):
-        from dnd_app.ui_desktop.dialogs import levelup_panel, rest
-        from dnd_app.ui_desktop.pages.sheet import base, spells
-        loaded = {
-            "_get_race_choices": levelup_panel._get_race_choices,
-            "_get_class_tool_choices": levelup_panel._get_class_tool_choices,
-            "_get_feat_choices": levelup_panel._get_feat_choices,
-            "_get_dm_reward_choices": levelup_panel._get_dm_reward_choices,
-            "_get_subclass_choices": levelup_panel._get_subclass_choices,
-            "_LEVELUP_ALL_SKILLS": levelup_panel.ALL_SKILLS,
-            "feat_prereq_met": levelup_panel.feat_prereq_met,
-            "_MV_FIGHTING_STYLES": levelup_panel.FIGHTING_STYLES,
-            "_all_relevant_choice_ids": rest._all_relevant_choice_ids,
-            "_prune_stale_choices": rest._prune_stale_choices,
-            "change_and_prune": rest.change_and_prune,
-            "RACE_SCOPED_CHOICE_IDS": rest.RACE_SCOPED_CHOICE_IDS,
-            "BACKGROUND_SCOPED_CHOICE_IDS": rest.BACKGROUND_SCOPED_CHOICE_IDS,
-            "RestOptionsDialog": rest.RestOptionsDialog,
-            "RestPreviewDialog": rest.RestPreviewDialog,
-            "RESOURCE_POOL_TOGGLES": base.RESOURCE_POOL_TOGGLES,
-            "WILDSHAPE_BLOCKED_FEATURES": base.WILDSHAPE_BLOCKED_FEATURES,
-            "SpellsMixin": spells.SpellsMixin,
-        }
-        if name not in loaded:
-            raise AttributeError(name)
-        self.__dict__.update(loaded)
-        return loaded[name]
-
-
-_desk = _DesktopHelpers()
-_spell_caps_cls = None
-
-
-def _SpellCapsHelper(char: dict):
-    """Just enough of a SpellsMixin instance to call its pure, self.char-
-    only cap-computation methods (_all_caster_classes, _known_spell_
-    classes, _attribute_known_spells, _char_spell_classes,
-    _max_castable_spell_level, _prepared_caster_caps,
-    _attribute_prepared_spells) without dragging in any of the mixin's
-    Qt widget-building methods, which this never calls. Built on first
-    use, since SpellsMixin's module imports QtWidgets."""
-    global _spell_caps_cls
-    if _spell_caps_cls is None:
-        class _Helper(_desk.SpellsMixin):
-            def __init__(self, char: dict):
-                self.char = char
-        _spell_caps_cls = _Helper
-    return _spell_caps_cls(char)
 
 
 class CharacterSheetBridge(QObject):
@@ -1013,7 +969,7 @@ class CharacterSheetBridge(QObject):
 
     @Slot(str)
     def useScroll(self, name: str):
-        """Spell scrolls cast their spell (core/spell_scrolls.py: class
+        """Spell scrolls cast their spell (core/spellcasting.py: class
         list, the DC 10 + level check, the scroll's own DC/attack); other
         scrolls (Scroll of Protection...) apply their effect."""
         if parse_spell_scroll(name):
@@ -1608,7 +1564,7 @@ class CharacterSheetBridge(QObject):
 
     def _maybe_critical_flavor_toast(self):
         if self.char.get("optional_rules", {}).get("critical_flavor", False):
-            from dnd_app.ui_desktop.style.flavor_text import random_death_message
+            from dnd_app.data.flavor_text import random_death_message
             self.toastRequested.emit(random_death_message())
 
     def _set_death_saves(self, succ: int, fail: int):
@@ -2293,7 +2249,7 @@ class CharacterSheetBridge(QObject):
         label, kind ("known"/"prepared"), current, max, ability,
         cantrips, cantripMax."""
         try:
-            rows = _SpellCapsHelper(self.char)._spell_limits()
+            rows = spell_limits(self.char)
         except Exception:
             return []
         return [{"label": r["label"], "kind": r["kind"], "current": r["current"], "max": r["max"],
@@ -2364,12 +2320,11 @@ class CharacterSheetBridge(QObject):
         the browser's castable-level filter and the "+ Add" button's cap
         gate.
         """
-        helper = _SpellCapsHelper(self.char)
         homebrew = self._spell_homebrew
         if homebrew:
             pool = dict(SPELL_DICT)
         else:
-            my_classes = helper._char_spell_classes()
+            my_classes = char_spell_classes(self.char)
             mark_spells = get_mark_expanded_spells(self.char)
             pool = {}
             for cn in my_classes:
@@ -2381,7 +2336,7 @@ class CharacterSheetBridge(QObject):
                     pool[name] = sp
             if not pool:
                 pool = dict(SPELL_DICT)
-            max_castable = helper._max_castable_spell_level()
+            max_castable = max_castable_spell_level(self.char)
         known = set(self.char.get("spells_known", []))
         q = (query or "").strip().lower()
         class_filter = class_filter or "All Classes"
@@ -2434,15 +2389,15 @@ class CharacterSheetBridge(QObject):
         """Details for any item -- magic item, weapon, armor, gear or tool
         -- for the browsers' View button / press-and-hold. Returns
         {name, subtitle, facts: [str], desc} (+ rarity for magic items)."""
-        from dnd_app.data.phbCommon.magic_items import get_magic_item
-        from dnd_app.data.phbCommon.items import (WEAPON_DICT as _W, ARMOR_DICT as _A,
+        from dnd_app.data.magic_items import get_magic_item
+        from dnd_app.data.items import (WEAPON_DICT as _W, ARMOR_DICT as _A,
                                                    ADVENTURING_GEAR as _G, ALL_TOOLS as _T)
         gp = lambda c: (f"{c:g} gp" if c >= 1 else f"{round(c * 100):g} cp" if c else "")
         scroll = parse_spell_scroll(name)
         if scroll and scroll[1] and get_spell(scroll[1]):
             # a bound scroll: its spell, the scroll's own DC/attack, and
             # whether this character can read it
-            from dnd_app.core.spell_scrolls import scroll_reading, scroll_base_name
+            from dnd_app.core.spellcasting import scroll_reading, scroll_base_name
             sp = get_spell(scroll[1])
             info = scroll_reading(self.char, scroll[1])
             lvl_txt = "Cantrip" if sp["level"] == 0 else f"Level {sp['level']}"
@@ -2522,8 +2477,7 @@ class CharacterSheetBridge(QObject):
             known.append(name)
             self.statsChanged.emit()
             return
-        helper = _SpellCapsHelper(char)
-        my_classes = helper._char_spell_classes()
+        my_classes = char_spell_classes(char)
         if not self._spell_homebrew:
             mark_spells = get_mark_expanded_spells(char)
             if my_classes and name not in mark_spells and not (set(sp.get("classes", [])) & my_classes):
@@ -2532,7 +2486,7 @@ class CharacterSheetBridge(QObject):
                 return
             sp_level = sp.get("level", 0)
             if sp_level > 0:
-                max_lvl = helper._max_castable_spell_level()
+                max_lvl = max_castable_spell_level(char)
                 if sp_level > max_lvl:
                     self.toastRequested.emit(
                         f"{name} is a level {sp_level} spell -- you can only "
@@ -2542,13 +2496,13 @@ class CharacterSheetBridge(QObject):
             def _real_name(cn):
                 return "Wizard" if cn in ("Fighter (EK)", "Rogue (AT)") else cn
 
-            all_classes = helper._all_caster_classes()
+            all_classes = all_caster_classes(char)
             is_cantrip = sp_level == 0
             sp_classes = set(sp.get("classes", []))
-            pool = all_classes if is_cantrip else helper._known_spell_classes()
+            pool = all_classes if is_cantrip else known_spell_classes(char)
             eligible = [cn for cn in pool if _real_name(cn) in sp_classes]
             if eligible:
-                attributed = helper._attribute_known_spells()
+                attributed = attribute_known_spells(char)
 
                 def _room(cn):
                     cant_max, lvl_max = all_classes[cn]
@@ -2575,7 +2529,7 @@ class CharacterSheetBridge(QObject):
         # (also prepared, but genuinely spellbook-limited, so "add" still
         # means something distinct from "prepare" for it).
         if sp.get("level", 0) > 0:
-            _, _, _, PREPARE_AB = _desk.SpellsMixin._spell_progression_tables()
+            _, _, _, PREPARE_AB = spell_progression_tables()
             full_list_classes = {c for c in PREPARE_AB if c != "Wizard"}
             if full_list_classes & set(sp.get("classes", [])) & my_classes:
                 prepped = char.setdefault("spells_prepared", [])
@@ -2617,12 +2571,11 @@ class CharacterSheetBridge(QObject):
         sp = get_spell(name)
         if sp and sp.get("level", 0) > 0 and name not in char.get("bonus_spells", []) \
                 and not self._spell_homebrew:
-            helper = _SpellCapsHelper(char)
-            caps = helper._prepared_caster_caps()
+            caps = prepared_caster_caps(char)
             sp_classes = set(sp.get("classes", []))
             eligible = [cn for cn in caps if cn in sp_classes]
             if eligible:
-                attributed = helper._attribute_prepared_spells()
+                attributed = attribute_prepared_spells(char)
                 target = max(eligible, key=lambda cn: caps[cn] - len(attributed.get(cn, [])))
                 current = len(attributed.get(target, []))
                 cap = caps[target]
@@ -2720,7 +2673,7 @@ class CharacterSheetBridge(QObject):
         if bucket in self._turn_counts and self._turn_blocked(bucket):
             return
         key = display.split("(")[0].strip().lower()
-        if char.get("_wildshape_active") and any(b in key for b in _desk.WILDSHAPE_BLOCKED_FEATURES):
+        if char.get("_wildshape_active") and any(b in key for b in WILDSHAPE_BLOCKED_FEATURES):
             self.toastRequested.emit(f"Can't use {display} while Wild Shaped -- your beast form can't "
                                      f"perform what it requires (a held item, speech, an unarmed strike, or casting)")
             return
@@ -2791,7 +2744,7 @@ class CharacterSheetBridge(QObject):
         for res in char.get("resources", []):
             rname = str(res.get("name", "")).lower()
             if key and (key in rname or rname in key) and res.get("current_max", 0) > 0:
-                if display in _desk.RESOURCE_POOL_TOGGLES and display in fx:
+                if display in RESOURCE_POOL_TOGGLES and display in fx:
                     self.toastRequested.emit(f"{display} already active -- end it from its resource row")
                     return
                 # e.g. Rage in heavy armor -- refused before a use is spent
@@ -2805,7 +2758,7 @@ class CharacterSheetBridge(QObject):
                     return
                 res["current"] = cur - 1
                 note = ""
-                if display in _desk.RESOURCE_POOL_TOGGLES and display not in fx:
+                if display in RESOURCE_POOL_TOGGLES and display not in fx:
                     fx.append(display)
                     note = on_effect_started(char, display)   # Rage ends concentration
                     self.ctrl.refresh()
@@ -2946,8 +2899,8 @@ class CharacterSheetBridge(QObject):
             self.statsChanged.emit()
             return
         # A free daily cast (a racial spell, Fey Touched, Firbolg Magic...)
-        # is used before any slot -- see core/free_casts.py.
-        from dnd_app.core.free_casts import spend_free_cast, free_cast_message
+        # is used before any slot -- see core/spellcasting.py.
+        from dnd_app.core.spellcasting import spend_free_cast, free_cast_message
         free = spend_free_cast(self.char, name)
         if free:
             if spell.get("concentration"):
@@ -3115,15 +3068,15 @@ class CharacterSheetBridge(QObject):
         old_race = self.char.get("race", "")
         # whatever the old race asked for and the new one doesn't goes
         # (a High Elf's cantrip) -- shared with desktop's identity edit
-        _desk.change_and_prune(
+        change_and_prune(
             self.char, lambda: self.char.update(race=name, species=name, subrace="", draconic_ancestry=""),
-            _desk.RACE_SCOPED_CHOICE_IDS if name != old_race else ())
+            RACE_SCOPED_CHOICE_IDS if name != old_race else ())
         self.ctrl.refresh()
         self.statsChanged.emit()
 
     @Slot(str)
     def changeSubrace(self, subrace_name: str):
-        _desk.change_and_prune(self.char, lambda: self.char.update(subrace=subrace_name))
+        change_and_prune(self.char, lambda: self.char.update(subrace=subrace_name))
         self.ctrl.refresh()
         self.statsChanged.emit()
 
@@ -3138,8 +3091,8 @@ class CharacterSheetBridge(QObject):
     @Slot(str)
     def changeBackground(self, name: str):
         old_bg = self.char.get("background", "")
-        _desk.change_and_prune(self.char, lambda: self.char.update(background=name),
-                               _desk.BACKGROUND_SCOPED_CHOICE_IDS if name != old_bg else ())
+        change_and_prune(self.char, lambda: self.char.update(background=name),
+                               BACKGROUND_SCOPED_CHOICE_IDS if name != old_bg else ())
         self.ctrl.refresh()
         self.statsChanged.emit()
 
@@ -3164,13 +3117,13 @@ class CharacterSheetBridge(QObject):
         entry = get_class_entry(self.char, class_name)
         if entry is None or entry["level"] <= 1:
             return
-        old_ids = _desk._all_relevant_choice_ids(self.char)
+        old_ids = _all_relevant_choice_ids(self.char)
         entry["level"] -= 1
         # below its subclass level, a class can't keep a subclass
         from dnd_app.core.character import drop_subclasses_below_level
         dropped = drop_subclasses_below_level(self.char)
-        new_ids = _desk._all_relevant_choice_ids(self.char)
-        _desk._prune_stale_choices(self.char, old_ids - new_ids)
+        new_ids = _all_relevant_choice_ids(self.char)
+        _prune_stale_choices(self.char, old_ids - new_ids)
         self.ctrl.refresh()
         msg = f"{class_name} is now level {entry['level']}"
         for _cn, sub, need in dropped:
@@ -3194,7 +3147,7 @@ class CharacterSheetBridge(QObject):
         classes = self.char.get("classes", [])
         if len(classes) <= 1:
             return
-        old_ids = _desk._all_relevant_choice_ids(self.char)
+        old_ids = _all_relevant_choice_ids(self.char)
         removed = next((c for c in classes if c["class"] == class_name), None)
         self.char["classes"] = [c for c in classes if c["class"] != class_name]
         # Its spells go with it -- only the ones no remaining class could
@@ -3203,8 +3156,8 @@ class CharacterSheetBridge(QObject):
         from dnd_app.core.character import drop_spells_of_removed_class, name_list
         lost = drop_spells_of_removed_class(self.char, removed) if removed else []
         self.char.get("_choices", {}).pop(f"{class_name}_subclass", None)   # re-adding asks again
-        new_ids = _desk._all_relevant_choice_ids(self.char)
-        _desk._prune_stale_choices(self.char, old_ids - new_ids)
+        new_ids = _all_relevant_choice_ids(self.char)
+        _prune_stale_choices(self.char, old_ids - new_ids)
         self.ctrl.refresh()
         self.toastRequested.emit(f"{class_name} removed" + (
             f", along with its spells: {name_list(lost)}" if lost else ""))
@@ -3650,8 +3603,8 @@ class CharacterSheetBridge(QObject):
     # used to make, which silently skipped Font of Inspiration recovery,
     # the Relentless Rage DC reset, expired-effect/active-toggle
     # clearing, and (long rest) exhaustion reduction and dropping
-    # concentration. RestOptionsDialog._build_options and
-    # RestPreviewDialog._build_lines are reused directly (both plain
+    # concentration. rest_options() and rest_preview_lines() (core/
+    # character.py) are the ones desktop's rest dialogs use (both plain
     # staticmethods, no QWidget involved) so the option list and the
     # preview wording can't drift from desktop's.
     #
@@ -3682,7 +3635,7 @@ class CharacterSheetBridge(QObject):
                         resets.append((r.get("name", "?"), r.get("current", 0), target))
         pact_restore = char.get("pact_slots_used", 0) > 0
         fading = [n for n in char.get("active_effects", [])
-                  if EFFECT_TABLE.get(n, {}).get("duration_category") == "short" or n in _desk.RESOURCE_POOL_TOGGLES]
+                  if EFFECT_TABLE.get(n, {}).get("duration_category") == "short" or n in RESOURCE_POOL_TOGGLES]
         return {"hp": cur, "max_hp": mx, "hit_dice_available": hit_dice_available,
                 "resets": resets, "pact_restore": pact_restore, "fading": fading}
 
@@ -3708,7 +3661,7 @@ class CharacterSheetBridge(QObject):
         exhaustion = char.get("exhaustion", 0)
         was_concentrating = char.get("concentration", {}).get("spell")
         fading = [n for n in char.get("active_effects", [])
-                  if EFFECT_TABLE.get(n, {}).get("duration_category") in ("short", "long") or n in _desk.RESOURCE_POOL_TOGGLES]
+                  if EFFECT_TABLE.get(n, {}).get("duration_category") in ("short", "long") or n in RESOURCE_POOL_TOGGLES]
         return {"hp": cur, "max_hp": mx, "temp_hp": temp_hp, "hit_dice_restored": hit_dice_restored,
                 "resets": resets, "slot_levels_reset": slot_levels_reset, "pact_restore": pact_restore,
                 "death_reset": death_reset, "exhaustion": exhaustion, "exhaustion_after": max(0, exhaustion - 1),
@@ -3717,7 +3670,7 @@ class CharacterSheetBridge(QObject):
     @Slot(str, result=list)
     def restPreviewLines(self, rest_type: str):
         preview = self._preview_short_rest() if rest_type == "short" else self._preview_long_rest()
-        return _desk.RestPreviewDialog._build_lines(rest_type, preview)
+        return rest_preview_lines(rest_type, preview)
 
     @Slot(str, result=str)
     def restBlockReason(self, rest_type: str):
@@ -3734,7 +3687,7 @@ class CharacterSheetBridge(QObject):
 
     @Slot(str, result=list)
     def restOptions(self, rest_type: str):
-        return list(_desk.RestOptionsDialog._build_options(self.char, rest_type))
+        return list(rest_options(self.char, rest_type))
 
     @Property(int, notify=statsChanged)
     def hitDiceAvailableForRest(self):
@@ -3742,7 +3695,7 @@ class CharacterSheetBridge(QObject):
 
     def _clear_active_toggles(self) -> list:
         fx = self.char.get("active_effects", [])
-        cleared = [name for name in fx if name in _desk.RESOURCE_POOL_TOGGLES]
+        cleared = [name for name in fx if name in RESOURCE_POOL_TOGGLES]
         for name in cleared:
             fx.remove(name)
         return cleared
@@ -3830,7 +3783,7 @@ class CharacterSheetBridge(QObject):
             expired.append(f"concentration on {was_concentrating}")
         rebuild(char)
         self.ctrl.refresh()
-        from dnd_app.ui_desktop.style.flavor_text import random_long_rest_dream
+        from dnd_app.data.flavor_text import random_long_rest_dream
         if expired:
             self.restToastRequested.emit(f"Faded: {', '.join(expired)}")
         else:
@@ -3853,21 +3806,21 @@ class CharacterSheetBridge(QObject):
                     "Spring – a willing creature within 5 ft. can teleport with you",
                     "Summer – Fey Step deals 2d6 fire damage to creatures within 5 ft. of your origin"]
         if kind == "guidance_spirits_swap":
-            return list(_desk._LEVELUP_ALL_SKILLS)
+            return list(_LEVELUP_ALL_SKILLS)
         if kind == "whispers_dead_swap":
-            return list(_desk._LEVELUP_ALL_SKILLS) + list(SWAP_TOOLS_POOL)
+            return list(_LEVELUP_ALL_SKILLS) + list(SWAP_TOOLS_POOL)
         if kind == "lunar_phase_swap":
             return ["Full Moon", "New Moon", "Crescent Moon"]
         if kind == "pact_blade_bond":
             return [n for n in (i.get("name") if isinstance(i, dict) else i
                                  for i in char.get("magic_items", [])) if n]
         if kind == "astral_knowledge_swap":
-            return list(_desk._LEVELUP_ALL_SKILLS)
+            return list(_LEVELUP_ALL_SKILLS)
         return []
 
     @Slot(result=list)
     def astralKnowledgeToolPool(self):
-        from dnd_app.data.phbCommon.items import WEAPON_NAMES
+        from dnd_app.data.items import WEAPON_NAMES
         return list(WEAPON_NAMES) + list(ALL_TOOLS)
 
     @Slot(str)
@@ -4061,9 +4014,9 @@ class CharacterSheetBridge(QObject):
         # Death/Knowledge Domain, Blood Hunter fighting style, etc.) all
         # come from this one function, in the same count+pool shape the
         # generic picker already renders.
-        choices = (get_choices_needed(self.char) + _desk._get_race_choices(self.char)
-                   + _desk._get_class_tool_choices(self.char) + _desk._get_feat_choices(self.char)
-                   + _desk._get_dm_reward_choices(self.char) + _desk._get_subclass_choices(self.char))
+        choices = (get_choices_needed(self.char) + _get_race_choices(self.char)
+                   + _get_class_tool_choices(self.char) + _get_feat_choices(self.char)
+                   + _get_dm_reward_choices(self.char) + _get_subclass_choices(self.char))
         # A handful of choices use pool=None on desktop because their own
         # bespoke widget (a free-text combobox, or a dedicated search
         # list) supplies the real candidate list at render time instead
@@ -4086,7 +4039,7 @@ class CharacterSheetBridge(QObject):
                     not pool or (len(pool) == 1 and "any" in str(pool[0]).lower())):
                 already = set(c.get("already_chosen") or [])
                 skills = self.char.get("skills", {})
-                c["pool"] = [s for s in _desk._LEVELUP_ALL_SKILLS
+                c["pool"] = [s for s in _LEVELUP_ALL_SKILLS
                              if s in already or skills.get(s, 0) < 2]
                 continue
             if pool is not None:
@@ -4094,7 +4047,7 @@ class CharacterSheetBridge(QObject):
             if c["type"] == "tool_prof":
                 c["pool"] = list(ALL_TOOLS)
             elif c["type"] == "skill_or_tool_prof":
-                c["pool"] = list(_desk._LEVELUP_ALL_SKILLS) + list(ALL_TOOLS)
+                c["pool"] = list(_LEVELUP_ALL_SKILLS) + list(ALL_TOOLS)
             elif c["type"] == "weapon_or_tool_prof":
                 c["pool"] = list(WEAPON_NAMES) + list(ALL_TOOLS)
             elif c["type"] == "maneuver":
@@ -4248,7 +4201,7 @@ class CharacterSheetBridge(QObject):
         # already reports metPrereq so the UI can disable ineligible
         # feats the same way desktop's feat list greys them out.
         feat = get_feat(feat_name)
-        if feat and not _desk.feat_prereq_met(self.char, feat)[0]:
+        if feat and not feat_prereq_met(self.char, feat)[0]:
             return
         add_feat(self.char, feat_name)
         apply_choice(self.char, choice_id, [f"feat:{feat_name}"])
@@ -4263,7 +4216,7 @@ class CharacterSheetBridge(QObject):
             name = f["name"]
             if q and q not in name.lower():
                 continue
-            met, reason = _desk.feat_prereq_met(self.char, f)
+            met, reason = feat_prereq_met(self.char, f)
             out.append({"name": name, "source": f.get("source", ""), "special": f.get("special", ""),
                         "desc": f.get("special", ""), "prereq": f.get("prereq", ""), "metPrereq": met})
         return out
@@ -4318,7 +4271,7 @@ class CharacterSheetBridge(QObject):
         mv_cls = next((c for c in mv_classes if classes.get(c, 0) >= 4), None)
         known_styles = char.get("fighting_styles", [])
         if opt.get("martial_versatility") and mv_cls and known_styles:
-            pool_full = _desk._MV_FIGHTING_STYLES.get(mv_cls, [])
+            pool_full = _MV_FIGHTING_STYLES.get(mv_cls, [])
             new_pool = [s for s in pool_full if not any(
                 s.split(" (")[0].strip().lower() == ks.split(" (")[0].strip().lower() for ks in known_styles)]
             if new_pool:

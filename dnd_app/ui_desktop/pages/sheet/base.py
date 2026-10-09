@@ -14,8 +14,8 @@ from ...shared import *
 from ...shared import _btn, _pill
 from ...widgets import FlowLayout, FlowContainer
 from dnd_app.ui_desktop.dialogs.arcane_recovery import ArcaneRecoveryDialog
-from dnd_app.ui_desktop.dialogs.rest import (RestOptionsDialog, RestPreviewDialog,
-    _all_relevant_choice_ids, _prune_stale_choices)
+from dnd_app.ui_desktop.dialogs.rest import RestOptionsDialog, RestPreviewDialog
+from dnd_app.core.choices import _all_relevant_choice_ids, _prune_stale_choices
 from dnd_app.ui_desktop.dialogs.levelup_multiclass import LevelUpMulticlassDialog
 from dnd_app.core.character import (
     ability_score, ability_mod, total_level, class_levels, subclasses,
@@ -39,97 +39,26 @@ from dnd_app.core.multiclass import (
 from dnd_app.core.builder import rebuild
 from dnd_app.core.controller import CharacterController
 from dnd_app.core.magic_items import concentration_save, start_concentration, drop_concentration
-from dnd_app.core.spell_components import spell_component_block_reason
+from dnd_app.core.spellcasting import spell_component_block_reason
 from dnd_app.core.save_load import (
     save_character, load_character, list_saved_characters, character_filename, validate_character,
 )
 from dnd_app.core.character import set_subclass, get_class_entry
-from dnd_app.data.phbCommon.magic_items import ALL_MAGIC_ITEMS, has_item_effect
+from dnd_app.data.magic_items import ALL_MAGIC_ITEMS, has_item_effect
 from dnd_app.ui_desktop.dialogs.levelup_panel import LevelUpPanel
-from dnd_app.data.phb2014.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
-from dnd_app.data.phb2014.races import get_race
-from dnd_app.data.phbCommon.backgrounds import get_background
-from dnd_app.data.phbCommon.feats import get_feat
-from dnd_app.data.phbCommon.spells import get_spell, spells_for_class, ALL_SPELLS
-from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON_DICT,
+from dnd_app.data.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
+from dnd_app.data.races import get_race
+from dnd_app.data.backgrounds import get_background
+from dnd_app.data.feats import get_feat
+from dnd_app.data.spells import get_spell, spells_for_class, ALL_SPELLS
+from dnd_app.data.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON_DICT,
     ADVENTURING_GEAR, GEAR_NAMES, MOUNTS, ALL_TOOLS, SIMPLE_MELEE, SIMPLE_RANGED,
     MARTIAL_MELEE, MARTIAL_RANGED, ARTISAN_TOOLS, SPECIAL_ARMOR)
-from dnd_app.data.phbCommon.conditions import CONDITIONS
+from dnd_app.data.conditions import CONDITIONS
 from dnd_app.ui_desktop import icons as _icons
-# Features that clearly require holding a holy symbol/spellcasting focus
-# and/or speaking — the same standard the real Wild Shape rule applies to
-# spellcasting itself ("you retain the benefit of any features... if the
-# new form is physically capable of doing so"). This is deliberately a
-# short, conservative list of clear-cut cases rather than an attempt to
-# categorize every class feature in the game; anything not in this list
-# is allowed by default, matching the rule's own default-allow framing.
-# Matched as a substring against the feature's display name, lowercased.
-WILDSHAPE_BLOCKED_FEATURES = {
-    # Requires touching a creature/object with your hands. Not explicitly
-    # addressed in the later, more detailed reference, so kept blocked on
-    # the original reasoning (a beast's mouth/paws aren't hands) rather
-    # than assumed to work without confirmation either way.
-    "lay on hands",
-    # Monk features requiring an unarmed strike specifically — natural
-    # weapons are weapons, but they aren't unarmed strikes, so these
-    # don't apply even though other Monk features (Unarmored Defense,
-    # Slow Fall, Stillness of Mind, Evasion, etc.) work fine.
-    "martial arts", "flurry of blows", "stunning strike",
-    "ki-empowered strikes", "hands of harm", "open hand technique",
-    "quivering palm", "touch of the long death", "drunken technique",
-    "intoxicated frenzy", "radiant sun bolt", "searing arc strike",
-    "searing sunburst", "sun shield",
-    # Require actual arms to manifest
-    "arms of the astral self", "visage of the astral self",
-    "body of the astral self", "awakened astral self",
-    # Require casting a spell or cantrip (or are themselves spellcasting).
-    # NOTE: "disciple of life", "sacred weapon", "pact magic", and
-    # "moon fire" were deliberately removed from this list — the app's
-    # real subclass feature strings bundle these with a component that
-    # explicitly works ("Sacred Weapon + Turn the Unholy",
-    # "Lunar Embodiment + Moon Fire", "Otherworldly Patron + Pact Magic +
-    # Rite Focus", "Bonus Proficiency (Heavy Armor) + Disciple of Life"),
-    # and substring-blocking the whole bundle would incorrectly block the
-    # working half too. The spellcasting half of each is already covered
-    # by the separate _cast_spell gate regardless.
-    "war magic", "eldritch strike", "spell thief", "magical ambush",
-    "versatile trickster", "share spells", "misty wanderer",
-    "fey reinforcements", "mystic frenzy", "revealed arcana",
-    "unsealed arcana", "alchemical savant", "arcane firearm",
-    "destructive wrath", "blessed healer", "reaper", "supreme healing",
-    "grim harvest", "spell breaker",
-    "circle of mortality", "voice of authority", "expert divination",
-    "spell mastery", "signature spells", "arcane ward",
-    "projected ward", "improved abjuration", "focused conjuration",
-    "split enchantment", "alter memories", "sculpt spells",
-    "potent cantrip", "empowered evocation", "overchannel",
-    "power surge", "durable magic", "arcane abeyance", "gravity well",
-    "awakened spellbook", "font of magic", "metamagic",
-    "controlled chaos", "divine magic", "tempestuous magic",
-    "clockwork magic", "psionic spells", "psionic sorcery",
-    "eldritch master", "bonus cantrips",
-    "grasping tentacles", "magical secrets", "additional magical secrets",
-    "battle magic", "mantle of majesty", "mystic chronicle",
-    "awakened spirit", "light bearer", "ritual caster",
-    # Requires manifesting a weapon out of psychic energy
-    "soul blades", "psychic blades",
-    # Require a finesse or ranged weapon specifically (Sneak Attack) —
-    # these all key off having Sneak Attack damage to add to/trigger from,
-    # which natural weapons can never provide.
-    "insightful fighting", "eye for weakness", "sudden strike",
-    "wails from the grave", "death's friend",
-    # Require a bow specifically
-    "arcane shot", "magic arrow", "curving shot", "ever-ready shot",
-    "kensei's shot",
-}
+from dnd_app.core.effects import WILDSHAPE_BLOCKED_FEATURES, RESOURCE_POOL_TOGGLES
+from dnd_app.core.character import rest_options
 
-# Combat-duration on/off active_effects toggles (Rage, Reckless Attack,
-# Bladesong, etc.) that share a resource pool -- using the resource
-# both flips the effect on and spends a use. One shared definition read
-# by every method that needs the set, including the rest handlers (see
-# _short_rest()/_long_rest()), so it can't drift out of sync between
-# them.
-RESOURCE_POOL_TOGGLES = {"Hybrid Transformation", "Rage", "Form of Dread", "Starry Form", "Reckless Attack", "Frenzy", "Sacred Weapon", "Invincible Conqueror", "Exalted Champion", "Peerless Athlete", "Hexblade's Curse", "Bladesong", "Radiant Soul (Aasimar)", "Necrotic Shroud", "Gem Flight", "Shifting", "Vow of Enmity", "Living Legend", "Mortal Bulwark", "Elder Champion", "Elemental Gift", "Writhing Tide", "Otherworldly Wings", "Trance of Order", "Umbral Form", "Ghost Walk", "Steps of Night", "Arms of the Astral Self", "Awakened Astral Self", "Giant's Might", "Aspect of the Wyrm", "Spirit Totem", "Radiant Consumption", "Maelstrom Aura"}
 
 ABILITIES = ["STR","DEX","CON","INT","WIS","CHA"]
 AB_FULL   = {"STR":"Strength","DEX":"Dexterity","CON":"Constitution",
@@ -418,7 +347,7 @@ class BaseSheetMixin:
         char = self.char
 
         preview = self._preview_short_rest()
-        options = RestOptionsDialog._build_options(char, "short")
+        options = rest_options(char, "short")
         dlg = RestPreviewDialog("short", preview, options, self)
         if dlg.exec() != QDialog.Accepted:
             return
@@ -501,7 +430,7 @@ class BaseSheetMixin:
             return
 
         preview = self._preview_long_rest()
-        options = RestOptionsDialog._build_options(char, "long")
+        options = rest_options(char, "long")
         dlg = RestPreviewDialog("long", preview, options, self)
         if dlg.exec() != QDialog.Accepted:
             return
@@ -545,7 +474,7 @@ class BaseSheetMixin:
         self.ctrl.refresh()
         self._mark_dirty()
         self._apply_rest_options(selected_options)
-        from dnd_app.ui_desktop.style.flavor_text import random_long_rest_dream
+        from dnd_app.data.flavor_text import random_long_rest_dream
         if expired:
             self._toast(f"Faded: {', '.join(expired)}")
         else:
@@ -589,7 +518,7 @@ class BaseSheetMixin:
     def _apply_rest_options(self, selected: list):
         """Applies whichever rest-changeable options the player checked
         in RestPreviewDialog's "ALSO RECONFIGURE?" section (built from
-        RestOptionsDialog._build_options()). Folded into the single
+        core/character.py's rest_options()). Folded into the single
         preview-and-confirm dialog shown BEFORE the rest applies, so
         confirming a rest is only ever one dialog, not two back to back.
         A checked option that needs a specific new value (which model,
@@ -693,7 +622,7 @@ class BaseSheetMixin:
             changed_anything = True
 
         if "guidance_spirits_swap" in selected:
-            from dnd_app.ui_desktop.dialogs.levelup_panel import ALL_SKILLS
+            from dnd_app.core.choices import ALL_SKILLS
             current = char.get("_choices", {}).get("guidance_of_the_spirits_skill", [])
             choice, ok = QInputDialog.getItem(
                 self, "Guidance of the Spirits", "New skill:", ALL_SKILLS,
@@ -704,8 +633,8 @@ class BaseSheetMixin:
                 changed_anything = True
 
         if "whispers_dead_swap" in selected:
-            from dnd_app.ui_desktop.dialogs.levelup_panel import ALL_SKILLS
-            from dnd_app.data.phbCommon.feature_ui_interactions import TOOLS as ALL_TOOLS
+            from dnd_app.core.choices import ALL_SKILLS
+            from dnd_app.data.feature_ui_interactions import TOOLS as ALL_TOOLS
             pool = ALL_SKILLS + ALL_TOOLS
             current = char.get("_choices", {}).get("whispers_of_the_dead_prof", [])
             choice, ok = QInputDialog.getItem(
@@ -728,8 +657,8 @@ class BaseSheetMixin:
                 changed_anything = True
 
         if "astral_knowledge_swap" in selected:
-            from dnd_app.ui_desktop.dialogs.levelup_panel import ALL_SKILLS
-            from dnd_app.data.phbCommon.items import WEAPON_NAMES, ALL_TOOLS
+            from dnd_app.core.choices import ALL_SKILLS
+            from dnd_app.data.items import WEAPON_NAMES, ALL_TOOLS
             race = char.get("species") or char.get("race", "")
             trait_name = "Astral Knowledge" if race == "Githyanki (MPMM)" else "Astral Trance"
             current_sk = char.get("_choices", {}).get("astral_knowledge_skill", [])
@@ -867,7 +796,7 @@ class BaseSheetMixin:
 
     def _export_pdf_dialog(self):
         from PySide6.QtWidgets import QFileDialog
-        from dnd_app.core.pdf_export import export_official_pdf, TEMPLATE_PATH
+        from dnd_app.core.pdf_sheet import export_official_pdf, TEMPLATE_PATH
         import os
         if not os.path.exists(TEMPLATE_PATH):
             QMessageBox.warning(
@@ -1116,7 +1045,7 @@ class BaseSheetMixin:
 
     def _refresh_class_cards(self):
         """(Re)build the header's class cards: one per class, each in its
-        class's colour (data/phbCommon/class_colors.py) as the card's border,
+        class's colour (data/class_colors.py) as the card's border,
         left stripe and tint -- the text stays the normal text colour, so
         darker class colours stay readable. A multiclass slots each class
         in beside the last. They always fit the
@@ -1127,7 +1056,7 @@ class BaseSheetMixin:
              the rest on hover (a 13-class character is legal, if unwise)"""
         lay = self._class_cards_lay
         classes = self.char.get("classes", [])
-        from dnd_app.data.phbCommon.class_colors import class_color, needs_outline
+        from dnd_app.data.class_colors import class_color, needs_outline
         avail = self._class_cards_room()
 
         def _card(title, sub, col, tip, compact):
@@ -1332,7 +1261,7 @@ class BaseSheetMixin:
         """Unified Level Up / Multiclass panel — replaces the separate
         Level Up and Add Multiclass buttons. See LevelUpMulticlassDialog
         for the full behavior."""
-        from dnd_app.data.phb2014.classes import CLASS_DICT
+        from dnd_app.data.classes import CLASS_DICT
         from dnd_app.core.character import add_class, level_up_block_reason
         why = level_up_block_reason(self.char)   # character level 20
         if why:
@@ -1578,7 +1507,7 @@ class BaseSheetMixin:
     def _open_add_multiclass(self):
         """Add a new class for multiclassing."""
         from PySide6.QtWidgets import QInputDialog
-        from dnd_app.data.phb2014.classes import CLASS_NAMES, CLASS_DICT
+        from dnd_app.data.classes import CLASS_NAMES, CLASS_DICT
         from dnd_app.core.character import add_class
         from dnd_app.core.builder import rebuild
         from dnd_app.core.calculator import update_all

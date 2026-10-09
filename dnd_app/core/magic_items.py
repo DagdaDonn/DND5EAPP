@@ -8,7 +8,7 @@ Date: 2026-08-20
 
 from __future__ import annotations
 
-from dnd_app.data.phbCommon.magic_items import get_item_effect, get_magic_item
+from dnd_app.data.magic_items import get_item_effect, get_magic_item
 import re as _re
 
 
@@ -39,7 +39,7 @@ def attunement_prereq_met(char: dict, item_name: str) -> tuple[bool, str]:
     """Checks a magic item's 'requires attunement by X' restriction (a
     class, race/species, or alignment, or the catch-all 'a spellcaster')
     against the character's real data — same shape and same reasoning as
-    levelup_panel.py's feat_prereq_met(). Returns (met, reason_if_not_met);
+    core/choices.py's feat_prereq_met(). Returns (met, reason_if_not_met);
     complex/narrative requirements this can't parse (e.g. "a creature that
     has slain a dragon") are left unenforced, same as feat_prereq_met
     leaves campaign-specific feat prereqs unenforced — the requirement
@@ -411,7 +411,7 @@ def apply_equipment_skill_effects(char: dict) -> None:
     from mundane armor properties (PHB p.144: armor that imposes Stealth
     disadvantage does so for ANY wearer, not just magic armor).
     """
-    from dnd_app.data.phbCommon.items import ARMOR_DICT
+    from dnd_app.data.items import ARMOR_DICT
 
     armor_name = char.get("armor_worn", "No Armor")
     base_armor_name, _ = parse_magic_suffix(armor_name)
@@ -429,7 +429,7 @@ def _is_infusion_target_equipped(char: dict, target_item: str, infusion_name: st
     """Whether the specific item an infusion was applied to is actually
     equipped right now, using the correct mechanism for its slot type
     (weapon/armor/shield each track "equipped" completely differently)."""
-    from dnd_app.data.phb2014.classes import ARTIFICER_INFUSION_TARGETS
+    from dnd_app.data.classes import ARTIFICER_INFUSION_TARGETS
     target_type = ARTIFICER_INFUSION_TARGETS.get(infusion_name)
     if target_type == "weapon":
         return target_item in char.get("equipped_weapons", [])
@@ -486,7 +486,7 @@ def sync_item_charges(char: dict) -> None:
             else:
                 tracked[name] = {"current": uses, "max": uses, "recharge": recharge}
 
-    from dnd_app.data.phb2014.classes import ARTIFICER_INFUSION_CHARGES
+    from dnd_app.data.classes import ARTIFICER_INFUSION_CHARGES
     infusion_charge_keys = set()
     for inf in char.get("active_infusions", []):
         name = inf.get("infusion", "")

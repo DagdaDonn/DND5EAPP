@@ -2,7 +2,7 @@
 
 MIMIC's Android app: a Qt Quick/QML UI over the same `core/` and
 `data/` the desktop app uses, packaged into an APK with buildozer and
-python-for-android (see `packaging/android/` and `installer/android/`).
+python-for-android (see `packaging/android/`).
 
 ## Plan
 
@@ -41,8 +41,8 @@ Working and shipping. What's here:
   roller, Save & Export, settings and credits.
 - `qml/imports/Mimic/` — the theme (all 26 desktop themes), shared
   components (`MButton`, `MCard`, `MIcon`, …) and `IconData.js`, which
-  is GENERATED from `ui_desktop/icon_data.py` so both apps draw the
-  same icons. Regenerate with `python3 -m dnd_app.ui_desktop.icon_data`
+  is GENERATED from `data/icon_data.py` so both apps draw the
+  same icons. Regenerate with `python3 -m dnd_app.data.icon_data`
   (the Android clean build does this automatically).
 
 Conventions every screen follows:

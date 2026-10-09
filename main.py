@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Android build entry point wrapper.
+"""Android app entry point.
 
-pyside6-android-deploy requires an `input_file` at the project root
-(see packaging/android/pysidedeploy.spec's project_dir + input_file).
-The real Android UI entry point lives at dnd_app/ui_android/main.py --
-this wrapper just imports and runs it, so the actual app code stays in
-one place. Required by packaging/android/pysidedeploy.spec: do not
-rename or move this file.
+The Android clean build (packaging/android/clean_build_android.sh) copies
+this file to the root of the APK's app folder; it only starts
+dnd_app/ui_android/main.py, so the app's code stays in one place. Keep it
+at the repo root, next to dnd_app/.
 """
 import os
 import sys

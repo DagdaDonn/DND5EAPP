@@ -807,7 +807,7 @@ def effect_ac_parts(char: dict) -> list:
     # "has the feat") for 2+ distinct melee weapons, neither Two-handed,
     # since a Two-handed weapon can't be one of a pair held one in each hand.
     if "Dual Wielder" in char.get("feats", []):
-        from dnd_app.data.phbCommon.items import WEAPON_DICT
+        from dnd_app.data.items import WEAPON_DICT
         melee_one_handed = []
         for wname in char.get("equipped_weapons", []):
             base_name = wname.split(" +")[0].strip()  # strip a magic "+1"/"+2" suffix
@@ -856,3 +856,79 @@ def has_extra_action(char: dict) -> bool:
     return (char.get("_action_surge_used_this_turn", False)
             or any(EFFECT_TABLE.get(n, {}).get("extra_action")
                    for n in char.get("active_effects", [])))
+
+
+# Features that clearly require holding a holy symbol/spellcasting focus
+# and/or speaking — the same standard the real Wild Shape rule applies to
+# spellcasting itself ("you retain the benefit of any features... if the
+# new form is physically capable of doing so"). This is deliberately a
+# short, conservative list of clear-cut cases rather than an attempt to
+# categorize every class feature in the game; anything not in this list
+# is allowed by default, matching the rule's own default-allow framing.
+# Matched as a substring against the feature's display name, lowercased.
+WILDSHAPE_BLOCKED_FEATURES = {
+    # Requires touching a creature/object with your hands. Not explicitly
+    # addressed in the later, more detailed reference, so kept blocked on
+    # the original reasoning (a beast's mouth/paws aren't hands) rather
+    # than assumed to work without confirmation either way.
+    "lay on hands",
+    # Monk features requiring an unarmed strike specifically — natural
+    # weapons are weapons, but they aren't unarmed strikes, so these
+    # don't apply even though other Monk features (Unarmored Defense,
+    # Slow Fall, Stillness of Mind, Evasion, etc.) work fine.
+    "martial arts", "flurry of blows", "stunning strike",
+    "ki-empowered strikes", "hands of harm", "open hand technique",
+    "quivering palm", "touch of the long death", "drunken technique",
+    "intoxicated frenzy", "radiant sun bolt", "searing arc strike",
+    "searing sunburst", "sun shield",
+    # Require actual arms to manifest
+    "arms of the astral self", "visage of the astral self",
+    "body of the astral self", "awakened astral self",
+    # Require casting a spell or cantrip (or are themselves spellcasting).
+    # NOTE: "disciple of life", "sacred weapon", "pact magic", and
+    # "moon fire" were deliberately removed from this list — the app's
+    # real subclass feature strings bundle these with a component that
+    # explicitly works ("Sacred Weapon + Turn the Unholy",
+    # "Lunar Embodiment + Moon Fire", "Otherworldly Patron + Pact Magic +
+    # Rite Focus", "Bonus Proficiency (Heavy Armor) + Disciple of Life"),
+    # and substring-blocking the whole bundle would incorrectly block the
+    # working half too. The spellcasting half of each is already covered
+    # by the separate _cast_spell gate regardless.
+    "war magic", "eldritch strike", "spell thief", "magical ambush",
+    "versatile trickster", "share spells", "misty wanderer",
+    "fey reinforcements", "mystic frenzy", "revealed arcana",
+    "unsealed arcana", "alchemical savant", "arcane firearm",
+    "destructive wrath", "blessed healer", "reaper", "supreme healing",
+    "grim harvest", "spell breaker",
+    "circle of mortality", "voice of authority", "expert divination",
+    "spell mastery", "signature spells", "arcane ward",
+    "projected ward", "improved abjuration", "focused conjuration",
+    "split enchantment", "alter memories", "sculpt spells",
+    "potent cantrip", "empowered evocation", "overchannel",
+    "power surge", "durable magic", "arcane abeyance", "gravity well",
+    "awakened spellbook", "font of magic", "metamagic",
+    "controlled chaos", "divine magic", "tempestuous magic",
+    "clockwork magic", "psionic spells", "psionic sorcery",
+    "eldritch master", "bonus cantrips",
+    "grasping tentacles", "magical secrets", "additional magical secrets",
+    "battle magic", "mantle of majesty", "mystic chronicle",
+    "awakened spirit", "light bearer", "ritual caster",
+    # Requires manifesting a weapon out of psychic energy
+    "soul blades", "psychic blades",
+    # Require a finesse or ranged weapon specifically (Sneak Attack) —
+    # these all key off having Sneak Attack damage to add to/trigger from,
+    # which natural weapons can never provide.
+    "insightful fighting", "eye for weakness", "sudden strike",
+    "wails from the grave", "death's friend",
+    # Require a bow specifically
+    "arcane shot", "magic arrow", "curving shot", "ever-ready shot",
+    "kensei's shot",
+}
+
+# Combat-duration on/off active_effects toggles (Rage, Reckless Attack,
+# Bladesong, etc.) that share a resource pool -- using the resource
+# both flips the effect on and spends a use. One shared definition read
+# by every method that needs the set, including the rest handlers (see
+# _short_rest()/_long_rest()), so it can't drift out of sync between
+# them.
+RESOURCE_POOL_TOGGLES = {"Hybrid Transformation", "Rage", "Form of Dread", "Starry Form", "Reckless Attack", "Frenzy", "Sacred Weapon", "Invincible Conqueror", "Exalted Champion", "Peerless Athlete", "Hexblade's Curse", "Bladesong", "Radiant Soul (Aasimar)", "Necrotic Shroud", "Gem Flight", "Shifting", "Vow of Enmity", "Living Legend", "Mortal Bulwark", "Elder Champion", "Elemental Gift", "Writhing Tide", "Otherworldly Wings", "Trance of Order", "Umbral Form", "Ghost Walk", "Steps of Night", "Arms of the Astral Self", "Awakened Astral Self", "Giant's Might", "Aspect of the Wyrm", "Spirit Totem", "Radiant Consumption", "Maelstrom Aura"}

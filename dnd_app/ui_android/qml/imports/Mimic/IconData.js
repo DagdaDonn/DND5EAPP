@@ -1,5 +1,5 @@
-// GENERATED from dnd_app/ui_desktop/icon_data.py -- do not edit by hand.
-// Regenerate: python3 -m dnd_app.ui_desktop.icon_data
+// GENERATED from dnd_app/data/icon_data.py -- do not edit by hand.
+// Regenerate: python3 -m dnd_app.data.icon_data
 .pragma library
 
 var stroke = 1.9;

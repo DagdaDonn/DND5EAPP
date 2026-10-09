@@ -466,7 +466,7 @@ def export_character_text(char: dict) -> str:
     # ── Weapons ───────────────────────────────────────────────────────────────
     equipped = char.get("equipped_weapons", [])
     if equipped:
-        from dnd_app.data.phbCommon.items import WEAPON_DICT
+        from dnd_app.data.items import WEAPON_DICT
         from .magic_items import parse_magic_suffix
         add("── WEAPONS ──")
         for wname in equipped:
@@ -528,7 +528,7 @@ def export_character_text(char: dict) -> str:
     # ── Spells known / prepared ───────────────────────────────────────────────
     known = char.get("spells_known", []) + char.get("cantrips", [])
     if known:
-        from dnd_app.data.phbCommon.spells import get_spell
+        from dnd_app.data.spells import get_spell
         prepared = set(char.get("spells_prepared", []))
         by_level = {}
         for sp in known:
@@ -558,7 +558,7 @@ def export_character_text(char: dict) -> str:
 
     # ── Actions / Bonus Actions / Reactions / Passives ───────────────────────
     try:
-        from dnd_app.ui_desktop.action_abilities import build_action_abilities
+        from dnd_app.core.actions import build_action_abilities
         buckets = build_action_abilities(char)
         for bucket in ("Action", "Bonus Action", "Reaction", "Passive"):
             entries = buckets.get(bucket, [])
@@ -597,6 +597,31 @@ def export_character_text(char: dict) -> str:
         add(char["notes"])
 
     return "\n".join(lines)
+
+
+def _merge_coin_spellings(data: dict) -> None:
+    """Coins are "GP", "SP"... everywhere. Older desktop saves also kept
+    lowercase ones ("gp"): the Gear tab's edits, and the background's gold,
+    which rebuild() used to add a second time (the creation wizards already
+    add it, as "GP"). For each coin:
+      * a lowercase amount set on the Gear tab wins
+      * a lowercase "gp" equal to the background's gold is that duplicate --
+        dropped, unless it's the only gold there is"""
+    cur = data.get("currency")
+    if not isinstance(cur, dict):
+        return
+    from dnd_app.data.backgrounds import get_background
+    import re
+    bg_text = (get_background(data.get("background", "")) or {}).get("equipment", "")
+    m = re.search(r"(\d+)\s*gp", bg_text or "", re.IGNORECASE)
+    bg_gold = int(m.group(1)) if m else None
+    for coin in ("CP", "SP", "EP", "GP", "PP"):
+        low = cur.pop(coin.lower(), None)
+        if not isinstance(low, (int, float)):
+            continue
+        if coin == "GP" and low == bg_gold and cur.get("GP"):
+            continue
+        cur[coin] = int(low)
 
 
 def _migrate(data: dict) -> dict:
@@ -644,6 +669,8 @@ def _migrate(data: dict) -> dict:
     if data.get("edition") == "2024":
         data["edition"] = "2014"
         data["_edition_coerced_from_2024"] = True
+
+    _merge_coin_spellings(data)
 
     # Normalize magic_items entries
     normalized = []

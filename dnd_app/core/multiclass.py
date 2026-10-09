@@ -340,7 +340,7 @@ def aggregate_resources(class_levels: dict, ability_scores: dict,
     formula/by_level-driven class resource in the game (Rage, Wild
     Shape, Ki, Sorcery Points, Channel Divinity, Lay on Hands) depends
     on reading from the correct edition's CLASS_DICT."""
-    from dnd_app.data.phb2014.classes import CLASS_DICT as CLASS_DICT_2014
+    from dnd_app.data.classes import CLASS_DICT as CLASS_DICT_2014
     from dnd_app.data.phb2024.classes_2024 import CLASS_DICT_2024
     CLASS_DICT = CLASS_DICT_2024 if edition == "2024" else CLASS_DICT_2014
 
@@ -1001,7 +1001,7 @@ def compute_hit_points(class_levels: dict, con_mod: int,
     First class level always gets max HD value.
     Subsequent levels get average (floor(HD/2)+1) or can be rolled.
     """
-    from dnd_app.data.phb2014.classes import CLASS_DICT
+    from dnd_app.data.classes import CLASS_DICT
 
     total_level = sum(class_levels.values())
     if total_level == 0:
@@ -1119,7 +1119,7 @@ def get_saving_throw_profs(class_levels: dict) -> set:
     char["classes"] (true for every real caller — they all build it via
     core.character.class_levels(char), a dict comprehension over that
     list in order), so its first key is reliably the starting class."""
-    from dnd_app.data.phb2014.classes import CLASS_DICT
+    from dnd_app.data.classes import CLASS_DICT
     starting_class = next(iter(class_levels), None)
     if not starting_class:
         return set()
@@ -1129,7 +1129,7 @@ def get_saving_throw_profs(class_levels: dict) -> set:
 
 def get_armor_profs(class_levels: dict) -> str:
     """Summarize armor proficiencies across all classes."""
-    from dnd_app.data.phb2014.classes import CLASS_DICT
+    from dnd_app.data.classes import CLASS_DICT
     all_profs = []
     for cls_name, level in class_levels.items():
         if level <= 0:
@@ -1144,7 +1144,7 @@ def get_armor_profs(class_levels: dict) -> str:
 
 def get_skill_choices_for_class(cls_name: str) -> tuple[list, int]:
     """Return (skill_choices_list, count) for a class."""
-    from dnd_app.data.phb2014.classes import CLASS_DICT
+    from dnd_app.data.classes import CLASS_DICT
     cls = CLASS_DICT.get(cls_name)
     if not cls:
         return [], 0

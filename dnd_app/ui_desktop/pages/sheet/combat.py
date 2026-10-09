@@ -39,22 +39,22 @@ from dnd_app.core.dying import (
     take_damage, heal, heal_block_reason, set_death_saves,
     revive, death_cause, death_status_text, STABLE_MESSAGE,
 )
-from dnd_app.core.spell_components import spell_component_block_reason
+from dnd_app.core.spellcasting import spell_component_block_reason
 from dnd_app.core.save_load import (
     save_character, load_character, list_saved_characters, character_filename, validate_character,
 )
 from dnd_app.core.character import set_subclass, get_class_entry
-from dnd_app.data.phbCommon.magic_items import ALL_MAGIC_ITEMS, has_item_effect
+from dnd_app.data.magic_items import ALL_MAGIC_ITEMS, has_item_effect
 from dnd_app.ui_desktop.dialogs.levelup_panel import LevelUpPanel
-from dnd_app.data.phb2014.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
-from dnd_app.data.phb2014.races import get_race
-from dnd_app.data.phbCommon.backgrounds import get_background
-from dnd_app.data.phbCommon.feats import get_feat
-from dnd_app.data.phbCommon.spells import get_spell, spells_for_class, ALL_SPELLS
-from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON_DICT,
+from dnd_app.data.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
+from dnd_app.data.races import get_race
+from dnd_app.data.backgrounds import get_background
+from dnd_app.data.feats import get_feat
+from dnd_app.data.spells import get_spell, spells_for_class, ALL_SPELLS
+from dnd_app.data.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON_DICT,
     ADVENTURING_GEAR, GEAR_NAMES, MOUNTS, ALL_TOOLS, SIMPLE_MELEE, SIMPLE_RANGED,
     MARTIAL_MELEE, MARTIAL_RANGED, ARTISAN_TOOLS, SPECIAL_ARMOR)
-from dnd_app.data.phbCommon.conditions import CONDITIONS
+from dnd_app.data.conditions import CONDITIONS
 from .base import *
 from .base import _lbl, _sep, _card
 from dnd_app.ui_desktop import icons as _icons
@@ -171,7 +171,7 @@ class CombatMixin:
         # above is centered and mechanical, this is a separate, smaller
         # aside underneath it.
         if self.char.get("optional_rules", {}).get("critical_flavor", False):
-            from dnd_app.ui_desktop.style.flavor_text import random_death_message
+            from dnd_app.data.flavor_text import random_death_message
             self._toast(random_death_message(), duration_ms=0)
 
     def _on_condition_changed(self, cond: str, on: bool):
@@ -307,7 +307,7 @@ class CombatMixin:
         it tracks the transformation state, uses, and a separate HP pool
         correctly, and shows the beast's stat block, but a full sheet-wide
         override of STR/DEX/CON-driven calculations is a larger follow-up."""
-        from dnd_app.data.phbCommon.statblocks import WILDSHAPE_BEASTS
+        from dnd_app.data.statblocks import WILDSHAPE_BEASTS
         from dnd_app.core.calculator import get_available_wildshape_beasts
 
         card = _card(PURPLE+"55")
@@ -393,7 +393,7 @@ class CombatMixin:
 
     def _wildshape_transform(self, beast_name: str):
         if not beast_name: return
-        from dnd_app.data.phbCommon.statblocks import WILDSHAPE_BEASTS
+        from dnd_app.data.statblocks import WILDSHAPE_BEASTS
         beast = WILDSHAPE_BEASTS.get(beast_name)
         if not beast: return
         if not self._spend_wildshape_use():
@@ -413,7 +413,7 @@ class CombatMixin:
         """Circle of the Moon's Combat Wild Shape: spend a spell slot as
         a bonus action to regain 1d8 HP per level of the slot, while
         transformed."""
-        from dnd_app.data.phbCommon.statblocks import WILDSHAPE_BEASTS
+        from dnd_app.data.statblocks import WILDSHAPE_BEASTS
         from dnd_app.core.calculator import subclasses as _sc, class_levels as _clv
         from dnd_app.core.multiclass import compute_all_spell_slots
         active = self.char.get("_wildshape_active")
@@ -1075,7 +1075,7 @@ class CombatMixin:
         cur = self._hp_current_hp.value()
         wild = self.char.get("_wildshape_active")
         if wild:
-            from dnd_app.data.phbCommon.statblocks import WILDSHAPE_BEASTS
+            from dnd_app.data.statblocks import WILDSHAPE_BEASTS
             beast_max = WILDSHAPE_BEASTS.get(wild, {}).get("hp", cur)
             new_hp = min(beast_max, cur + amt)
             self._hp_current_hp.setValue(new_hp)
@@ -1220,7 +1220,7 @@ class CombatMixin:
         rogue_lvl = class_levels(self.char).get("Rogue", 0)
         has_qualifying_weapon = False
         if rogue_lvl > 0:
-            from dnd_app.data.phbCommon.items import WEAPON_DICT
+            from dnd_app.data.items import WEAPON_DICT
             from dnd_app.core.magic_items import parse_magic_suffix
             for wpn_name in self.char.get("equipped_weapons", []):
                 base_name, _ = parse_magic_suffix(wpn_name)
@@ -2021,7 +2021,7 @@ class CombatMixin:
         aren't rage- or toggle-gated, they're just part of the character.
         Some races have more than one distinct natural attack, so this
         renders one row per entry rather than assuming exactly one."""
-        from dnd_app.data.phbCommon.items import RACIAL_NATURAL_WEAPONS
+        from dnd_app.data.items import RACIAL_NATURAL_WEAPONS
         species = self.char.get("species") or self.char.get("race", "")
         weapons = list(RACIAL_NATURAL_WEAPONS.get(species, []))
         if species == "Simic Hybrid" and "Grappling Appendages" in self.char.get("_choices", {}).get("simic_enhancement_5th", []):
@@ -2550,7 +2550,7 @@ class CombatMixin:
         active = self.char.get("_wildshape_active")
         if not active:
             return
-        from dnd_app.data.phbCommon.statblocks import WILDSHAPE_BEASTS
+        from dnd_app.data.statblocks import WILDSHAPE_BEASTS
         beast = WILDSHAPE_BEASTS.get(active)
         if not beast:
             return
@@ -2635,7 +2635,7 @@ class CombatMixin:
         self._hp_temp_hp.blockSignals(True)
         active_beast = char.get("_wildshape_active")
         if active_beast:
-            from dnd_app.data.phbCommon.statblocks import WILDSHAPE_BEASTS
+            from dnd_app.data.statblocks import WILDSHAPE_BEASTS
             beast = WILDSHAPE_BEASTS.get(active_beast, {})
             mx = beast.get("hp", 0)
             cur = char.get("_wildshape_hp", mx)

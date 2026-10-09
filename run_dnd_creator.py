@@ -23,7 +23,7 @@ def _show_import_error(exc, missing_name=""):
             "    pip install PySide6\n\n"
             "If you built an EXE with PyInstaller, rebuild with:\n"
             "    --collect-all PySide6\n\n"
-            "See packaging/windows/BUILD_EXE.md for the full recommended build command."
+            "See packaging/windows/README.md for the full recommended build command."
         )
     else:
         title = "Import error"

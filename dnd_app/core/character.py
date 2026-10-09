@@ -287,7 +287,7 @@ def ability_score(char: dict, ability: str, ignore_wildshape: bool = False) -> i
     # wild shaped, you use the beast's separate HP pool instead.
     active_beast = char.get("_wildshape_active")
     if active_beast and not ignore_wildshape and ability in ("STR", "DEX", "CON"):
-        from dnd_app.data.phbCommon.statblocks import WILDSHAPE_BEASTS
+        from dnd_app.data.statblocks import WILDSHAPE_BEASTS
         beast = WILDSHAPE_BEASTS.get(active_beast)
         if beast and ability in beast.get("abilities", {}):
             return beast["abilities"][ability]
@@ -319,7 +319,7 @@ def get_class_entry(char: dict, class_name: str) -> Optional[dict]:
 def _lookup_hit_die(class_name: str, fallback: int = 8) -> int:
     """Authoritative hit die from class data — callers can't get it wrong."""
     try:
-        from dnd_app.data.phb2014.classes import CLASS_DICT
+        from dnd_app.data.classes import CLASS_DICT
         return CLASS_DICT.get(class_name, {}).get("hit_die", fallback)
     except Exception:
         return fallback
@@ -371,7 +371,7 @@ def level_up_block_reason(char: dict, class_name: str = "") -> str:
 
 def _subclass_levels(char: dict) -> dict:
     """{class: the level its subclass comes at}, for the character's edition."""
-    from dnd_app.data.phb2014.classes import CLASS_DICT as _D14
+    from dnd_app.data.classes import CLASS_DICT as _D14
     try:
         from dnd_app.data.phb2024.classes_2024 import CLASS_DICT_2024 as _D24
     except Exception:
@@ -450,10 +450,10 @@ def protected_spells(char: dict) -> set:
     so taking a class away (or a level of one) never takes them:
       * granted spells -- race, feat, subclass, fighting style, invocation
         (char["bonus_spells"])
-      * anything a race or feat lets them cast for free (core/free_casts.py)
+      * anything a race or feat lets them cast for free (core/spellcasting.py)
       * any spell picked through a race or feat choice"""
     out = set(char.get("bonus_spells", []))
-    from .free_casts import free_spells_of
+    from .spellcasting import free_spells_of
     for res in char.get("resources", []):
         out |= set(free_spells_of(char, res))
     for key, picked in char.get("_choices", {}).items():
@@ -476,7 +476,7 @@ def drop_spells_of_removed_class(char: dict, removed: dict) -> list:
       3. A Bard who stays (Magical Secrets at 10, Lore at 6) could have
          picked a spell from any list, so nothing is taken from them.
       4. Spells from a race, feat or subclass are never touched."""
-    from dnd_app.data.phbCommon.spells import get_spell
+    from dnd_app.data.spells import get_spell
     gone = _spell_lists_of(removed)
     left = set()
     for entry in char.get("classes", []):
@@ -664,3 +664,165 @@ def short_rest(char: dict) -> None:
 
 def deep_copy(char: dict) -> dict:
     return copy.deepcopy(char)
+
+
+# ── Rest options and preview (both apps' rest dialogs) ──────────────────────
+
+def rest_options(char: dict, rest_type: str) -> list:
+    """What a rest lets the character re-pick, for both apps' rest dialogs:
+    re-preparing spells, an Armorer's armour model, Arcane Recovery, an
+    Eladrin's season, a pact boon's bonded item or book... (long or short
+    rest, as each allows). [{"kind", "label", "detail"}, ...]"""
+    opts = []
+    # Unprepare all spells — any prepared caster, long rest only (this
+    # is the normal way of re-choosing prepared spells: 1 minute per
+    # spell level during a long rest, PHB p.201-202).
+    if rest_type == "long":
+        from dnd_app.core.spellcasting import spell_progression_tables
+        _, _, _, prep_ab = spell_progression_tables()
+        if any(cn in prep_ab for cn in {c["class"] for c in char.get("classes", [])}):
+            if char.get("spells_prepared"):
+                opts.append({
+                    "kind": "unprepare_all",
+                    "label": "Unprepare all spells (choose new ones afterward)",
+                    "detail": "Clears every non-bonus prepared spell so you can pick a "
+                              "different set from the Spells tab.",
+                })
+    # Armorer's Arcane Armor model is changeable on either rest type with smith's tools in hand.
+    is_armorer = any(
+        c.get("class") == "Artificer" and "armorer" in c.get("subclass", "").lower()
+        for c in char.get("classes", [])
+    )
+    if is_armorer and char.get("_choices", {}).get("armorer_model_3"):
+        opts.append({
+            "kind": "armorer_model",
+            "label": "Change Arcane Armor model (Guardian / Infiltrator)",
+            "detail": "Requires smith's tools in hand.",
+        })
+    # Arcane Recovery (Wizard 1+): short rest only (the rule triggers
+    # "when you finish a short rest"), once per day (checked via the
+    # resource added in update_all), only if there's actually
+    # something expended to recover.
+    if rest_type == "short":
+        arcane_recovery_res = next(
+            (r for r in char.get("resources", []) if r.get("key") == "arcane_recovery"), None)
+        if arcane_recovery_res and arcane_recovery_res.get("current", 0) > 0:
+            if any(char.get("spell_slots_used", [])):
+                opts.append({
+                    "kind": "arcane_recovery",
+                    "label": "Arcane Recovery — recover expended spell slots",
+                    "detail": "Once per day: recover slots totaling \u2264 half your Wizard "
+                              "level (rounded up), max slot level 5.",
+                })
+    # Eladrin season changes only on a long rest ("you can change your chosen season after a long rest").
+    race = char.get("species") or char.get("race", "")
+    if rest_type == "long" and "eladrin" in race.lower() and char.get("_choices", {}).get("eladrin_season"):
+        opts.append({
+            "kind": "eladrin_season",
+            "label": "Change Eladrin season",
+            "detail": "Changes which additional effect your Fey Step bonus action has.",
+        })
+    # Githyanki (MPMM)'s Astral Knowledge / Astral Elf's Astral Trance:
+    # both grant "proficiency in one skill and with one weapon or tool
+    # of your choice ... until the end of your next long rest" —
+    # re-chosen every long rest, not a one-time pick.
+    if rest_type == "long" and race in ("Githyanki (MPMM)", "Astral Elf") and \
+            char.get("_choices", {}).get("astral_knowledge_skill"):
+        trait_name = "Astral Knowledge" if race == "Githyanki (MPMM)" else "Astral Trance"
+        opts.append({
+            "kind": "astral_knowledge_swap",
+            "label": f"Re-choose {trait_name}'s skill and weapon/tool proficiencies",
+            "detail": "Changes which skill and which weapon or tool proficiency you currently "
+                      "have from this trait.",
+        })
+    # Pact Boon 1-hour rituals are available on short rest (and long rest), since a short rest is defined as being at least an hour.
+    pact_choice = char.get("_choices", {}).get("warlock_pact_boon", [])
+    pact_name = pact_choice[0].lower() if pact_choice else ""
+    if "blade" in pact_name:
+        opts.append({
+            "kind": "pact_blade_bond",
+            "label": "Bond a magic weapon to become your pact weapon",
+            "detail": "1-hour ritual, performable during a short rest. The weapon becomes "
+                      "your pact weapon until you die, bond a different weapon, or break "
+                      "the bond (also a 1-hour ritual).",
+        })
+    if "tome" in pact_name:
+        opts.append({
+            "kind": "pact_tome_replace",
+            "label": "Replace a lost Book of Shadows",
+            "detail": "1-hour ceremony, performable during a short or long rest. Destroys "
+                      "the previous book.",
+        })
+    if "talisman" in pact_name:
+        opts.append({
+            "kind": "pact_talisman_replace",
+            "label": "Replace a lost Talisman",
+            "detail": "1-hour ceremony, performable during a short or long rest. Destroys "
+                      "the previous amulet.",
+        })
+    # Guidance of the Spirits (Bard, College of Spirits) resets on a long rest only. Whispers of the Dead (Rogue, Phantom) resets on either rest type.
+    if rest_type == "long" and char.get("_choices", {}).get("guidance_of_the_spirits_skill"):
+        opts.append({
+            "kind": "guidance_spirits_swap",
+            "label": "Swap Guidance of the Spirits' skill",
+            "detail": "Changes which skill you gained proficiency in.",
+        })
+    if char.get("_choices", {}).get("whispers_of_the_dead_prof"):
+        opts.append({
+            "kind": "whispers_dead_swap",
+            "label": "Channel a different Whispers of the Dead proficiency",
+            "detail": "Changes which skill or tool proficiency you currently have from this feature.",
+        })
+    if rest_type == "long" and char.get("_choices", {}).get("lunar_phase"):
+        opts.append({
+            "kind": "lunar_phase_swap",
+            "label": "Change your Lunar Embodiment phase",
+            "detail": "Choose Full Moon, New Moon, or Crescent Moon.",
+        })
+    return opts
+
+
+def rest_preview_lines(rest_type: str, preview: dict) -> list:
+    """The lines a rest preview shows (HP, hit dice, slots, resources, what
+    fades), for both apps' rest dialogs."""
+    lines = []
+    if rest_type == "short":
+        if preview["hp"] >= preview["max_hp"]:
+            lines.append(f"HP: already full ({preview['max_hp']})")
+        elif preview["hit_dice_available"] > 0:
+            lines.append(f"HP: {preview['hp']}/{preview['max_hp']}  —  "
+                          f"{preview['hit_dice_available']} hit dice available, "
+                          f"you'll choose how many to spend next")
+        else:
+            lines.append(f"HP: {preview['hp']}/{preview['max_hp']}  —  no hit dice remaining")
+    else:
+        heal = preview["max_hp"] - preview["hp"]
+        if heal > 0:
+            lines.append(f"HP: {preview['hp']} → {preview['max_hp']} (full heal, +{heal})")
+        else:
+            lines.append(f"HP: already full ({preview['max_hp']})")
+        if preview["temp_hp"] > 0:
+            lines.append(f"Temporary HP: {preview['temp_hp']} → 0 (lost)")
+        if preview["hit_dice_restored"] > 0:
+            lines.append(f"Hit Dice: +{preview['hit_dice_restored']} restored")
+        if preview["exhaustion"] > 0:
+            lines.append(f"Exhaustion: level {preview['exhaustion']} → {preview['exhaustion_after']}")
+        if preview["death_reset"]:
+            lines.append("Death saves: cleared")
+        if preview["was_concentrating"]:
+            lines.append(f"Concentration on {preview['was_concentrating']}: will end")
+
+    if preview.get("slot_levels_reset"):
+        levels = ", ".join(f"Lv{lvl}" for lvl in preview["slot_levels_reset"])
+        lines.append(f"Spell slots restored: {levels}")
+    if preview.get("pact_restore"):
+        lines.append("Pact Magic slots: restored")
+    if preview.get("resets"):
+        lines.append("")
+        lines.append("Resources restored:")
+        lines.extend(f"  • {name}: {cur} → {tgt}" for name, cur, tgt in preview["resets"])
+    if preview.get("fading"):
+        lines.append("")
+        lines.append("Will fade/end:")
+        lines.extend(f"  • {n}" for n in preview["fading"])
+    return lines

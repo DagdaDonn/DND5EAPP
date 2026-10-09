@@ -13,7 +13,7 @@ from ...shared import *
 # already brought in).
 from ...shared import _btn, _pill
 from ...widgets import FlowLayout, FlowContainer, FilterSidebar
-from dnd_app.ui_desktop.action_abilities import _append_cantrip_scaling_note
+from dnd_app.core.actions import _append_cantrip_scaling_note
 from dnd_app.core.character import (
     ability_score, ability_mod, total_level, class_levels, subclasses,
     long_rest, short_rest, add_class
@@ -34,24 +34,29 @@ from dnd_app.core.multiclass import (
     compute_hit_points, get_saving_throw_profs
 )
 from dnd_app.core.builder import rebuild
+from dnd_app.core.spellcasting import (
+    spell_progression_tables, char_spell_classes, max_castable_spell_level,
+    all_caster_classes, known_spell_classes, attribute_known_spells,
+    prepared_caster_caps, attribute_prepared_spells, spell_limits,
+)
 from dnd_app.core.controller import CharacterController
 from dnd_app.core.magic_items import concentration_save, start_concentration, drop_concentration
-from dnd_app.core.spell_components import spell_component_block_reason
+from dnd_app.core.spellcasting import spell_component_block_reason
 from dnd_app.core.save_load import (
     save_character, load_character, list_saved_characters, character_filename, validate_character,
 )
 from dnd_app.core.character import set_subclass, get_class_entry
-from dnd_app.data.phbCommon.magic_items import ALL_MAGIC_ITEMS, has_item_effect
+from dnd_app.data.magic_items import ALL_MAGIC_ITEMS, has_item_effect
 from dnd_app.ui_desktop.dialogs.levelup_panel import LevelUpPanel
-from dnd_app.data.phb2014.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
-from dnd_app.data.phb2014.races import get_race
-from dnd_app.data.phbCommon.backgrounds import get_background
-from dnd_app.data.phbCommon.feats import get_feat
-from dnd_app.data.phbCommon.spells import get_spell, spells_for_class, ALL_SPELLS
-from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON_DICT,
+from dnd_app.data.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
+from dnd_app.data.races import get_race
+from dnd_app.data.backgrounds import get_background
+from dnd_app.data.feats import get_feat
+from dnd_app.data.spells import get_spell, spells_for_class, ALL_SPELLS
+from dnd_app.data.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON_DICT,
     ADVENTURING_GEAR, GEAR_NAMES, MOUNTS, ALL_TOOLS, SIMPLE_MELEE, SIMPLE_RANGED,
     MARTIAL_MELEE, MARTIAL_RANGED, ARTISAN_TOOLS, SPECIAL_ARMOR)
-from dnd_app.data.phbCommon.conditions import CONDITIONS
+from dnd_app.data.conditions import CONDITIONS
 from .base import *
 from .base import _lbl, _sep, _card
 from dnd_app.ui_desktop import icons as _icons
@@ -142,7 +147,7 @@ class SpellsMixin:
         those individual call sites."""
         if not self._spell_rows:
             return
-        from dnd_app.ui_desktop.style.immersive_spells import compute_display_spell_title
+        from dnd_app.core.spellcasting import compute_display_spell_title
         for row in self._spell_rows:
             row.set_display_name(compute_display_spell_title(self.char, row.spell))
 
@@ -244,7 +249,7 @@ class SpellsMixin:
         builder.py, which also prunes it from spells_known itself."""
         if not hasattr(self, "_spell_rows"):
             return
-        from dnd_app.data.phbCommon.spells import get_spell as _gs
+        from dnd_app.data.spells import get_spell as _gs
         shown = {r.spell.get("name") for r in self._spell_rows}
         prepared_set = set(self.char.get("spells_prepared", []))
         for name in self.char.get("spells_known", []):
@@ -524,7 +529,7 @@ class SpellsMixin:
         self._spell_rows = []
         self._level_headers = {}
         self._class_level_headers = {}
-        from dnd_app.data.phbCommon.spells import get_spell as _gs
+        from dnd_app.data.spells import get_spell as _gs
         prepared_set = set(self.char.get("spells_prepared", []))
         # Sort by class then level. _attribute_known_spells() is
         # intentionally scoped to only track "known spells" caps for
@@ -560,8 +565,8 @@ class SpellsMixin:
         so _add_spell_from_browser() can recompute it after adding a
         single new spell too, without a full list rebuild (which would
         clobber in-progress prepared/pin toggles elsewhere on the tab)."""
-        from dnd_app.data.phbCommon.spells import get_spell as _gs
-        all_classes = self._all_caster_classes()
+        from dnd_app.data.spells import get_spell as _gs
+        all_classes = all_caster_classes(self.char)
         class_order = [c.get("class","") for c in self.char.get("classes", [])
                        if c.get("class","") in all_classes]
         from dnd_app.core.calculator import spell_preparing_classes
@@ -664,159 +669,6 @@ class SpellsMixin:
             item.setToolTip(self._spell_tooltip_text(s))
             self._sp_browser.addItem(item)
 
-    @staticmethod
-    def _spell_progression_tables():
-        """Single source of truth for spells-known / cantrips-known
-        progression tables, shared by the summary display, the learn-gate,
-        and the multiclass attribution logic below — kept as one copy so
-        the three call sites can never drift out of sync with each
-        other."""
-        SPELLS_KNOWN = {
-            "Bard":     {1:4,2:5,3:6,4:7,5:8,6:9,7:10,8:11,9:12,10:14,11:15,12:15,
-                         13:16,14:18,15:19,16:19,17:20,18:22,19:22,20:22},
-            "Sorcerer": {1:2,2:3,3:4,4:5,5:6,6:7,7:8,8:9,9:10,10:11,11:12,12:12,
-                         13:13,14:13,15:14,16:14,17:15,18:15,19:15,20:15},
-            "Warlock":  {1:2,2:3,3:4,4:5,5:6,6:7,7:8,8:9,9:10,10:10,11:11,12:11,
-                         13:12,14:12,15:13,16:13,17:14,18:14,19:15,20:15},
-            "Ranger":   {1:0,2:2,3:3,4:3,5:4,6:4,7:5,8:5,9:6,10:6,11:7,12:7,
-                         13:8,14:8,15:9,16:9,17:10,18:10,19:11,20:11},
-        }
-        CANTRIPS = {
-            "Wizard":   {1:3,4:4,10:5},
-            "Cleric":   {1:3},
-            "Druid":    {1:2,6:3,11:4},
-            "Bard":     {1:2,4:3,10:4},
-            "Sorcerer": {1:4,4:5,10:6},
-            "Warlock":  {1:2,4:3,10:4},
-            "Artificer":{1:2},
-        }
-        EK_AT = {3:3,4:4,7:5,8:6,10:7,11:8,13:9,14:10,16:11,19:12,20:13}
-        PREPARE_AB = {"Wizard":"INT","Cleric":"WIS","Druid":"WIS","Paladin":"CHA","Artificer":"INT"}
-        return SPELLS_KNOWN, CANTRIPS, EK_AT, PREPARE_AB
-
-    def _all_caster_classes(self):
-        """{class_name: (cantrip_max, leveled_max_or_None)} for EVERY class
-        that grants cantrips and/or known spells. leveled_max is None for
-        prepared casters (Wizard/Cleric/Druid/Paladin/Artificer) — they
-        don't have a 'known' leveled-spell cap, they prepare a subset of
-        their full list daily (tracked separately via spells_prepared).
-        Cantrips work the same way for every class though, so they're
-        covered here regardless of prepared vs. known."""
-        SPELLS_KNOWN, CANTRIPS, EK_AT, PREPARE_AB = self._spell_progression_tables()
-        out = {}
-        for c in self.char.get("classes", []):
-            cname, lvl = c.get("class",""), c.get("level",0)
-            sub = c.get("subclass","").lower()
-            cant_max = max((v for k,v in CANTRIPS.get(cname,{}).items() if k<=lvl), default=0)
-            if cname in SPELLS_KNOWN:
-                lvl_max = max((v for k,v in SPELLS_KNOWN[cname].items() if k<=lvl), default=0)
-                out[cname] = (cant_max, lvl_max)
-            elif cname == "Fighter" and "eldritch knight" in sub:
-                lvl_max = max((v for k,v in EK_AT.items() if k<=lvl), default=0)
-                out["Fighter (EK)"] = (2 + (1 if lvl>=10 else 0), lvl_max)
-            elif cname == "Rogue" and "arcane trickster" in sub:
-                lvl_max = max((v for k,v in EK_AT.items() if k<=lvl), default=0)
-                out["Rogue (AT)"] = (2 + (1 if lvl>=10 else 0), lvl_max)
-            elif cname in PREPARE_AB:
-                out[cname] = (cant_max, None)
-        return out
-
-    def _known_spell_classes(self):
-        """{class_name: (cantrip_max, leveled_max)} for classes that track
-        their OWN known-LEVELED-spells list (Bard, Sorcerer, Warlock,
-        Ranger, EK Fighter, AT Rogue) — i.e. _all_caster_classes() minus
-        the prepared casters, who don't have a known-spells cap at all."""
-        return {cn: (c, l) for cn, (c, l) in self._all_caster_classes().items()
-                if l is not None}
-
-    def _attribute_known_spells(self):
-        """Partition char['spells_known'] into per-class buckets.
-
-        5e multiclass spellcasting (PHB p.164): each class's spells-known
-        is a COMPLETELY SEPARATE pool — a Sorcerer/Warlock doesn't share
-        one combined list, and spell slots being shared (multiclass slot
-        table) doesn't change that, so a pooled total shown against EACH
-        class's own cap would both mis-split multiclass casters and let
-        one class's spells count against another's limit. Cantrips are
-        attributed across EVERY casting class (prepared casters included,
-        since cantrips are
-        always "known" regardless of prepared/known spellcasting style);
-        leveled spells are only attributed across classes with a genuine
-        known-spells pool.
-
-        When a known spell is on more than one of the character's own
-        eligible class lists (a genuine overlap), it's assigned to
-        whichever eligible class currently has the most room left
-        relative to its own cap, keeping the split balanced rather than
-        one class eating the other's allowance by list order alone.
-
-        Returns: {class_name: {'cantrips': [...], 'leveled': [...]}}
-        """
-        from dnd_app.data.phbCommon.spells import get_spell as _gs
-        all_classes = self._all_caster_classes()
-        known_classes = self._known_spell_classes()
-        buckets = {cn: {"cantrips": [], "leveled": []} for cn in all_classes}
-        if not all_classes:
-            return buckets
-
-        def _real_name(cn):
-            return "Wizard" if cn in ("Fighter (EK)", "Rogue (AT)") else cn
-
-        # Racial/subclass bonus spells (Fairy's Druidcraft, a Cleric
-        # domain spell, etc.) are merged into spells_known so they're
-        # castable, but they're always-known freebies, not a pick that
-        # should eat into a class's own known-spells/cantrip cap — so
-        # this loop excludes anything in char["bonus_spells"] before
-        # counting entries against a class's cap.
-        bonus = set(self.char.get("bonus_spells", []))
-        # A prepared caster's (Cleric/Druid/Paladin/Artificer) own
-        # full-list access dumps its entire available spell list into the
-        # same flat spells_known — a leveled spell there belongs to that
-        # class, not to a known-caster class's own pick, even when the
-        # name also happens to be on that known-caster's spell list (e.g.
-        # "Silence" is both Cleric and Bard). Without this exclusion a
-        # Cleric's own domain access got silently counted as "Bard
-        # learned it", inflating the Bard's known-spell count/cap.
-        from dnd_app.core.builder import full_list_dumped_spell_names
-        full_dumped = set()
-        for names in full_list_dumped_spell_names(self.char).values():
-            full_dumped.update(names)
-        # A leveled spell a prepared caster (Wizard/Cleric/...) can prepare
-        # belongs to that class rather than a known-spells pool when it's
-        # actually prepared, or when no known-spells class could have it
-        # at all -- a Wizard/Warlock preparing Charm Person as a Wizard
-        # spell, or keeping Shield in the spellbook, shouldn't use up one
-        # of the Warlock's spells known.
-        from dnd_app.core.calculator import spell_preparing_classes
-        prepared_set = set(self.char.get("spells_prepared", []))
-        for name in self.char.get("spells_known", []):
-            if name in bonus:
-                continue
-            sp = _gs(name)
-            if not sp: continue
-            is_cantrip = sp.get("level", 1) == 0
-            if not is_cantrip and name in full_dumped:
-                continue
-            sp_classes = set(sp.get("classes", []))
-            if not is_cantrip and spell_preparing_classes(self.char, sp):
-                if name in prepared_set or not any(_real_name(cn) in sp_classes for cn in known_classes):
-                    continue
-            pool = all_classes if is_cantrip else known_classes
-            eligible = [cn for cn in pool if _real_name(cn) in sp_classes]
-            eligible = list(dict.fromkeys(eligible)) or list(pool.keys())
-            if not eligible:
-                continue
-            if len(eligible) == 1:
-                target = eligible[0]
-            else:
-                def _room(cn):
-                    cant_max, lvl_max = all_classes[cn]
-                    bucket = buckets[cn]["cantrips"] if is_cantrip else buckets[cn]["leveled"]
-                    cap = cant_max if is_cantrip else (lvl_max if lvl_max is not None else 999)
-                    return cap - len(bucket)
-                target = max(eligible, key=_room)
-            buckets[target]["cantrips" if is_cantrip else "leveled"].append(name)
-        return buckets
 
     def _refresh_spellcasting_table(self):
         """Populate the 'Class | Ability | Save DC | Atk Bonus' table.
@@ -834,7 +686,7 @@ class SpellsMixin:
         """
         if not hasattr(self, "_dc_table_lay"): return
         from dnd_app.core.calculator import get_prof_bonus, ability_mod as _am
-        from dnd_app.data.phb2014.classes import CLASS_DICT
+        from dnd_app.data.classes import CLASS_DICT
 
         # Clear any existing data rows. QGridLayout has no removeRow(), so
         # track our own row widgets instead — rebuilt fresh on every refresh.
@@ -892,64 +744,13 @@ class SpellsMixin:
             lay.addWidget(hint, row_i, 0, 1, 4)
             self._dc_row_widgets.append(hint)
 
-    def _spell_limits(self) -> list[dict]:
-        """How many spells and cantrips each casting class can know or
-        prepare, and how many it has -- plain data, shared by desktop's
-        Spells Known / Prepared card and the Android Spells screen.
-        One dict per casting class:
-          label      "Wizard Lv5" / "EK Fighter Lv3" / "AT Rogue Lv3"
-          kind       "known" (Sorcerer/Bard/...) or "prepared" (Wizard/Cleric/...)
-          current, max      leveled spells known / prepared vs the cap
-          ability    the ability the prepared cap uses ("INT"), else ""
-          cantrips, cantrip_max   (cantrip_max 0 = the class gets none)
-        Multiclass known-spell casters (Sorcerer/Warlock, Bard/Warlock...)
-        are counted SEPARATELY per class -- never pooled into one shared
-        count checked against every class's cap. Granted spells (domain,
-        racial, feat) don't count, so they're left out of `current`."""
-        from dnd_app.core.character import ability_mod as _am
-        char = self.char
-        SPELLS_KNOWN, CANTRIPS, EK_AT, PREPARE_AB = self._spell_progression_tables()
-        attributed = self._attribute_known_spells()
-        prepared_attributed = self._attribute_prepared_spells()
-        rows = []
-        for c in char.get("classes", []):
-            cname = c["class"]; lvl = c["level"]
-            sub = c.get("subclass", "").lower()
-            cmax = max((v for k, v in CANTRIPS.get(cname, {}).items() if k <= lvl), default=0)
-            is_ek = cname == "Fighter" and "eldritch knight" in sub
-            is_at = cname == "Rogue" and "arcane trickster" in sub
-            if is_ek or is_at:
-                # EK/AT aren't in the CANTRIPS table (it's keyed by full
-                # caster class names) -- 2 cantrips at 3rd level, 3 at 10th
-                cmax = 2 + (1 if lvl >= 10 else 0)
-            # this class's OWN attributed spells, not the flat spells_known list
-            bucket_key = "Fighter (EK)" if is_ek else "Rogue (AT)" if is_at else cname
-            mine = attributed.get(bucket_key, {"cantrips": [], "leveled": []})
-            row = {"cantrips": len(mine["cantrips"]), "cantrip_max": cmax, "ability": ""}
-            if cname in SPELLS_KNOWN:
-                best = max((v for k, v in SPELLS_KNOWN[cname].items() if k <= lvl), default=0)
-                row.update(label=f"{cname} Lv{lvl}", kind="known", current=len(mine["leveled"]), max=best)
-            elif is_ek or is_at:
-                best = max((v for k, v in EK_AT.items() if k <= lvl), default=0)
-                row.update(label=f"{'EK Fighter' if is_ek else 'AT Rogue'} Lv{lvl}", kind="known",
-                           current=len(mine["leveled"]), max=best)
-            elif cname in PREPARE_AB:
-                ab = PREPARE_AB[cname]
-                eff = lvl if cname not in ("Paladin", "Artificer") else max(1, lvl // 2)
-                row.update(label=f"{cname} Lv{lvl}", kind="prepared", ability=ab,
-                           current=len(prepared_attributed.get(cname, [])),
-                           max=max(1, _am(char, ab) + eff))
-            else:
-                continue
-            rows.append(row)
-        return rows
 
     def _refresh_spell_count_labels(self):
         """Show how many spells and cantrips each class can currently
         know/prepare (see _spell_limits)."""
         if not hasattr(self, "_spell_count_lbl"): return
         lines = []
-        for r in self._spell_limits():
+        for r in spell_limits(self.char):
             cantrip_line = (f"  <span style='color:{TEXT3};'>Cantrips: {r['cantrips']}/{r['cantrip_max']}</span>"
                             if r["cantrip_max"] else "")
             if r["kind"] == "prepared":
@@ -1047,12 +848,12 @@ class SpellsMixin:
         Single-class casters never see this — nothing to disambiguate."""
         if not hasattr(self, "_spell_rows"):
             return
-        known_classes = self._known_spell_classes()
+        known_classes = known_spell_classes(self.char)
         if len(known_classes) < 2:
             for row in self._spell_rows:
                 row.set_class_tag(None)
             return
-        attributed = self._attribute_known_spells()
+        attributed = attribute_known_spells(self.char)
         owner = {}
         for cn, buckets in attributed.items():
             for name in buckets["cantrips"] + buckets["leveled"]:
@@ -1071,7 +872,7 @@ class SpellsMixin:
         item = self._sp_browser.itemAt(pos)
         if not item: return
         spell_name = item.text().strip()
-        from dnd_app.data.phbCommon.spells import get_spell
+        from dnd_app.data.spells import get_spell
         spell = get_spell(spell_name)
         if not spell: return
         from PySide6.QtWidgets import QMenu, QDialog, QVBoxLayout, QScrollArea, QWidget, QLabel, QDialogButtonBox
@@ -1107,7 +908,7 @@ class SpellsMixin:
         cl = self._sp_cls_f.currentText()
         lv = self._sp_lvl_f.currentText()
         homebrew = self._sp_homebrew.isChecked()
-        max_castable = None if homebrew else self._max_castable_spell_level()
+        max_castable = None if homebrew else max_castable_spell_level(self.char)
         # spells already on your list aren't offered again (same as Android)
         known = set(self.char.get("spells_known", []))
         for i in range(self._sp_browser.count()):
@@ -1116,7 +917,7 @@ class SpellsMixin:
             ok = (not q or q in sp["name"].lower()) and sp["name"] not in known
             if cl != "All Classes": ok = ok and cl in sp.get("classes",[])
             if not homebrew:
-                mine = self._char_spell_classes()
+                mine = char_spell_classes(self.char)
                 if mine: ok = ok and bool(set(sp.get("classes",[])) & mine)
                 # Hide leveled spells above what the character can currently
                 # cast — unless Homebrew mode is on, matching the "+ Add"
@@ -1129,51 +930,11 @@ class SpellsMixin:
                              (lv.startswith("Lv") and sp["level"]==int(lv[3:])))
             item.setHidden(not ok)
 
-    def _char_spell_classes(self) -> set:
-        """Class spell-lists this character can learn from (EK/AT → Wizard)."""
-        out = set()
-        for c in self.char.get("classes", []):
-            cn = c.get("class",""); sub = c.get("subclass","").lower()
-            if cn in ("Wizard","Cleric","Druid","Bard","Sorcerer","Warlock",
-                      "Paladin","Ranger","Artificer"):
-                out.add(cn)
-            if cn == "Fighter" and "eldritch knight" in sub: out.add("Wizard")
-            if cn == "Rogue"   and "arcane trickster" in sub: out.add("Wizard")
-        return out
-
-    def _spell_caps(self):
-        """(cantrip_max, leveled_max_or_None) POOLED across all casting
-        classes — kept only as a coarse "could this possibly fit anywhere"
-        check for UI hints. Actual per-spell gating in
-        _add_spell_from_browser uses _all_caster_classes()/
-        _attribute_known_spells() for genuine per-class caps instead of
-        this pooled total, since 5e multiclass spellcasting never actually
-        shares one combined known-spells pool."""
-        all_classes = self._all_caster_classes()
-        cant_max = sum(c for c, l in all_classes.values())
-        leveled_vals = [l for c, l in all_classes.values() if l is not None]
-        lvl_max = sum(leveled_vals) if leveled_vals else 0
-        prepared_only = bool(all_classes) and not leveled_vals
-        return cant_max, (None if prepared_only else lvl_max)
-
-    def _max_castable_spell_level(self) -> int:
-        """Highest spell level the character can currently cast, combining
-        ordinary spell slots and Warlock Pact Magic — the two are tracked
-        completely separately in the character data, so checking only one
-        would wrongly block (or wrongly allow) a pure-Warlock or
-        multiclass Warlock character."""
-        max_lvl = 0
-        for i, count in enumerate(self.char.get("spell_slots_max", [])):
-            if count > 0:
-                max_lvl = i + 1
-        if self.char.get("pact_slots_max", 0) > 0:
-            max_lvl = max(max_lvl, self.char.get("pact_slot_level", 0))
-        return max_lvl
 
     def _add_spell_from_browser(self):
         homebrew = self._sp_homebrew.isChecked()
-        my_classes = self._char_spell_classes()
-        from dnd_app.data.phbCommon.spells import get_spell as _gs
+        my_classes = char_spell_classes(self.char)
+        from dnd_app.data.spells import get_spell as _gs
 
         def _real_name(cn):
             return "Wizard" if cn in ("Fighter (EK)", "Rogue (AT)") else cn
@@ -1188,7 +949,7 @@ class SpellsMixin:
                 # to that list by a racial Mark (Mark of Shadow/Detection/
                 # Storm expand the spell list itself, per their real text,
                 # rather than granting a spell directly).
-                from dnd_app.data.phbCommon.spells import get_mark_expanded_spells
+                from dnd_app.data.spells import get_mark_expanded_spells
                 mark_spells = get_mark_expanded_spells(self.char)
                 if my_classes and name not in mark_spells and not (set(sp.get("classes",[])) & my_classes):
                     self._toast(f"{name} isn't on your class spell lists "
@@ -1201,7 +962,7 @@ class SpellsMixin:
                 # applies to leveled spells.
                 sp_level = sp.get("level", 0)
                 if sp_level > 0:
-                    max_lvl = self._max_castable_spell_level()
+                    max_lvl = max_castable_spell_level(self.char)
                     if sp_level > max_lvl:
                         self._toast(f"{name} is a level {sp_level} spell — you can only "
                                     f"cast up to level {max_lvl} right now "
@@ -1212,10 +973,10 @@ class SpellsMixin:
                 # spell N correctly affects the room-check for spell N+1 —
                 # multiclass casters have SEPARATE pools per class, so a
                 # Sorcerer/Warlock can't "borrow" the other's headroom.
-                all_classes = self._all_caster_classes()
+                all_classes = all_caster_classes(self.char)
                 is_cantrip = sp.get("level", 0) == 0
                 sp_classes = set(sp.get("classes", []))
-                pool = all_classes if is_cantrip else self._known_spell_classes()
+                pool = all_classes if is_cantrip else known_spell_classes(self.char)
                 eligible = [cn for cn in pool if _real_name(cn) in sp_classes]
                 if pool and not eligible:
                     # On your class list overall (Gate 1 passed) but none of
@@ -1224,7 +985,7 @@ class SpellsMixin:
                     # character. No "known" cap applies to that; let it through.
                     eligible = []
                 if eligible:
-                    attributed = self._attribute_known_spells()
+                    attributed = attribute_known_spells(self.char)
                     def _room(cn):
                         cant_max, lvl_max = all_classes[cn]
                         bucket = attributed.get(cn, {"cantrips":[], "leveled":[]})
@@ -1251,7 +1012,7 @@ class SpellsMixin:
             # it's also a prepared caster, but real Wizards are limited to
             # whatever's in their spellbook, so the "add" step here still
             # means something distinct from "prepare" for them.
-            _, _, _, PREPARE_AB = self._spell_progression_tables()
+            _, _, _, PREPARE_AB = spell_progression_tables()
             full_list_classes = {c for c in PREPARE_AB if c != "Wizard"}
             if sp.get("level", 0) > 0 and full_list_classes & set(sp.get("classes", [])) & my_classes:
                 self._on_prep_toggled(row, True)
@@ -1308,70 +1069,14 @@ class SpellsMixin:
             if empty:
                 # a pure martial (no slots, no pact magic, no cantrips from
                 # any class yet) gets a wink rather than a to-do
-                martial = (self._max_castable_spell_level() == 0 and
-                           not any(cm > 0 for cm, _ in self._all_caster_classes().values()))
+                martial = (max_castable_spell_level(self.char) == 0 and
+                           not any(cm > 0 for cm, _ in all_caster_classes(self.char).values()))
                 self._my_sp_empty_title.setText(
                     "No spells yet - Who needs them anyway" if martial else "No spells yet")
                 self._my_sp_empty_hint.setText(
                     "Your steel does the talking." if martial
                     else "Add spells from the Spell Browser tab.")
 
-    def _prepared_caster_caps(self) -> dict:
-        """{class_name: cap} for each prepared-casting class the character
-        has (Wizard/Cleric/Druid: ability mod + class level; Paladin/
-        Artificer: ability mod + half class level, rounded down), each with
-        a minimum of 1. Per-class, NOT pooled — 5e multiclass spellcasting
-        gives each prepared-caster class its own separate prepared-spell
-        allotment (PHB p.164, same principle as spells-known being
-        per-class for Sorcerer/Bard/Warlock/Ranger). Preparing a Cleric
-        spell should never eat into a Druid's separate allotment on the
-        same character, or vice versa."""
-        from dnd_app.core.character import ability_mod
-        _, _, _, PREPARE_AB = self._spell_progression_tables()
-        caps = {}
-        for c in self.char.get("classes", []):
-            cname, lvl = c.get("class",""), c.get("level",0)
-            if cname not in PREPARE_AB or lvl <= 0:
-                continue
-            mod = ability_mod(self.char, PREPARE_AB[cname])
-            level_term = (lvl // 2) if cname in ("Paladin", "Artificer") else lvl
-            caps[cname] = max(1, mod + level_term)
-        return caps
-
-    def _attribute_prepared_spells(self) -> dict:
-        """Partition char['spells_prepared'] into per-class buckets, the
-        same way _attribute_known_spells() does for spells_known. Only
-        ordinary leveled spells count (cantrips and bonus/domain/circle
-        spells are always-available and don't draw from any class's
-        prepared allotment). When a prepared spell is on more than one of
-        the character's own prepared-caster class lists, it's assigned to
-        whichever eligible class currently has the most room left, keeping
-        the split balanced rather than one class's list winning by order.
-
-        Returns: {class_name: [spell_name, ...]}
-        """
-        from dnd_app.data.phbCommon.spells import get_spell as _gs
-        caps = self._prepared_caster_caps()
-        buckets = {cn: [] for cn in caps}
-        if not caps:
-            return buckets
-        bonus = set(self.char.get("bonus_spells", []))
-        for name in self.char.get("spells_prepared", []):
-            if name in bonus:
-                continue
-            sp = _gs(name)
-            if not sp or sp.get("level", 0) == 0:
-                continue
-            sp_classes = set(sp.get("classes", []))
-            eligible = [cn for cn in caps if cn in sp_classes]
-            if not eligible:
-                continue
-            if len(eligible) == 1:
-                target = eligible[0]
-            else:
-                target = max(eligible, key=lambda cn: caps[cn] - len(buckets[cn]))
-            buckets[target].append(name)
-        return buckets
 
     def _on_prep_toggled(self, row, checked: bool):
         """Sync a spell row's prepared checkbox to char['spells_prepared'],
@@ -1398,11 +1103,11 @@ class SpellsMixin:
         # spells) don't count against any prepared cap — only ordinary
         # leveled spells the player is actively choosing to prepare do.
         if row.spell.get("level", 0) > 0 and name not in self.char.get("bonus_spells", []):
-            caps = self._prepared_caster_caps()
+            caps = prepared_caster_caps(self.char)
             sp_classes = set(row.spell.get("classes", []))
             eligible = [cn for cn in caps if cn in sp_classes]
             if eligible:
-                attributed = self._attribute_prepared_spells()
+                attributed = attribute_prepared_spells(self.char)
                 target = max(eligible, key=lambda cn: caps[cn] - len(attributed.get(cn, [])))
                 current = len(attributed.get(target, []))
                 cap = caps[target]
@@ -1449,7 +1154,7 @@ class SpellsMixin:
             self._level_headers[lvl] = hdr
             ins = self._find_hdr_pos(lvl)
             self._my_spells_lay.insertWidget(ins, hdr)
-        from dnd_app.ui_desktop.style.immersive_spells import compute_display_spell_title
+        from dnd_app.core.spellcasting import compute_display_spell_title
         from dnd_app.core.calculator import spell_preparing_classes
         row = SpellRow(spell, prepared, locked=is_bonus,
                         display_name=compute_display_spell_title(self.char, spell),
@@ -1616,8 +1321,8 @@ class SpellsMixin:
             self._toast(f"Cast {spell['name']} (cantrip — at will)")
             return
         # A free daily cast (a racial spell, Fey Touched, Firbolg Magic...)
-        # is used before any slot -- see core/free_casts.py.
-        from dnd_app.core.free_casts import spend_free_cast, free_cast_message
+        # is used before any slot -- see core/spellcasting.py.
+        from dnd_app.core.spellcasting import spend_free_cast, free_cast_message
         free = spend_free_cast(self.char, spell["name"])
         if free:
             if spell.get("concentration"):

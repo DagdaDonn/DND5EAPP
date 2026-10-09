@@ -35,22 +35,22 @@ from dnd_app.core.multiclass import (
 from dnd_app.core.builder import rebuild
 from dnd_app.core.controller import CharacterController
 from dnd_app.core.magic_items import concentration_save, start_concentration, drop_concentration
-from dnd_app.core.spell_components import spell_component_block_reason
+from dnd_app.core.spellcasting import spell_component_block_reason
 from dnd_app.core.save_load import (
     save_character, load_character, list_saved_characters, character_filename, validate_character,
 )
 from dnd_app.core.character import set_subclass, get_class_entry
-from dnd_app.data.phbCommon.magic_items import ALL_MAGIC_ITEMS, has_item_effect
+from dnd_app.data.magic_items import ALL_MAGIC_ITEMS, has_item_effect
 from dnd_app.ui_desktop.dialogs.levelup_panel import LevelUpPanel
-from dnd_app.data.phb2014.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
-from dnd_app.data.phb2014.races import get_race
-from dnd_app.data.phbCommon.backgrounds import get_background
-from dnd_app.data.phbCommon.feats import get_feat, feat_summary
-from dnd_app.data.phbCommon.spells import get_spell, spells_for_class, ALL_SPELLS
-from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON_DICT,
+from dnd_app.data.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
+from dnd_app.data.races import get_race
+from dnd_app.data.backgrounds import get_background
+from dnd_app.data.feats import get_feat, feat_summary
+from dnd_app.data.spells import get_spell, spells_for_class, ALL_SPELLS
+from dnd_app.data.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON_DICT,
     ADVENTURING_GEAR, GEAR_NAMES, MOUNTS, ALL_TOOLS, SIMPLE_MELEE, SIMPLE_RANGED,
     MARTIAL_MELEE, MARTIAL_RANGED, ARTISAN_TOOLS, SPECIAL_ARMOR)
-from dnd_app.data.phbCommon.conditions import CONDITIONS
+from dnd_app.data.conditions import CONDITIONS
 from .base import *
 from .base import _lbl, _sep, _card
 from dnd_app.ui_desktop import icons as _icons
@@ -154,7 +154,7 @@ class FeaturesMixin:
                 anc = self.char.get("draconic_ancestry","")
                 if anc:
                     try:
-                        from dnd_app.data.phb2014.races import DRACONIC_ANCESTRY
+                        from dnd_app.data.races import DRACONIC_ANCESTRY
                         anc_data = DRACONIC_ANCESTRY.get(anc)
                         if anc_data:
                             dmg, shape, desc = anc_data
@@ -227,7 +227,7 @@ class FeaturesMixin:
 
             # Load proper subclass feature names from SUBCLASS_FEATURES
             try:
-                from dnd_app.data.phbCommon.class_features import SUBCLASS_FEATURES, CLASS_FEATURE_INDEX
+                from dnd_app.data.class_features import SUBCLASS_FEATURES, CLASS_FEATURE_INDEX
                 proper_names = SUBCLASS_FEATURES.get((cname, sub), [])
             except ImportError:
                 proper_names = []
@@ -429,7 +429,7 @@ class FeaturesMixin:
         from dnd_app.core.character import class_levels as _cls_lvls_repl
         art_lvl = _cls_lvls_repl(self.char).get("Artificer", 0)
         if art_lvl >= 2:
-            from dnd_app.data.phb2014.classes import ARTIFICER_REPLICABLE_ITEMS
+            from dnd_app.data.classes import ARTIFICER_REPLICABLE_ITEMS
             all_replicable_names = {name for tier_items in ARTIFICER_REPLICABLE_ITEMS.values()
                                      for name, _ in tier_items}
             known_infusions = self.char.get("artificer_infusions", [])
@@ -444,7 +444,7 @@ class FeaturesMixin:
 
                 # ── Optional / Alternate Class Features (TCoE) ──────────────────────
         try:
-            from dnd_app.data.phbCommon.class_features import OPTIONAL_CLASS_FEATURES as _OPT
+            from dnd_app.data.class_features import OPTIONAL_CLASS_FEATURES as _OPT
         except ImportError:
             _OPT = {}
         _enabled = self.char.get("_choices",{}).get("optional_features",{})
@@ -469,7 +469,7 @@ class FeaturesMixin:
                 self._add_feature_section(f"✦ Optional — {_cn}",AMBER,_items,badge_color=AMBER)
 
         # ── DM-Granted Feats Browser ─────────────────────────────────────────
-        from dnd_app.data.phbCommon.feats import ALL_FEATS, get_feat as _get_feat
+        from dnd_app.data.feats import ALL_FEATS, get_feat as _get_feat
         # Show any already-granted feats
         granted = self.char.get("dm_feats", [])
         if granted:
@@ -493,7 +493,7 @@ class FeaturesMixin:
         # bonus features) — same pattern as DM-Granted Feats above, so a
         # granted reward actually appears on the sheet, not just as a
         # checkmark in the browser below.
-        from dnd_app.data.phbCommon.dm_rewards import get_dm_reward as _get_dm_reward
+        from dnd_app.data.dm_rewards import get_dm_reward as _get_dm_reward
         granted_rewards = self.char.get("dm_rewards", [])
         if granted_rewards:
             reward_items = []
@@ -555,7 +555,7 @@ class FeaturesMixin:
             f"QLineEdit{{background:{SURF2};border:1px solid {BORDER2};border-radius:5px;"
             f"color:{TEXT};padding:4px 8px;font-size:{FS_SMALL}px;}}"
             f"QLineEdit:focus{{border-color:{AMBER};}}")
-        from dnd_app.data.phbCommon.dm_rewards import DM_REWARD_CATEGORIES
+        from dnd_app.data.dm_rewards import DM_REWARD_CATEGORIES
         fb_type_filter = QComboBox()
         fb_type_filter.addItems(DM_REWARD_CATEGORIES)
         fb_type_filter.setStyleSheet(
@@ -575,7 +575,7 @@ class FeaturesMixin:
             f"QListWidget::item{{padding:3px 8px;}}"
             f"QListWidget::item:selected{{background:{qa(AMBER,0x88)};color:white;}}"
             f"QListWidget::item:hover:!selected{{background:{SURF3};}}")
-        from dnd_app.data.phbCommon.feature_tooltips import FEATURE_DESCS as _FEAT_DESCS
+        from dnd_app.data.feature_tooltips import FEATURE_DESCS as _FEAT_DESCS
         for ft in ALL_FEATS:
             already = ft["name"] in self.char.get("dm_feats", [])
             item = QListWidgetItem(("✓ " if already else "") + ft["name"])
@@ -600,7 +600,7 @@ class FeaturesMixin:
         # list, distinguished by a crystal-ball icon and the second data role, since
         # these are a genuinely different kind of content (mostly narrative
         # hooks with occasional mechanical traits) than standard feats.
-        from dnd_app.data.phbCommon.dm_rewards import ALL_DM_REWARDS
+        from dnd_app.data.dm_rewards import ALL_DM_REWARDS
         for rw in ALL_DM_REWARDS:
             already_rw = rw["name"] in self.char.get("dm_rewards", [])
             item = QListWidgetItem(("✓ " if already_rw else "") + rw["name"])
@@ -660,7 +660,7 @@ class FeaturesMixin:
             fname = item.data(Qt.UserRole) or item.text().lstrip("✓ ")
             item_type = item.data(Qt.UserRole + 1) or "feat"
             if item_type == "dm_reward":
-                from dnd_app.data.phbCommon.dm_rewards import get_dm_reward as _gdr2
+                from dnd_app.data.dm_rewards import get_dm_reward as _gdr2
                 rw = _gdr2(fname)
                 if rw:
                     pre = rw.get("prereq","")
@@ -671,8 +671,8 @@ class FeaturesMixin:
                         + (f"<br><span style='color:{AMBER};'>Requires: {pre}</span>" if pre else "")
                         + f"<br><br>{self._format_multi_para(rw.get('desc',''))}")
                 return
-            from dnd_app.data.phbCommon.feats import get_feat as _gf2
-            from dnd_app.data.phbCommon.feature_tooltips import FEATURE_DESCS as _FEAT_DESCS2
+            from dnd_app.data.feats import get_feat as _gf2
+            from dnd_app.data.feature_tooltips import FEATURE_DESCS as _FEAT_DESCS2
             ft = _gf2(fname)
             if ft:
                 pre = ft.get("prereq",""); src_tag=ft.get("source","")
@@ -816,9 +816,9 @@ class FeaturesMixin:
         return '<br><br>'.join(chunks)
 
     def _add_feature_section(self, title, color, items, badge_color=None):
-        from dnd_app.data.phbCommon.feature_ui_interactions import FEATURE_CONFIG
+        from dnd_app.data.feature_ui_interactions import FEATURE_CONFIG
         try:
-            from dnd_app.data.phbCommon.feature_tooltips import FEATURE_DESCS
+            from dnd_app.data.feature_tooltips import FEATURE_DESCS
         except ImportError:
             FEATURE_DESCS = {}
         # Resolve '+STAT' placeholders into real numbers for every item —
@@ -938,7 +938,7 @@ class FeaturesMixin:
         self._feat_tab_lay.insertWidget(self._feat_tab_lay.count()-1, grp)
 
     def _add_wild_magic_section(self, barb: bool = False):
-        from dnd_app.data.phb2014.classes import WILD_MAGIC_SURGE_TABLE, WILD_MAGIC_BARBARIAN_TABLE
+        from dnd_app.data.classes import WILD_MAGIC_SURGE_TABLE, WILD_MAGIC_BARBARIAN_TABLE
         # Determine which table to use: Barbarian=d8, Sorcerer=d100
         is_barb_wm = barb
         if is_barb_wm:

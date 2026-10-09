@@ -23,12 +23,12 @@ from ..shared import _btn
 from dnd_app.core.character import new_character, add_class, ability_score, ability_mod, get_class_entry, set_subclass
 from dnd_app.core.builder import rebuild, get_choices_needed, apply_choice, race_requires_subrace
 from dnd_app.core.multiclass import check_multiclass_prereq
-from dnd_app.data.phb2014.races import ALL_RACES, RACE_NAMES, RACE_DICT, get_race, flex_asi_desc, combined_racial_asi
-from dnd_app.data.phb2014.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
-from dnd_app.data.phbCommon.backgrounds import ALL_BACKGROUNDS, BACKGROUND_NAMES, get_background
-from dnd_app.data.phbCommon.feats import ALL_FEATS
-from dnd_app.data.phbCommon.spells import ALL_SPELLS, spells_for_class, get_spell
-from dnd_app.data.phbCommon.items import ARMOR, ALL_WEAPONS, ADVENTURING_GEAR, SIMPLE_MELEE, SIMPLE_RANGED, MARTIAL_MELEE, MARTIAL_RANGED
+from dnd_app.data.races import ALL_RACES, RACE_NAMES, RACE_DICT, get_race, flex_asi_desc, combined_racial_asi
+from dnd_app.data.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
+from dnd_app.data.backgrounds import ALL_BACKGROUNDS, BACKGROUND_NAMES, get_background
+from dnd_app.data.feats import ALL_FEATS
+from dnd_app.data.spells import ALL_SPELLS, spells_for_class, get_spell
+from dnd_app.data.items import ARMOR, ALL_WEAPONS, ADVENTURING_GEAR, SIMPLE_MELEE, SIMPLE_RANGED, MARTIAL_MELEE, MARTIAL_RANGED
 from dnd_app.ui_desktop import icons as _icons
 
 ABILITIES = ["STR","DEX","CON","INT","WIS","CHA"]
@@ -337,7 +337,7 @@ class Step1Race(QWidget):
         if hasattr(self, "_anc_widget"):
             self._anc_widget.setVisible(is_dragonborn)
             if is_dragonborn:
-                from dnd_app.data.phb2014.races import DRACONIC_ANCESTRY, ANCESTRY_BY_SUBRACE
+                from dnd_app.data.races import DRACONIC_ANCESTRY, ANCESTRY_BY_SUBRACE
                 self._ancestry_combo.clear()
                 # Default to Standard types (all 10)
                 for anc in ANCESTRY_BY_SUBRACE.get("Standard", []):
@@ -354,7 +354,7 @@ class Step1Race(QWidget):
         # the chosen subrace's own bonuses, not just the base race's.
         def _on_subrace_changed(idx):
             if is_dragonborn and hasattr(self, "_anc_widget"):
-                from dnd_app.data.phb2014.races import DRACONIC_ANCESTRY, ANCESTRY_BY_SUBRACE
+                from dnd_app.data.races import DRACONIC_ANCESTRY, ANCESTRY_BY_SUBRACE
                 sub_name = self._subrace_combo.currentData() or "Standard"
                 types = ANCESTRY_BY_SUBRACE.get(sub_name, ANCESTRY_BY_SUBRACE["Standard"])
                 self._ancestry_combo.clear()
@@ -700,7 +700,7 @@ class Step2Abilities(QWidget):
         different +1s) — the each-style checkbox picker can represent
         neither valid distribute option, so the style must be read from
         asi_flex_style before deciding which card to show."""
-        from dnd_app.data.phb2014.races import RACE_DICT
+        from dnd_app.data.races import RACE_DICT
         race = char.get("race", "")
         rdata = RACE_DICT.get(race, {})
         flex = rdata.get("asi_flex", 0)
@@ -841,7 +841,7 @@ class Step2Abilities(QWidget):
         elif sub_name:
             self._race_bonus_lbl.setText(f"Subrace: {sub_name}")
     def _update_totals(self):
-        from dnd_app.data.phb2014.races import RACE_DICT as RD
+        from dnd_app.data.races import RACE_DICT as RD
         if "Standard Array" in self._method.currentText():
             for ab, combo in self._sa_combos.items():
                 self._ab_blocks[ab].set_score(int(combo.currentText()))
@@ -1083,7 +1083,7 @@ class Step3Class(QWidget):
                 self._bg_feat_combo.setVisible(False)
                 self._bg_feat_lbl.setVisible(False)
             return
-        from dnd_app.data.phbCommon.backgrounds import get_background
+        from dnd_app.data.backgrounds import get_background
         bg = get_background(text) or {}
         feat_choices = bg.get("feat_choices") or []
         # Skills row
@@ -1139,7 +1139,7 @@ class Step3Class(QWidget):
 
     def _on_cls_change(self, text):
         if text.startswith("—"): self._cls_info_lbl.setText(""); return
-        from dnd_app.data.phb2014.classes import CLASS_DICT
+        from dnd_app.data.classes import CLASS_DICT
         cdata = CLASS_DICT.get(text, {})
         hd = cdata.get("hit_die", 8)
         saves = ", ".join(cdata.get("save_profs", []))
@@ -1200,7 +1200,7 @@ class Step3Class(QWidget):
         char["edition"] = "2014"
         char["background"] = bg_name
 
-        from dnd_app.data.phbCommon.backgrounds import get_background
+        from dnd_app.data.backgrounds import get_background
         bg_data = get_background(bg_name) or {}
         feat_choices = bg_data.get("feat_choices") or []
         if feat_choices:
@@ -1224,7 +1224,7 @@ class Step3Class(QWidget):
             if isinstance(char.get("_choices"), dict):
                 char["_choices"].pop("background_feat", None)
 
-        from dnd_app.data.phb2014.classes import CLASS_DICT
+        from dnd_app.data.classes import CLASS_DICT
         from dnd_app.core.character import add_class
         cdata = CLASS_DICT.get(cls_name, {})
         hd = cdata.get("hit_die", 8)
@@ -1428,7 +1428,7 @@ class Step4Spells(QWidget):
 # ═══════════════════════════════════════════════════════════════════
 #  STEP 5: EQUIPMENT
 # ═══════════════════════════════════════════════════════════════════
-from dnd_app.data.phbCommon.items import weapon_category_pool as _weapon_category_pool
+from dnd_app.data.items import weapon_category_pool as _weapon_category_pool
 
 
 class Step5Equipment(QWidget):
@@ -1487,7 +1487,7 @@ class Step5Equipment(QWidget):
             f"Choose your starting equipment ({cls_name}):" if cls_name
             else "Choose your starting equipment:", TEXT2, FS_BODY))
 
-        from dnd_app.data.phbCommon.starting_equipment import get_starting_equipment
+        from dnd_app.data.starting_equipment import get_starting_equipment
         self._groups = get_starting_equipment(cls_name)
         scroll = QScrollArea(); scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea{background:transparent;border:none;}")
@@ -1623,7 +1623,7 @@ class Step5Equipment(QWidget):
         # real gameplay additions could exist.
         char["equipped_weapons"] = []
         char["equipment"] = []
-        from dnd_app.data.phbCommon.items import WEAPON_DICT, EQUIPMENT_PACKS
+        from dnd_app.data.items import WEAPON_DICT, EQUIPMENT_PACKS
         for item in chosen_items:
             base = item.split(" (")[0].strip()
             if base == "Shield":

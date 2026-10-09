@@ -719,30 +719,6 @@ class SettingsDialog(QDialog):
         self.accept()
 
 
-def _find_readme_text() -> str:
-    """Locate and read README.md, whether running from source (repo
-    root, two levels up from this file) or from a frozen PyInstaller
-    build (bundled next to the executable via sys._MEIPASS)."""
-    candidates = []
-    if getattr(sys, "frozen", False):
-        candidates.append(os.path.join(getattr(sys, "_MEIPASS", ""), "README.md"))
-        candidates.append(os.path.join(os.path.dirname(sys.executable), "README.md"))
-    candidates.append(os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
-        "README.md"))
-    for path in candidates:
-        if path and os.path.isfile(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    return f.read()
-            except OSError:
-                continue
-    return ("# MIMIC\n\nA Complete D&D 5e Character Creator & Management Tool.\n\n"
-            "Created by Ethan O'Brien.\n\nThank you for downloading MIMIC, and for "
-            "supporting the project.\n\n(The full README.md could not be found "
-            "alongside this build.)")
-
-
 class CreditsDialog(QDialog):
     """Shows the project README — what the app is, what it covers, and
     its credits — in a scrollable, read-only view."""
@@ -762,7 +738,8 @@ class CreditsDialog(QDialog):
         viewer.setStyleSheet(
             f"QTextBrowser{{background:{SURF};border:1px solid {BORDER};"
             f"border-radius:8px;padding:10px;color:{TEXT};font-size:{FS_BODY}px;}}")
-        viewer.setMarkdown(_find_readme_text())
+        from dnd_app.core.readme import readme_text
+        viewer.setMarkdown(readme_text())
         lay.addWidget(viewer, 1)
 
         btn_row = QHBoxLayout(); btn_row.addStretch()
@@ -1055,7 +1032,7 @@ class CharacterCreatorApp(QMainWindow):
 
     def _import_pdf_dialog(self):
         """What a PDF import can and can't do first, then the file picker."""
-        from dnd_app.core.pdf_import import PDF_IMPORT_INTRO, PDF_IMPORT_LIMITS
+        from dnd_app.core.pdf_sheet import PDF_IMPORT_INTRO, PDF_IMPORT_LIMITS
         box = QMessageBox(self)
         box.setWindowTitle("Import from a PDF Character Sheet")
         box.setIcon(QMessageBox.Information)
@@ -1074,8 +1051,8 @@ class CharacterCreatorApp(QMainWindow):
 
     def _import_pdf(self, path: str):
         """A filled-in official 5e character sheet PDF -> a new character
-        (see core/pdf_import.py), saved straight away like a new one."""
-        from dnd_app.core.pdf_import import import_character_pdf, SheetImportError
+        (see core/pdf_sheet.py), saved straight away like a new one."""
+        from dnd_app.core.pdf_sheet import import_character_pdf, SheetImportError
         from dnd_app.core.save_load import name_in_use, unique_character_name
         try:
             char, notes = import_character_pdf(path)

@@ -35,23 +35,23 @@ from dnd_app.core.multiclass import (
 from dnd_app.core.builder import rebuild
 from dnd_app.core.controller import CharacterController
 from dnd_app.core.magic_items import concentration_save, start_concentration, drop_concentration
-from dnd_app.core.spell_components import spell_component_block_reason
+from dnd_app.core.spellcasting import spell_component_block_reason
 from dnd_app.core.save_load import (
     save_character, load_character, list_saved_characters, character_filename, validate_character,
 )
 from dnd_app.core.character import set_subclass, get_class_entry
-from dnd_app.data.phbCommon.magic_items import ALL_MAGIC_ITEMS, has_item_effect
+from dnd_app.data.magic_items import ALL_MAGIC_ITEMS, has_item_effect
 from dnd_app.ui_desktop.dialogs.levelup_panel import LevelUpPanel
-from dnd_app.data.phb2014.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
-from dnd_app.data.phb2014.races import get_race
-from dnd_app.data.phbCommon.backgrounds import get_background
-from dnd_app.data.phbCommon.feats import get_feat
-from dnd_app.data.phbCommon.spells import get_spell, spells_for_class, ALL_SPELLS
-from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON_DICT,
+from dnd_app.data.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
+from dnd_app.data.races import get_race
+from dnd_app.data.backgrounds import get_background
+from dnd_app.data.feats import get_feat
+from dnd_app.data.spells import get_spell, spells_for_class, ALL_SPELLS
+from dnd_app.data.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON_DICT,
     ADVENTURING_GEAR, GEAR_NAMES, MOUNTS, ALL_TOOLS, SIMPLE_MELEE, SIMPLE_RANGED,
     MARTIAL_MELEE, MARTIAL_RANGED, FIREARMS, ARTISAN_TOOLS, SPECIAL_ARMOR,
     gear_icon, is_scroll_name, is_thrown_consumable)
-from dnd_app.data.phbCommon.conditions import CONDITIONS
+from dnd_app.data.conditions import CONDITIONS
 from .base import *
 from .base import _lbl, _sep, _card
 from dnd_app.ui_desktop import icons as _icons
@@ -59,7 +59,8 @@ from dnd_app.ui_desktop import icons as _icons
 
 class GearMixin:
     def _on_currency_change(self, coin: str, value: int):
-        """User changed a currency spinbox (gp, sp, cp, ep, pp)."""
+        """User changed a currency spinbox ("GP", "SP"... -- the spelling
+        every other part of both apps uses)."""
         self.char.setdefault("currency", {})[coin] = value
         self._mark_dirty()
 
@@ -79,14 +80,14 @@ class GearMixin:
             col = QVBoxLayout(); col.setSpacing(2)
             col.addWidget(_lbl(coin, color, FS_TINY, bold=True, align=Qt.AlignCenter))
             sp = QSpinBox(); sp.setRange(0,999999); sp.setMinimumWidth(72)
-            sp.setValue(self.char.get("currency",{}).get(coin.lower(),0))
+            sp.setValue(self.char.get("currency",{}).get(coin,0))
             sp.setAlignment(Qt.AlignCenter)
             sp.setStyleSheet(f"QSpinBox{{font-size:{FS_BODY}px;font-weight:700;color:{color};"
                              f"border:2px solid {qa(color,0x66)};border-radius:6px;background:{SURF2};padding:2px;}}")
             sp.setButtonSymbols(QAbstractSpinBox.NoButtons)
-            sp.valueChanged.connect(lambda v,k=coin.lower(): self._on_currency_change(k,v))
+            sp.valueChanged.connect(lambda v,k=coin: self._on_currency_change(k,v))
             col.addWidget(sp); mcl.addLayout(col)
-            self._currency_spins[coin.lower()] = sp
+            self._currency_spins[coin] = sp
         mcl.addStretch()
         root.addWidget(money_card)
 
@@ -449,13 +450,13 @@ class GearMixin:
         # Mounts get a real stat block in the Companions tab instead of a
         # generic equipment line — a Warhorse's AC/HP/attacks matter in
         # play, unlike a bedroll's weight and price.
-        from dnd_app.data.phbCommon.items import MOUNTS
+        from dnd_app.data.items import MOUNTS
         if any(row[0] == name for row in MOUNTS):
             self._add_mount(name)
             self._toast(f"{name} added — see its stat block in the Companions tab")
             return
         # Get weight and cost from item data
-        from dnd_app.data.phbCommon.items import WEAPON_DICT, ARMOR_DICT, ADVENTURING_GEAR, ALL_WEAPONS
+        from dnd_app.data.items import WEAPON_DICT, ARMOR_DICT, ADVENTURING_GEAR, ALL_WEAPONS
         weight = 0.0
         cost = 0.0
         wd = WEAPON_DICT.get(name)
@@ -509,8 +510,8 @@ class GearMixin:
 
     _RARITY_ORDER = ["Common","Uncommon","Rare","Very Rare","Legendary","Artifact"]
     # dark grey -> amber, the same palette the Android app uses (one source:
-    # data/phbCommon/magic_items.py RARITY_COLORS)
-    from dnd_app.data.phbCommon.magic_items import RARITY_COLORS as _RARITY_COLORS
+    # data/magic_items.py RARITY_COLORS)
+    from dnd_app.data.magic_items import RARITY_COLORS as _RARITY_COLORS
 
     def _populate_magic_browser(self):
         self._mi_browser.clear()
@@ -618,14 +619,14 @@ class GearMixin:
             equipped_list = self.char.get("equipped_weapons", [])
             owned_names = {e.get("name","") for e in self.char.get("equipment", [])
                             if isinstance(e, dict)}
-            from dnd_app.data.phbCommon.items import ALL_WEAPONS
+            from dnd_app.data.items import ALL_WEAPONS
             valid_names = {w[0] for w in ALL_WEAPONS}
         else:  # Armor
             cur_armor = self.char.get("armor_worn", "No Armor")
             equipped_list = [cur_armor] if cur_armor not in ("No Armor",) else []
             owned_names = {e.get("name","") for e in self.char.get("equipment", [])
                             if isinstance(e, dict)}
-            from dnd_app.data.phbCommon.items import ARMOR
+            from dnd_app.data.items import ARMOR
             valid_names = {a[0] for a in ARMOR if a[0] not in ("No Armor","Mage Armor (spell)")}
 
         # Candidates: currently equipped (not already magical) first, then
@@ -732,7 +733,7 @@ class GearMixin:
             bonus = int(bonus_str[1])
             self._open_enchant_dialog(kind, bonus)
             return
-        from dnd_app.data.phbCommon.magic_items import get_magic_item
+        from dnd_app.data.magic_items import get_magic_item
         catalog = get_magic_item(name) or {}
         needs_attune = bool(catalog.get("attunement"))
         itype = catalog.get("type","")
@@ -747,7 +748,7 @@ class GearMixin:
             import re as _re
             m = _re.match(r'^Spell Scroll \((Cantrip|\d+(?:st|nd|rd|th) level)\)$', name)
             if m:
-                from dnd_app.data.phbCommon.spells import SPELLS_BY_LEVEL
+                from dnd_app.data.spells import SPELLS_BY_LEVEL
                 lvl = 0 if m.group(1) == "Cantrip" else int(_re.match(r'\d+', m.group(1)).group())
                 choices = sorted(s["name"] for s in SPELLS_BY_LEVEL.get(lvl, []))
                 # every scroll carries a spell -- cancelling adds nothing
@@ -821,7 +822,7 @@ class GearMixin:
             self._magic_items_tree.addTopLevelItem(placeholder)
             return
 
-        from dnd_app.data.phbCommon.magic_items import get_magic_item, get_item_effect as _gie
+        from dnd_app.data.magic_items import get_magic_item, get_item_effect as _gie
 
         # rarity first (Common -> Artifact), then name
         def _owned_key(entry):
@@ -1093,10 +1094,10 @@ class GearMixin:
             self._gear_equip_tree.addTopLevelItem(placeholder)
             return
 
-        from dnd_app.data.phbCommon.items import ADVENTURING_GEAR as _AG_notes
+        from dnd_app.data.items import ADVENTURING_GEAR as _AG_notes
         GEAR_NOTES = {row[0]: (row[3] if len(row) > 3 else "") for row in _AG_notes}
 
-        from dnd_app.data.phbCommon.items import WEAPON_DICT, ARMOR_DICT
+        from dnd_app.data.items import WEAPON_DICT, ARMOR_DICT
         # Grouped like the Android inventory: Weapons / Armor / Magic Items
         # / Consumables / Tools & Gear, each under a header row with a
         # count, equipped items first within each group.
@@ -1323,7 +1324,7 @@ class GearMixin:
                 drink_act = menu.addAction(_icons.icon("potion"), f"Drink {_name[:36]}")
                 drink_act.triggered.connect(lambda checked=False, n=_name: self._use_potion(n))
             if is_scroll_name(_name):
-                from dnd_app.core.spell_scrolls import parse_spell_scroll
+                from dnd_app.core.spellcasting import parse_spell_scroll
                 _scroll = parse_spell_scroll(_name)
                 label = (f"Use: cast {_scroll[1]}" if _scroll and _scroll[1]
                          else "Use (choose its spell)" if _scroll else f"Read {_name[:36]}")
@@ -1343,7 +1344,7 @@ class GearMixin:
         to an item of this type (weapon/armor/shield), per
         ARTIFICER_INFUSION_TARGETS, and aren't already active on some
         other item."""
-        from dnd_app.data.phb2014.classes import ARTIFICER_INFUSION_TARGETS
+        from dnd_app.data.classes import ARTIFICER_INFUSION_TARGETS
         known = self.char.get("artificer_infusions", [])
         active_infusions = {a["infusion"] for a in self.char.get("active_infusions", [])}
         result = []
@@ -1491,12 +1492,12 @@ class GearMixin:
         self._mark_dirty()
 
     def _use_spell_scroll(self, name: str):
-        """Cast the spell on one spell scroll (core/spell_scrolls.py: the
+        """Cast the spell on one spell scroll (core/spellcasting.py: the
         class-list rule, the DC 10 + level check, the scroll's own save DC
         and attack). A blank scroll asks which spell is on it first."""
-        from dnd_app.core.spell_scrolls import (parse_spell_scroll, use_spell_scroll,
+        from dnd_app.core.spellcasting import (parse_spell_scroll, use_spell_scroll,
                                                 bind_spell_scroll, spell_for_scroll_level)
-        from dnd_app.data.phbCommon.spells import get_spell
+        from dnd_app.data.spells import get_spell
         from dnd_app.core.magic_items import start_concentration
         level, spell_name = parse_spell_scroll(name)
         if not spell_name:
@@ -1534,7 +1535,7 @@ class GearMixin:
         family...) is used up and, if it has a lasting effect
         (EFFECT_TABLE entry), added to active_effects the same way
         potions are."""
-        from dnd_app.core.spell_scrolls import parse_spell_scroll
+        from dnd_app.core.spellcasting import parse_spell_scroll
         if parse_spell_scroll(name):
             self._use_spell_scroll(name)
             return
@@ -1565,7 +1566,7 @@ class GearMixin:
         self._mark_dirty()
 
     def _toggle_weapon_equipped(self, name: str, equip: bool):
-        from dnd_app.data.phbCommon.items import WEAPON_DICT
+        from dnd_app.data.items import WEAPON_DICT
         from dnd_app.core.magic_items import parse_magic_suffix
         equipped = self.char.setdefault("equipped_weapons", [])
         if not equip:

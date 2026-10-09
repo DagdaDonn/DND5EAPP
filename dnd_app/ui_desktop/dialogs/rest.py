@@ -39,22 +39,23 @@ from dnd_app.core.multiclass import (
 from dnd_app.core.builder import rebuild
 from dnd_app.core.controller import CharacterController
 from dnd_app.core.magic_items import concentration_save, start_concentration, drop_concentration
-from dnd_app.core.spell_components import spell_component_block_reason
+from dnd_app.core.spellcasting import spell_component_block_reason
 from dnd_app.core.save_load import (
     save_character, load_character, list_saved_characters, character_filename, validate_character,
 )
 from dnd_app.core.character import set_subclass, get_class_entry
-from dnd_app.data.phbCommon.magic_items import ALL_MAGIC_ITEMS, has_item_effect
+from dnd_app.core.character import rest_options, rest_preview_lines
+from dnd_app.data.magic_items import ALL_MAGIC_ITEMS, has_item_effect
 from dnd_app.ui_desktop.dialogs.levelup_panel import LevelUpPanel
-from dnd_app.data.phb2014.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
-from dnd_app.data.phb2014.races import get_race
-from dnd_app.data.phbCommon.backgrounds import get_background
-from dnd_app.data.phbCommon.feats import get_feat
-from dnd_app.data.phbCommon.spells import get_spell, spells_for_class, ALL_SPELLS
-from dnd_app.data.phbCommon.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON_DICT,
+from dnd_app.data.classes import CLASS_DICT, CLASS_NAMES, BATTLE_MASTER_MANEUVERS, WILD_MAGIC_SURGE_TABLE
+from dnd_app.data.races import get_race
+from dnd_app.data.backgrounds import get_background
+from dnd_app.data.feats import get_feat
+from dnd_app.data.spells import get_spell, spells_for_class, ALL_SPELLS
+from dnd_app.data.items import (ARMOR, ARMOR_DICT, ALL_WEAPONS, WEAPON_DICT,
     ADVENTURING_GEAR, GEAR_NAMES, MOUNTS, ALL_TOOLS, SIMPLE_MELEE, SIMPLE_RANGED,
     MARTIAL_MELEE, MARTIAL_RANGED, ARTISAN_TOOLS, SPECIAL_ARMOR)
-from dnd_app.data.phbCommon.conditions import CONDITIONS
+from dnd_app.data.conditions import CONDITIONS
 from dnd_app.ui_desktop import icons as _icons
 
 
@@ -63,7 +64,7 @@ class RestOptionsDialog(QDialog):
     or long rest, surfaces every "you can change X when you finish a
     rest" choice the character actually has, found by searching the
     game's own feature text for short/long rest + change/swap language.
-    Extensible: add more entries to _build_options() as more of these
+    Extensible: add more entries to core/character.py's rest_options() as more of these
     get confirmed and wired up.
 
     Currently covers: unpreparing all spells to choose new ones (any
@@ -78,7 +79,7 @@ class RestOptionsDialog(QDialog):
         self.setWindowTitle(f"{'Long' if rest_type == 'long' else 'Short'} Rest Options")
         self.setMinimumSize(480, 300)
         self.setStyleSheet(f"QDialog{{background:{BG};}}")
-        self._options = RestOptionsDialog._build_options(char, rest_type)
+        self._options = rest_options(char, rest_type)
         self._checks = {}
 
         root = QVBoxLayout(self); root.setContentsMargins(20,18,20,18); root.setSpacing(10)
@@ -108,124 +109,9 @@ class RestOptionsDialog(QDialog):
         btn_row.addWidget(skip_btn); btn_row.addWidget(confirm_btn)
         root.addLayout(btn_row)
 
-    @staticmethod
-    def _build_options(char, rest_type):
-        """Static so RestPreviewDialog can reuse this exact list without
-        needing a RestOptionsDialog instance — this class stays the
-        documented name/reference for "what's reconfigurable on a rest"
-        (see the many comments elsewhere pointing to it), it just no
-        longer needs to be constructed to compute the list."""
-        opts = []
-        # Unprepare all spells — any prepared caster, long rest only (this
-        # is the normal way of re-choosing prepared spells: 1 minute per
-        # spell level during a long rest, PHB p.201-202).
-        if rest_type == "long":
-            _, _, _, prep_ab = _spell_progression_tables_static()
-            if any(cn in prep_ab for cn in {c["class"] for c in char.get("classes", [])}):
-                if char.get("spells_prepared"):
-                    opts.append({
-                        "kind": "unprepare_all",
-                        "label": "Unprepare all spells (choose new ones afterward)",
-                        "detail": "Clears every non-bonus prepared spell so you can pick a "
-                                  "different set from the Spells tab.",
-                    })
-        # Armorer's Arcane Armor model is changeable on either rest type with smith's tools in hand.
-        is_armorer = any(
-            c.get("class") == "Artificer" and "armorer" in c.get("subclass", "").lower()
-            for c in char.get("classes", [])
-        )
-        if is_armorer and char.get("_choices", {}).get("armorer_model_3"):
-            opts.append({
-                "kind": "armorer_model",
-                "label": "Change Arcane Armor model (Guardian / Infiltrator)",
-                "detail": "Requires smith's tools in hand.",
-            })
-        # Arcane Recovery (Wizard 1+): short rest only (the rule triggers
-        # "when you finish a short rest"), once per day (checked via the
-        # resource added in update_all), only if there's actually
-        # something expended to recover.
-        if rest_type == "short":
-            arcane_recovery_res = next(
-                (r for r in char.get("resources", []) if r.get("key") == "arcane_recovery"), None)
-            if arcane_recovery_res and arcane_recovery_res.get("current", 0) > 0:
-                if any(char.get("spell_slots_used", [])):
-                    opts.append({
-                        "kind": "arcane_recovery",
-                        "label": "Arcane Recovery — recover expended spell slots",
-                        "detail": "Once per day: recover slots totaling \u2264 half your Wizard "
-                                  "level (rounded up), max slot level 5.",
-                    })
-        # Eladrin season changes only on a long rest ("you can change your chosen season after a long rest").
-        race = char.get("species") or char.get("race", "")
-        if rest_type == "long" and "eladrin" in race.lower() and char.get("_choices", {}).get("eladrin_season"):
-            opts.append({
-                "kind": "eladrin_season",
-                "label": "Change Eladrin season",
-                "detail": "Changes which additional effect your Fey Step bonus action has.",
-            })
-        # Githyanki (MPMM)'s Astral Knowledge / Astral Elf's Astral Trance:
-        # both grant "proficiency in one skill and with one weapon or tool
-        # of your choice ... until the end of your next long rest" —
-        # re-chosen every long rest, not a one-time pick.
-        if rest_type == "long" and race in ("Githyanki (MPMM)", "Astral Elf") and \
-                char.get("_choices", {}).get("astral_knowledge_skill"):
-            trait_name = "Astral Knowledge" if race == "Githyanki (MPMM)" else "Astral Trance"
-            opts.append({
-                "kind": "astral_knowledge_swap",
-                "label": f"Re-choose {trait_name}'s skill and weapon/tool proficiencies",
-                "detail": "Changes which skill and which weapon or tool proficiency you currently "
-                          "have from this trait.",
-            })
-        # Pact Boon 1-hour rituals are available on short rest (and long rest), since a short rest is defined as being at least an hour.
-        pact_choice = char.get("_choices", {}).get("warlock_pact_boon", [])
-        pact_name = pact_choice[0].lower() if pact_choice else ""
-        if "blade" in pact_name:
-            opts.append({
-                "kind": "pact_blade_bond",
-                "label": "Bond a magic weapon to become your pact weapon",
-                "detail": "1-hour ritual, performable during a short rest. The weapon becomes "
-                          "your pact weapon until you die, bond a different weapon, or break "
-                          "the bond (also a 1-hour ritual).",
-            })
-        if "tome" in pact_name:
-            opts.append({
-                "kind": "pact_tome_replace",
-                "label": "Replace a lost Book of Shadows",
-                "detail": "1-hour ceremony, performable during a short or long rest. Destroys "
-                          "the previous book.",
-            })
-        if "talisman" in pact_name:
-            opts.append({
-                "kind": "pact_talisman_replace",
-                "label": "Replace a lost Talisman",
-                "detail": "1-hour ceremony, performable during a short or long rest. Destroys "
-                          "the previous amulet.",
-            })
-        # Guidance of the Spirits (Bard, College of Spirits) resets on a long rest only. Whispers of the Dead (Rogue, Phantom) resets on either rest type.
-        if rest_type == "long" and char.get("_choices", {}).get("guidance_of_the_spirits_skill"):
-            opts.append({
-                "kind": "guidance_spirits_swap",
-                "label": "Swap Guidance of the Spirits' skill",
-                "detail": "Changes which skill you gained proficiency in.",
-            })
-        if char.get("_choices", {}).get("whispers_of_the_dead_prof"):
-            opts.append({
-                "kind": "whispers_dead_swap",
-                "label": "Channel a different Whispers of the Dead proficiency",
-                "detail": "Changes which skill or tool proficiency you currently have from this feature.",
-            })
-        if rest_type == "long" and char.get("_choices", {}).get("lunar_phase"):
-            opts.append({
-                "kind": "lunar_phase_swap",
-                "label": "Change your Lunar Embodiment phase",
-                "detail": "Choose Full Moon, New Moon, or Crescent Moon.",
-            })
-        return opts
 
     def get_selected(self):
         return [kind for kind, cb in self._checks.items() if cb.isChecked()]
-
-
 
 
 class RestPreviewDialog(QDialog):
@@ -239,7 +125,7 @@ class RestPreviewDialog(QDialog):
     filters over current character state, not a simulation, so this
     can't drift from what those methods actually do next.
 
-    `options` (from RestOptionsDialog._build_options()) folds the
+    `options` (from core/character.py's rest_options()) folds the
     "anything you'd like to reconfigure on this rest" checklist into
     this same preview dialog rather than a separate confirm step, so
     the player gets one dialog and one Confirm for the whole rest.
@@ -262,7 +148,7 @@ class RestPreviewDialog(QDialog):
         card = _card(qa(TEAL,0x44)); cl = QVBoxLayout(card)
         cl.setContentsMargins(14,12,14,14); cl.setSpacing(4)
         cl.addWidget(_lbl("WHAT THIS WILL DO", TEAL2, FS_SMALL, bold=True))
-        cl.addWidget(_lbl("\n".join(self._build_lines(rest_type, preview)), TEXT, FS_BODY, wrap=True))
+        cl.addWidget(_lbl("\n".join(rest_preview_lines(rest_type, preview)), TEXT, FS_BODY, wrap=True))
         root.addWidget(card)
 
         if options:
@@ -289,223 +175,5 @@ class RestPreviewDialog(QDialog):
 
     def get_selected(self):
         return [kind for kind, cb in self._checks.items() if cb.isChecked()]
-
-    @staticmethod
-    def _build_lines(rest_type: str, preview: dict) -> list:
-        lines = []
-        if rest_type == "short":
-            if preview["hp"] >= preview["max_hp"]:
-                lines.append(f"HP: already full ({preview['max_hp']})")
-            elif preview["hit_dice_available"] > 0:
-                lines.append(f"HP: {preview['hp']}/{preview['max_hp']}  —  "
-                              f"{preview['hit_dice_available']} hit dice available, "
-                              f"you'll choose how many to spend next")
-            else:
-                lines.append(f"HP: {preview['hp']}/{preview['max_hp']}  —  no hit dice remaining")
-        else:
-            heal = preview["max_hp"] - preview["hp"]
-            if heal > 0:
-                lines.append(f"HP: {preview['hp']} → {preview['max_hp']} (full heal, +{heal})")
-            else:
-                lines.append(f"HP: already full ({preview['max_hp']})")
-            if preview["temp_hp"] > 0:
-                lines.append(f"Temporary HP: {preview['temp_hp']} → 0 (lost)")
-            if preview["hit_dice_restored"] > 0:
-                lines.append(f"Hit Dice: +{preview['hit_dice_restored']} restored")
-            if preview["exhaustion"] > 0:
-                lines.append(f"Exhaustion: level {preview['exhaustion']} → {preview['exhaustion_after']}")
-            if preview["death_reset"]:
-                lines.append("Death saves: cleared")
-            if preview["was_concentrating"]:
-                lines.append(f"Concentration on {preview['was_concentrating']}: will end")
-
-        if preview.get("slot_levels_reset"):
-            levels = ", ".join(f"Lv{lvl}" for lvl in preview["slot_levels_reset"])
-            lines.append(f"Spell slots restored: {levels}")
-        if preview.get("pact_restore"):
-            lines.append("Pact Magic slots: restored")
-        if preview.get("resets"):
-            lines.append("")
-            lines.append("Resources restored:")
-            lines.extend(f"  • {name}: {cur} → {tgt}" for name, cur, tgt in preview["resets"])
-        if preview.get("fading"):
-            lines.append("")
-            lines.append("Will fade/end:")
-            lines.extend(f"  • {n}" for n in preview["fading"])
-        return lines
-
-
-
-
-def _spell_progression_tables_static():
-    """Standalone version of CharacterSheet._spell_progression_tables,
-    usable without a CharacterSheet instance (RestOptionsDialog doesn't
-    have one)."""
-    from dnd_app.data.phb2014.classes import CLASS_DICT
-    prep_ab = {cn for cn, cd in CLASS_DICT.items() if cd.get("spell_ability") and cd.get("has_spells")
-               and cn in ("Cleric", "Druid", "Paladin", "Artificer", "Wizard")}
-    return None, None, None, prep_ab
-
-
-
-
-def _all_relevant_choice_ids(char_snapshot: dict) -> set:
-    """Every pending-choice id structurally relevant to this exact
-    character state, regardless of whether it's already been answered
-    (computed against a scratch copy with _choices cleared, so an
-    already-answered choice still shows up here). Union of every
-    choice-generating function the Choices tab actually combines.
-    Used to diff "before" vs "after" a race/background/class/subclass/
-    level change and prune any choice from the real character's
-    _choices that's no longer relevant — without this, changing away
-    from something never lets you make its choice differently, and can
-    leave an old choice's pool/value silently misapplied to whatever
-    replaced it."""
-    import copy
-    store = char_snapshot.get("_choices", {}) or {}
-    plain = copy.deepcopy(char_snapshot)
-    plain["_choices"] = {}
-    ids = {c["id"] for c in _generate_choices(plain) if "id" in c}
-    # a growing choice that's already full (8 invocations at 8) generates
-    # nothing above -- so ask again with those lists empty, or it's never
-    # "relevant" and never goes when its class or level does
-    ids |= {c["id"] for c in _all_relevant_choices(char_snapshot) if "id" in c}
-    # a choice offered only once another is answered (Blessed Warrior's
-    # cantrips, Pact of the Tome's): keep the relevant answers, and each
-    # round adds the choices they open up
-    for _ in range(4):
-        plain = copy.deepcopy(char_snapshot)
-        plain["_choices"] = {k: v for k, v in store.items() if k in ids}
-        more = {c["id"] for c in _generate_choices(plain) if "id" in c} - ids
-        if not more:
-            break
-        ids |= more
-    return ids
-
-
-# Choices that hold every pick so far, growing with level, and the
-# character lists they also fill
-_CUMULATIVE_IDS = ("eldritch_invocations", "artificer_infusions", "fighter_maneuvers",
-                   "sorcerer_metamagic", "four_elements_disciplines", "rune_knight_runes",
-                   "blood_hunter_mutagens", "blood_hunter_curses", "arcane_shot_options",
-                   "kensei_weapons", "magical_secrets_spells")
-_CUMULATIVE_LISTS = ("eldritch_invocations", "artificer_infusions",
-                     "battle_master_maneuvers", "magical_secrets_spells")
-
-
-def _generate_choices(scratch: dict) -> list:
-    from dnd_app.core.builder import get_choices_needed
-    from dnd_app.ui_desktop.dialogs.levelup_panel import (
-        _get_subclass_choices, _get_race_choices, _get_class_tool_choices,
-        _get_feat_choices, _get_dm_reward_choices, _get_optional_feature_choices,
-    )
-    return (get_choices_needed(scratch) + _get_subclass_choices(scratch)
-            + _get_race_choices(scratch) + _get_class_tool_choices(scratch)
-            + _get_feat_choices(scratch) + _get_dm_reward_choices(scratch)
-            + _get_optional_feature_choices(scratch))
-
-
-def _all_relevant_choices(char_snapshot: dict, keep_choices: bool = False) -> list:
-    """Every choice this exact character state has, with its full count and
-    pool: generated with the growing choices' picks and lists emptied.
-    keep_choices keeps the other picks (a pact boon), so an invocation's
-    pool still knows what it may need."""
-    import copy
-    scratch = copy.deepcopy(char_snapshot)
-    if keep_choices:
-        for cid in _CUMULATIVE_IDS:
-            scratch.setdefault("_choices", {}).pop(cid, None)
-    else:
-        scratch["_choices"] = {}
-    for field in _CUMULATIVE_LISTS:
-        scratch[field] = []
-    return _generate_choices(scratch)
-
-
-def _trim_over_count(char: dict) -> dict:
-    """After a level down, a growing choice can hold more picks than the
-    level allows: keep the oldest that are still allowed (an invocation
-    whose level or pact it no longer meets goes first). Returns
-    {choice id: the picks dropped}."""
-    store = char.get("_choices", {})
-    dropped = {}
-    # 1. one count (and an invocation's allowed pool) per choice -- the
-    #    same choice can come from two generators, one with the real pool
-    limits = {}
-    for c in _all_relevant_choices(char, keep_choices=True):
-        cid = c.get("id")
-        if cid not in _CUMULATIVE_IDS:
-            continue
-        count = c.get("count") or 0
-        pool = c.get("pool") if c.get("type") == "invocation" else None
-        have = limits.get(cid)
-        if have is None:
-            limits[cid] = [count, pool]
-        else:
-            have[0] = min(have[0], count)
-            have[1] = have[1] or pool
-    # 2. keep the oldest picks still allowed, up to the count
-    for cid, (count, pool) in limits.items():
-        held = store.get(cid)
-        if not isinstance(held, list):
-            continue
-        keep = [p for p in held if not pool or p in pool][:count]
-        if len(keep) < len(held):
-            dropped[cid] = [p for p in held if p not in keep]
-            store[cid] = keep
-    return dropped
-
-
-# Choice ids from _get_race_choices()/get_choices_needed() that are keyed
-# generically (by choice TYPE, e.g. "race_skill_profs") rather than by the
-# specific race/background name — so _all_relevant_choice_ids()'s before/
-# after diff can't tell "still relevant" from "relevant to a DIFFERENT
-# race/background now, with a completely different pool, but the old
-# answer looks superficially complete". Astral Elf and Githyanki (MPMM)
-# happen to share the same two ids since they're mechanically identical.
-RACE_SCOPED_CHOICE_IDS = {
-    "race_skill_profs", "race_tool_profs", "race_skill_or_tool_profs",
-    "aasimar_revelation", "astral_knowledge_skill",
-    "astral_knowledge_weapon_or_tool", "eladrin_season", "human_extra_language",
-}
-BACKGROUND_SCOPED_CHOICE_IDS = {"bg_languages", "bg_skill_profs", "bg_tool_profs"}
-
-
-def change_and_prune(char: dict, change, scoped=()) -> set:
-    """A race, subrace or background change: make it, then drop every
-    choice the old one asked for and the new one doesn't (a High Elf's
-    Wizard cantrip, once Human), picks and all -- plus `scoped`, the
-    generic ids whose old picks can't carry over to the new pool."""
-    old_ids = _all_relevant_choice_ids(char)
-    change()
-    new_ids = _all_relevant_choice_ids(char)
-    return _prune_stale_choices(char, (old_ids - new_ids) | set(scoped))
-
-
-def _prune_stale_choices(char: dict, stale_ids: set) -> set:
-    """Remove the given choice ids from char["_choices"] if present, and
-    everything that hangs off them. Returns the ids actually removed."""
-    from dnd_app.core.builder import forget_choice_picks
-    store = char.get("_choices", {})
-    removed, stale = set(), set(stale_ids)
-    # 1. take out the stale choices, and the picks a growing choice no
-    #    longer has room for (after a level down)
-    # 2. their picks leave every list they landed in -- skills, styles,
-    #    invocations, spells, feats...
-    # 3. dropping a feat or a style can make more choices stale (its own
-    #    picks): go round again until nothing changes
-    for _ in range(6):
-        before = _all_relevant_choice_ids(char)
-        gone = {cid for cid in stale if cid in store}
-        picks = {cid: store.pop(cid, None) for cid in gone}
-        removed |= gone
-        picks.update(_trim_over_count(char))
-        if not picks:
-            break
-        forget_choice_picks(char, picks)
-        stale = before - _all_relevant_choice_ids(char)
-    return removed
-
-
 
 

@@ -125,7 +125,7 @@ spec, root, sdk, ndk, jar_dir, *jars = sys.argv[1:]
 text = open(spec, encoding="utf-8", newline="").read()
 nl = "\r\n" if "\r\n" in text else "\n"
 icon = f"{root}/packaging/android/icon.png"
-hook = f"{root}/deployment/recipes/p4a_hook.py"
+hook = f"{root}/packaging/android/p4a_hook.py"
 values = {
     "source.dir": root,
     "android.sdk_path": sdk,
@@ -155,9 +155,9 @@ fi
 echo "[6/6] Verifying"
 grep -E '^(source\.dir|android\.(sdk_path|ndk_path|add_jars|icon|apptheme)|p4a\.(local_recipes|branch|hook|extra_args))[[:space:]]*=' "$SPEC" | sed 's/^/  /'
 grep -qE '^p4a\.branch[[:space:]]*=[[:space:]]*v2024\.01\.21' "$SPEC" \
-    || echo "  WARNING: p4a.branch is not v2024.01.21 -- see BUILD_APK.md before building"
-[ -f "$ROOT/deployment/recipes/p4a_hook.py" ] || echo "  WARNING: deployment/recipes/p4a_hook.py is missing"
+    || echo "  WARNING: p4a.branch is not v2024.01.21 -- see packaging/android/README.md before building"
+[ -f "$ROOT/packaging/android/p4a_hook.py" ] || echo "  WARNING: packaging/android/p4a_hook.py is missing"
 
 echo
 echo "=== Done ==="
-echo "Next: double-click installer\\android\\clean_build_android.bat"
+echo "Next: double-click packaging\\android\\clean_build_android.bat"
