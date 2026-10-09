@@ -18,7 +18,7 @@ from dnd_app.core.character import (
     long_rest, short_rest, add_class
 )
 from dnd_app.core.calculator import (
-    update_all, get_ac, get_prof_bonus, get_initiative,
+    update_all, get_ac, get_prof_bonus, get_initiative, ability_check_bonus,
     all_skill_bonuses, all_saving_throw_bonuses, get_save_advantage_status,
     get_initiative_advantage_status, get_carry_capacity,
     get_spell_save_dc, get_spell_attack_bonus,
@@ -69,7 +69,7 @@ class AbilitiesMixin:
         for ab in ABILITIES:
             blk = AbilityBlock(ab, ability_score(self.char, ab), editable=False)
             blk.roll_requested.connect(
-                lambda a: self._quick_roll_toast(f"{AB_FULL[a]} check", ability_mod(self.char, a), "check", a))
+                lambda a: self._quick_roll_toast(f"{AB_FULL[a]} check", ability_check_bonus(self.char, a), "check", a))
             ab_row.addWidget(blk); self._ab_blocks[ab] = blk
         ab_row.addStretch()
         abcl.addLayout(ab_row)

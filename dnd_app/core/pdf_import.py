@@ -544,8 +544,12 @@ def character_from_values(values: dict, how: str = "form") -> tuple[dict, list[s
         elif on:
             profs.append(skill)
     choices["class_skill_profs"] = sorted(set(profs + experts))
+    # the sheet's own picks, so a later level down never mistakes them
+    # for a removed class's (core/builder.forget_choice_picks)
+    choices["pdf_skill_profs"] = sorted(set(profs + experts))
     if experts:
         choices["class_skill_expertise"] = experts
+        choices["pdf_skill_expertise"] = experts
 
     # languages / tools from PROFICIENCIES & LANGUAGES
     langs = [l for l in LANGUAGES if re.search(rf"\b{re.escape(l)}\b", v("ProficienciesLang"), re.I)]

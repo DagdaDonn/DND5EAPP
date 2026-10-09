@@ -29,7 +29,10 @@ MIMIC is a Dungeons & Dragons 5th Edition app that brings together everything a 
 - **Starting equipment picker** with class-appropriate options — every chosen item lands correctly in your inventory, alongside your background's own equipment and starting gold
 - **Level-up wizard** — walks through each level's choices, including nested sub-choices
 - **Multiclassing support** — full rules for combining classes
-- **Level changes stay consistent** — Level Up stops at 20, a class that drops below its subclass level loses the subclass until it gets back there, and Level Up / Level Down / Remove Class grey out (saying why) when they can't apply
+- **Level changes stay consistent** — Level Up stops at 20; a class that drops below its subclass level sets the subclass aside, and it comes back when the class gets there again; Level Up / Level Down / Remove Class grey out (saying why) when they can't apply
+- **Skills follow your character** — expertise and skill picks from a level you no longer have (or a removed class) go with it, while your own edits on the Skills tab stay until you reset them
+- **Changes leave nothing behind** — level down, remove a class, or change race, subrace, background or a feat, and what came with it goes too: invocations, maneuvers, infusions, fighting styles, Magical Secrets, a race's cantrip, and any pick those opened up (Pact of the Tome's cantrips). Level back up and you're asked again
+- **Checks add what they should** — a plain ability check gets Jack of All Trades, and a Fey Wanderer's Otherworldly Glamour gives a skill of your choice plus its Wisdom bonus on every Charisma check, on both apps
 
 ### Spell Management
 - **Prepared/known spell tracking**
@@ -68,6 +71,7 @@ MIMIC is a Dungeons & Dragons 5th Edition app that brings together everything a 
 - **Rests and slots stay honest** — a long rest needs at least 1 HP to start, and used slots or resource uses never exceed what you have after a level change
 - **Surprised** tracked as a condition (the PHB surprise rule: no moving, acting or reacting until your first turn ends)
 - **Weapon and armor equipping** with computed attack bonuses and damage
+- **Ammunition from your inventory** — a bow, crossbow, sling, blowgun or firearm shows the shots your inventory holds (a bundle of 20 arrows counts as 20); each attack uses one, opening a bundle into loose pieces so the Gear tab stays right. Click the counter to set how many you have, and changes on the Gear tab show on the counter straight away. Same on both apps
 - **On-hit damage bonuses shown separately by type**, since a different damage type genuinely matters against resistance/immunity
 
 ### Resistances, Immunities & Movement
@@ -163,6 +167,8 @@ installer\windows\build_exe.bat
 
 **Output:** `dist/MIMIC.exe` (Windows) or `dist/MIMIC` (macOS/Linux). See [`packaging/windows/BUILD_EXE.md`](packaging/windows/BUILD_EXE.md) for the full guide.
 
+The Windows EXE carries its name, version and publisher (right-click → Properties → Details). The version is the same one the Android app uses, set once in `dnd_app/ui_android/buildozer.spec`.
+
 ---
 
 ## MIMIC on Android
@@ -222,6 +228,7 @@ dnd_app/
     calculator.py                     #   AC, saves, skills, HP, slots... (update_all)
     magic_items.py                    #   Item effects, attunement, owned copies, manuals
     dying.py                          #   Damage, death saves, stable, dying (both apps)
+    ammo.py                           #   Ammunition counted from the inventory
     free_casts.py                     #   Free daily casts from a race or feat
     spell_scrolls.py                  #   Spell scroll rules (DMG p.200)
     save_load.py                      #   Save folder, files, duplicate-name guard
@@ -279,9 +286,7 @@ packaging/
 
 ## Roadmap
 
-- Full support for the 2024 ruleset
 - Clickable hyperlinks for spell/feat/ability cross-references
-- Wider on-hit damage bonus coverage
 - Monster and bestiary integration
 
 ---

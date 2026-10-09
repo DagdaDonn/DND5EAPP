@@ -1679,40 +1679,9 @@ class CombatMixin:
         # Display the weapon under its full enchanted name (e.g. "Longsword +1")
         name = wpn_name
 
-        # ── Ammo type for this weapon ─────────────────────────────────────────
-        _AMMO_KEY = {
-            "Shortbow":        "arrows",  "Longbow":         "arrows",
-            "Light Crossbow":  "bolts",   "Hand Crossbow":   "bolts",
-            "Heavy Crossbow":  "bolts",   "Sling":           "bullets",
-            "Blowgun":         "needles", "Pistol":          "bullets_modern",
-            "Musket":          "bullets_modern", "Revolver": "bullets_modern",
-            "Hunting Rifle":   "bullets_modern", "Automatic Rifle": "bullets_modern",
-            "Laser Pistol":    "energy_cells",   "Laser Rifle":     "energy_cells",
-            "Antimatter Rifle":"energy_cells",
-        }
-        _AMMO_LABEL = {
-            "arrows":         "Arrows",       "bolts":          "Bolts",
-            "bullets":        "Sling Bullets","needles":        "Needles",
-            "bullets_modern": "Bullets",      "energy_cells":   "Energy Cells",
-        }
-        _AMMO_EQUIP_NAMES = {
-            "arrows":         ["Arrows","Arrow","Arrows (20)","Ammunition, Arrows (20)"],
-            "bolts":          ["Bolts","Bolt","Bolts (20)","Crossbow Bolts (20)","Ammunition, Bolts (20)"],
-            "bullets":        ["Sling Bullets","Sling Bullets (20)","Bullets"],
-            "needles":        ["Needles","Blowgun Needles (50)"],
-            "bullets_modern": ["Bullets (Modern)","Bullets"],
-            "energy_cells":   ["Energy Cell","Energy Cells"],
-        }
-        ammo_key = _AMMO_KEY.get(base_wpn_name, "") if is_ranged and not is_thrown else ""
-
-        # Seed ammo tracker from equipment list if currently at 0
-        if ammo_key and self.char.get("ammo", {}).get(ammo_key, 0) == 0:
-            for eq in self.char.get("equipment", []):
-                if not isinstance(eq, dict): continue
-                eq_name = eq.get("name","")
-                if any(eq_name.lower() == n.lower() for n in _AMMO_EQUIP_NAMES.get(ammo_key,[])):
-                    self.char.setdefault("ammo", {})[ammo_key] = eq.get("qty", 0)
-                    break
+        # ── Ammo this weapon fires (core/ammo.py, counted from the inventory) ─
+        from dnd_app.core.ammo import ammo_kind, ammo_label, ammo_count, spend_ammo, set_ammo
+        ammo_key = ammo_kind(base_wpn_name, is_ranged, is_thrown)
 
         row_f = QFrame()
         row_f.setStyleSheet(f"QFrame{{background:{SURF2};border:1px solid {BORDER};border-radius:8px;}}")
@@ -1824,66 +1793,43 @@ class CombatMixin:
         rl.addStretch()
 
         # ── Ammo counter (ranged non-thrown weapons) ──────────────────────────
-        ammo_lbl = None
+        # Shows what the inventory holds (bundles count every piece in them);
+        # click to change how many you have -- the Gear tab follows, and an
+        # edit there (or another weapon's shot) updates every counter
+        # (_refresh_ammo_counters).
         if ammo_key:
-            ammo_count = self.char.setdefault("ammo", {}).get(ammo_key, 0)
-            ammo_lbl = QPushButton(f"{_AMMO_LABEL.get(ammo_key,'Ammo')}: {ammo_count}")
+            ammo_lbl = QPushButton(f"{ammo_label(ammo_key)}: {ammo_count(self.char, ammo_key)}")
             _icons.set_button_icon(ammo_lbl, "ammo", 13)
+            ammo_lbl.setToolTip(f"{ammo_label(ammo_key)} in your inventory — click to change")
             ammo_lbl.setStyleSheet(
                 _btn("", AMBER, variant="chip", radius=5, text_color=AMBE2,
                      border_alpha=0x55, hover_bg_alpha=0x33, font_size=FS_TINY,
                      padding="2px 6px").styleSheet())
             ammo_lbl.setFixedHeight(26)
-            def _add_ammo(checked=False, _key=ammo_key, _lbl=ammo_lbl,
-                          _label=_AMMO_LABEL.get(ammo_key,"Ammo"),
-                          _equip_names=_AMMO_EQUIP_NAMES.get(ammo_key,[])):
+            def _set_ammo(checked=False, _key=ammo_key):
+                label = ammo_label(_key)
                 n, ok = QInputDialog.getInt(
-                    None, f"Restock {_label}",
-                    f"Add how many {_label}?", 20, 0, 9999)
+                    None, label, f"How many {label.lower()} do you have?",
+                    ammo_count(self.char, _key), 0, 9999)
                 if ok:
-                    self.char.setdefault("ammo",{})[_key] = (
-                        self.char["ammo"].get(_key, 0) + n)
-                    # Sync to equipment list
-                    total = self.char["ammo"][_key]
-                    for _eq in self.char.get("equipment",[]):
-                        if not isinstance(_eq,dict): continue
-                        if any(_eq.get("name","").lower()==en.lower() for en in _equip_names):
-                            _eq["qty"] = total; break
-                    else:
-                        # Add to equipment if not present
-                        from dnd_app.data.phbCommon.items import ADVENTURING_GEAR as _AG
-                        _ammo_cost = next((float(g[2] or 0) for g in _AG if g[0] == _label), 0.0)
-                        self.char.setdefault("equipment",[]).append(
-                            {"name":_label,"qty":total,"weight":0.02,"cost":_ammo_cost,"notes":""})
-                    _lbl.setText(f"{_label}: {total}")
+                    set_ammo(self.char, _key, n)
+                    self._refresh_gear_equipment()
                     self._mark_dirty()
-            ammo_lbl.clicked.connect(_add_ammo)
+            ammo_lbl.clicked.connect(_set_ammo)
+            self._ammo_counters.append((ammo_key, ammo_lbl))
             rl.addWidget(ammo_lbl)
 
         # ── Attack roll button ────────────────────────────────────────────────
-        def _roll_hit(checked=False, _atk=atk, _name=name,
-                      _ak=ammo_key, _al=ammo_lbl,
-                      _ammo_lbl_ref=_AMMO_LABEL,
-                      _equip_names=_AMMO_EQUIP_NAMES.get(ammo_key,[])):
-            import random
+        def _roll_hit(checked=False, _atk=atk, _name=name, _ak=ammo_key):
+            # A shot takes one piece of ammunition from the inventory
             if _ak:
-                cur = self.char.setdefault("ammo", {}).get(_ak, 0)
-                if cur <= 0:
+                label = ammo_label(_ak)
+                if not spend_ammo(self.char, _ak):
                     QMessageBox.warning(
                         None, "No Ammo",
-                        "No " + _ammo_lbl_ref.get(_ak,"ammo") + " remaining!\n"
-                        "Click the ammo counter to restock.")
+                        f"Out of {label.lower()}!\nClick the {label} counter to add more.")
                     return
-                self.char["ammo"][_ak] = cur - 1
-                new_qty = self.char["ammo"][_ak]
-                # Sync to equipment
-                for _eq in self.char.get("equipment",[]):
-                    if not isinstance(_eq,dict): continue
-                    if any(_eq.get("name","").lower()==en.lower() for en in _equip_names):
-                        _eq["qty"] = max(0, new_qty); break
-                if _al:
-                    _al.setText(
-                        f"{_ammo_lbl_ref.get(_ak,'Ammo')}: {new_qty}")
+                self._refresh_gear_equipment()
                 self._mark_dirty()
             d20, _adv_note = self._attack_d20()
             bonus = int(_atk.replace("+","").replace("\u2212","-")) if _atk else 0
@@ -2563,6 +2509,7 @@ class CombatMixin:
                 item.widget().setParent(None)
                 item.widget().deleteLater()
         self._weapon_row_widgets.clear()
+        self._ammo_counters.clear()
         from dnd_app.core.calculator import class_levels
         if class_levels(self.char).get("Monk", 0) > 0:
             self._add_martial_arts_row()
@@ -2580,6 +2527,16 @@ class CombatMixin:
         self._add_wildshape_beast_attack_rows()
         for idx, wpn in enumerate(self.char.get("equipped_weapons",[])):
             self._add_weapon_row(wpn, is_offhand=(idx > 0))
+
+    def _refresh_ammo_counters(self):
+        """Every weapon's ammo counter shows the inventory as it is now --
+        after a shot, a Gear tab edit, or an item added or removed."""
+        from dnd_app.core.ammo import ammo_label, ammo_count
+        for kind, btn in self._ammo_counters:
+            try:
+                btn.setText(f"{ammo_label(kind)}: {ammo_count(self.char, kind)}")
+            except RuntimeError:   # its row was rebuilt meanwhile
+                pass
 
     def _add_wildshape_beast_attack_rows(self):
         """While Wild Shaped, the beast's own actions (Bite, Claws, etc.)

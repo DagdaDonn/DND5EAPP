@@ -15,7 +15,7 @@ dnd_app.core.calculator then uses both when computing totals.
 Author: Ethan O'Brien
 Date: 2026-08-20
 """
-from .character import ability_mod, total_level
+from .character import ability_mod, total_level, default_skills, restore_set_aside_subclasses
 from dnd_app.data.phbCommon.backgrounds import get_background
 
 ABILITIES = ["STR","DEX","CON","INT","WIS","CHA"]
@@ -212,6 +212,9 @@ def rebuild(char: dict) -> None:
     race_name = char.get("species") or char.get("race", "")
     bg_name = char.get("background", "")
     classes = char.get("classes", [])
+    # A subclass a level down set aside comes back once its class is at
+    # the subclass level again (the pick waits in _choices meanwhile).
+    restore_set_aside_subclasses(char)
 
     grants = {
         "skill_profs": [],      # skills granted (no choice needed)
@@ -478,6 +481,21 @@ def rebuild(char: dict) -> None:
 
     char["ability_bonuses"] = base_bonuses
 
+    # ── Skills are rebuilt from what the character has ─────────────────────
+    # Every rebuild starts from no proficiency and adds the race,
+    # background and class grants, the skill and expertise picks and
+    # (further down) class features -- so a pick or feature that's gone
+    # (a level down, a removed class, a new race) takes its skill with it.
+    # The player's own Skills-tab edits are kept apart, in
+    # char["skill_overrides"], and go on top at the end of rebuild().
+    old_skills = dict(char.get("skills") or {})
+    char["skills"] = default_skills()
+    stale_expertise = _drop_stale_expertise(char) if "skill_overrides" not in char else set()
+    if "skill_overrides" not in char and any(
+            c.get("class") == "Bard" and "glamour" in (c.get("subclass") or "").lower()
+            for c in classes):
+        stale_expertise.add("Persuasion")   # given by mistake to Glamour bards before
+
     # Apply skill profs: grants set level to 2 (proficient), but don't DOWNGRADE
     # user choices that are set to 3 (expertise)
     for skill in grants["skill_profs"]:
@@ -485,15 +503,23 @@ def rebuild(char: dict) -> None:
         if current < 2:
             char["skills"][skill] = 2
 
-    # Apply chosen skill profs from _choices
-    for skill in choices.get("class_skill_profs", []):
-        current = char["skills"].get(skill, 0)
-        if current < 2:
+    # Chosen skills: every skill pick and expertise pick still in _choices,
+    # plus the combined lists (which also hold an imported sheet's skills).
+    # Read from the picks themselves, so one that's gone takes its skill.
+    picked_profs = set(choices.get("class_skill_profs", []))
+    picked_expertise = set(choices.get("class_skill_expertise", []))
+    for key, picked in choices.items():
+        if not isinstance(picked, list) or key in ("class_skill_profs", "class_skill_expertise"):
+            continue
+        skills_in = {p for p in picked if isinstance(p, str) and p in char["skills"]}
+        if key.endswith("_skill_profs") or key.endswith("_skill_or_tool_profs"):
+            picked_profs |= skills_in
+        elif "expertise" in key:
+            picked_expertise |= skills_in
+    for skill in picked_profs:
+        if char["skills"].get(skill, 0) < 2:
             char["skills"][skill] = 2
-
-    # Apply chosen skill expertise from _choices, same as class_skill_profs
-    # above, so expertise choices made through the UI are re-derivable.
-    for skill in choices.get("class_skill_expertise", []):
+    for skill in picked_expertise:
         char["skills"][skill] = 3
 
     # Apply proficiency lists for display
@@ -573,32 +599,34 @@ def rebuild(char: dict) -> None:
     # on that known-caster class's spell list too. See that function's
     # exclusion logic below for why this matters.
     full_list_dumped_names = full_list_dumped_spell_names(char)
-    for cname, dumped in full_list_dumped_names.items():
-        for name in dumped:
-            if name not in char.get("spells_known", []):
-                char.setdefault("spells_known", []).append(name)
-    # The list shrinks too: after a level down (or with the class removed)
-    # a Cleric 4 doesn't keep its 3rd-level spells. What the list no longer
-    # reaches goes -- unless something else gives it: a race, feat or
-    # subclass, or a class that picks spells from a list it's on (a
-    # Bard's own pick). Only names this list itself added are looked at,
-    # so the player's own picks are never touched. (_full_list_dump isn't
-    # saved; it covers changes made since the sheet was opened.)
-    from dnd_app.core.character import picking_spell_lists, protected_spells
-    from dnd_app.data.phbCommon.spells import get_spell as _get_spell
     now_dumped = set()
     for dumped in full_list_dumped_names.values():
         now_dumped |= set(dumped)
-    shrunk = set(char.get("_full_list_dump", [])) - now_dumped
-    if shrunk:
-        keep = protected_spells(char)
+    # Which known spells a list added itself is kept, and saved, in
+    # char["spells_from_full_list"] -- so when the list shrinks (a Cleric 4
+    # after a level down, or the class removed) exactly those go, but never
+    # a spell the player had already learned another way.
+    from dnd_app.core.character import picking_spell_lists, protected_spells
+    from dnd_app.data.phbCommon.spells import get_spell as _get_spell
+    known_now = set(char.get("spells_known", []))
+    if "spells_from_full_list" in char:
+        added = set(char["spells_from_full_list"] or [])
+    else:
+        # a character saved before the record: the list's spells it knows,
+        # except any another class of theirs could have picked
         picking = picking_spell_lists(char)
-        def _still_had(name):
-            sp = _get_spell(name)
-            return name in keep or bool(set(sp.get("classes", []) if sp else []) & picking)
-        char["spells_known"] = [n for n in char.get("spells_known", [])
-                                if n not in shrunk or _still_had(n)]
-    char["_full_list_dump"] = sorted(now_dumped)
+        added = {n for n in now_dumped & known_now
+                 if not set((_get_spell(n) or {}).get("classes", [])) & picking}
+    for cname, dumped in full_list_dumped_names.items():
+        for name in dumped:
+            if name not in char.setdefault("spells_known", []):
+                char["spells_known"].append(name)
+                added.add(name)
+    gone = added - now_dumped
+    if gone:
+        keep = protected_spells(char)
+        char["spells_known"] = [n for n in char["spells_known"] if n not in gone or n in keep]
+    char["spells_from_full_list"] = sorted(added & now_dumped)
 
     # ── Known casters: Sorcerer, Bard, Warlock, Ranger, and Eldritch
     # Knight/Arcane Trickster's limited Wizard-list spells ─────────────────
@@ -664,6 +692,191 @@ def rebuild(char: dict) -> None:
     char["spells_prepared"] = [s for s in char.get("spells_prepared", []) if s in have]
     char["quick_spells"] = [s for s in char.get("quick_spells", []) if s in have]
 
+    # ── The player's own skill edits go on top (see "Skills are rebuilt") ──
+    _apply_skill_overrides(char, old_skills, stale_expertise)
+
+
+def _drop_stale_expertise(char: dict) -> set:
+    """Once, for a character saved before skills were rebuilt: expertise an
+    earlier level down left in the combined list with no pick behind it
+    any more. Only when there are picks to go by (an imported sheet's
+    expertise has none). Returns the skills dropped."""
+    store = char.get("_choices", {})
+    combined = store.get("class_skill_expertise")
+    if not isinstance(combined, list):
+        return set()
+    picks = {p for key, picked in store.items()
+             if key != "class_skill_expertise" and "expertise" in key and isinstance(picked, list)
+             for p in picked}
+    if not picks:
+        return set()
+    store["class_skill_expertise"] = [p for p in combined if p in picks]
+    return set(combined) - picks
+
+
+def _apply_skill_overrides(char: dict, old_skills: dict, stale: set) -> None:
+    """Lay the player's own Skills-tab levels over the rebuilt ones.
+    A character saved before skills were rebuilt has no overrides yet:
+    then any level above what's granted is taken to be the player's own
+    edit, so the sheet looks as it did -- except the stale expertise just
+    dropped."""
+    overrides = char.get("skill_overrides")
+    if overrides is None:
+        overrides = {sk: lvl for sk, lvl in old_skills.items()
+                     if isinstance(lvl, int) and lvl > char["skills"].get(sk, 0) and sk not in stale}
+        char["skill_overrides"] = overrides
+    for sk, lvl in overrides.items():
+        char["skills"][sk] = lvl
+
+
+def set_skill_level(char: dict, skill: str, level: int) -> None:
+    """The player sets a skill's level on the Skills tab (0 none, 1 half,
+    2 proficient, 3 expertise). Kept as an override -- unless it's what
+    the character gets anyway, which needs none."""
+    level = max(0, min(3, int(level)))
+    overrides = char.setdefault("skill_overrides", {})
+    overrides.pop(skill, None)
+    rebuild(char)
+    if char["skills"].get(skill, 0) != level:
+        overrides[skill] = level
+        char["skills"][skill] = level
+
+
+def reset_skill_levels(char: dict) -> None:
+    """Drop every Skills-tab edit: skills are just what's granted again."""
+    char["skill_overrides"] = {}
+    rebuild(char)
+
+
+# The combined lists rebuild() reads, and the choices that feed each.
+_PICK_LISTS = {
+    "class_skill_profs": lambda k: (k.endswith("_skill_profs") or k.endswith("_skill_or_tool_profs")
+                                    or k == "race_skill_profs"),
+    "class_skill_expertise": lambda k: "expertise" in k,
+    "tool_profs": lambda k: k.endswith("_tool_profs"),
+    "extra_languages": lambda k: "language" in k,
+}
+
+
+def forget_choice_picks(char: dict, pruned: dict) -> None:
+    """Choices that no longer apply (a level down, a removed class, a new
+    race) take their picks out of the combined lists too -- unless another
+    choice still gives them -- so the skill, tool or language goes.
+    `pruned` is {choice id: what was picked}, already out of _choices."""
+    store = char.get("_choices", {})
+    for combined, feeds in _PICK_LISTS.items():
+        if not isinstance(store.get(combined), list):
+            continue
+        gone = {p for key, picked in pruned.items()
+                if key != combined and feeds(key) and isinstance(picked, list)
+                for p in picked if isinstance(p, str)}
+        if not gone:
+            continue
+        still = {p for key, picked in store.items()
+                 if key != combined and feeds(key) and isinstance(picked, list)
+                 for p in picked if isinstance(p, str)}
+        store[combined] = [p for p in store[combined] if p not in gone or p in still]
+        if not store[combined]:
+            store.pop(combined)
+    _drop_from_lists(char, pruned)
+
+
+def _drop_from_lists(char: dict, dropped: dict) -> None:
+    """The other lists a pick lands in go with it -- unless another choice
+    still makes the same pick:
+      * fighting styles, maneuvers, invocations, infusions (and an
+        infusion that's active on an item)
+      * Magical Secrets / Mystic Arcanum spells -- known spells, unless a
+        race, feat or subclass gives them or another class has them
+      * a feat taken at an ASI ("feat:Alert")"""
+    store = char.get("_choices", {})
+
+    def still(has):
+        return {p for key, picked in store.items() if has(key) and isinstance(picked, list)
+                for p in picked if isinstance(p, str)}
+
+    for cid, picks in dropped.items():
+        if not isinstance(picks, list):
+            continue
+        picks = [p for p in picks if isinstance(p, str)]
+        for field, has in (("fighting_styles", lambda k: "fighting_style" in k),
+                           ("battle_master_maneuvers", lambda k: "maneuvers" in k),
+                           ("eldritch_invocations", lambda k: k == "eldritch_invocations"),
+                           ("artificer_infusions", lambda k: k == "artificer_infusions")):
+            if has(cid) and isinstance(char.get(field), list):
+                keep = still(has)
+                char[field] = [x for x in char[field] if x not in picks or x in keep]
+        if cid == "artificer_infusions":
+            gone = {p.split(" – ")[0].strip() for p in picks} - {
+                p.split(" – ")[0].strip() for p in char.get("artificer_infusions", [])}
+            char["active_infusions"] = [a for a in char.get("active_infusions", [])
+                                        if a.get("infusion") not in gone]
+        if cid.startswith(("bard_magical_secrets", "bard_lore_secrets")) or cid == "magical_secrets_spells":
+            _drop_any_list_spells(char, picks, "Bard")
+        elif cid.startswith("mystic_arcanum_"):
+            _drop_any_list_spells(char, picks, "Warlock")
+        named = still(lambda k: True)
+        for p in picks:
+            if p.startswith("feat:"):
+                feat = p[5:]
+                if p not in named and feat not in named:
+                    char["feats"] = [f for f in char.get("feats", []) if f != feat]
+
+
+def _drop_any_list_spells(char: dict, spells: list, granted_by: str) -> None:
+    """Spells a Bard's Magical Secrets or a Warlock's Mystic Arcanum gave:
+    out of the known spells -- unless a race, feat or subclass gives them,
+    or another of the character's classes has them on its list."""
+    from .character import protected_spells, _spell_lists_of
+    from dnd_app.data.phbCommon.spells import get_spell
+    keep = protected_spells(char)
+    lists = set()
+    for entry in char.get("classes", []):
+        if entry.get("class") != granted_by:
+            lists |= _spell_lists_of(entry)
+    still = {p for key, picked in char.get("_choices", {}).items()
+             if key.startswith(("bard_magical_secrets", "bard_lore_secrets", "mystic_arcanum_"))
+             and isinstance(picked, list) for p in picked}
+    gone = set()
+    for name in spells:
+        sp = get_spell(name)
+        if name in keep or name in still or (set(sp.get("classes", [])) & lists if sp else False):
+            continue
+        gone.add(name)
+    char["spells_known"] = [n for n in char.get("spells_known", []) if n not in gone]
+    # the Magical Secrets list itself loses every dropped pick (a College of
+    # Lore pick of the same spell keeps it known, not on this list)
+    still_ms = set(char.get("_choices", {}).get("magical_secrets_spells") or [])
+    char["magical_secrets_spells"] = [n for n in char.get("magical_secrets_spells", [])
+                                      if n not in spells or n in still_ms]
+
+
+def swap_choice_pick(char: dict, has, old: str, new: str) -> None:
+    """A versatility swap (fighting style, maneuver...): the new pick takes
+    the old one's place in the choice it came from, so a later level down
+    removes the right one."""
+    for key, picked in char.get("_choices", {}).items():
+        if has(key) and isinstance(picked, list) and old in picked:
+            char["_choices"][key] = [new if p == old else p for p in picked]
+            return
+
+
+def move_expertise(char: dict, old_skill: str, new_skill: str) -> None:
+    """Bardic Versatility / Skill Versatility: expertise moves from one
+    skill to another -- in the pick it came from, so rebuild() keeps it."""
+    store = char.setdefault("_choices", {})
+    for key, picked in store.items():
+        if key != "class_skill_expertise" and "expertise" in key and isinstance(picked, list) \
+                and old_skill in picked:
+            store[key] = [new_skill if p == old_skill else p for p in picked]
+            break
+    combined = [p for p in store.get("class_skill_expertise", []) if p != old_skill]
+    store["class_skill_expertise"] = sorted(set(combined + [new_skill]))
+    overrides = char.get("skill_overrides") or {}
+    if overrides.get(old_skill, 0) >= 3:
+        overrides.pop(old_skill)
+    rebuild(char)
+
 
 def _apply_class_feature_mechanics(char: dict, classes: list, edition: str):
     """Auto-apply mechanical bonuses from class features based on current level."""
@@ -679,15 +892,10 @@ def _apply_class_feature_mechanics(char: dict, classes: list, edition: str):
     if cl_map.get("Rogue", 0) >= 15:
         char["saving_throws"]["WIS"] = True
 
-    # ── Otherworldly Glamour (Bard Glamour 3+): CHA to Persuasion ─────────────
     bard_sub = subs.get("Bard", "")
-    if cl_map.get("Bard", 0) >= 3 and "glamour" in bard_sub.lower():
-        # Persuasion: at least proficient; upgrade to expertise if already prof
-        current = char["skills"].get("Persuasion", 0)
-        if current < 2:
-            char["skills"]["Persuasion"] = 2
-        elif current == 2:
-            char["skills"]["Persuasion"] = 3  # expertise
+    # (Otherworldly Glamour is the Fey Wanderer ranger's: its skill is a
+    # pick, fey_wanderer_skill_profs, and its bonus is calculator.py's
+    # fey_wanderer_check_bonus. The College of Glamour grants no Persuasion.)
 
     # ── College of Eloquence (Bard 3+): Persuasion & Deception near-perfect ───
     if cl_map.get("Bard", 0) >= 3 and "eloquence" in bard_sub.lower():
@@ -731,6 +939,11 @@ def _apply_class_feature_mechanics(char: dict, classes: list, edition: str):
 
     # ── Beguiling Influence invocation: Deception + Persuasion proficiency ────
     chosen_invocations = char.get("eldritch_invocations", [])
+    # flags below are re-derived every rebuild -- an invocation that's gone
+    # (a level down) takes its flag with it
+    char["_eldritch_mind"] = False
+    char["_armor_of_shadows"] = False
+    char["_devils_sight"] = False
     for inv in chosen_invocations:
         inv_lower = inv.lower()
         if "beguiling influence" in inv_lower:
@@ -1134,5 +1347,12 @@ def apply_choice(char: dict, choice_id: str, selected: list) -> None:
             if k.endswith("_skill_profs") and isinstance(v, list):
                 all_skill_profs.extend(v)
         choices["class_skill_profs"] = list(set(all_skill_profs))
+    # ...and expertise picks the same way (the apps' own handlers do too)
+    elif "expertise" in choice_id and choice_id != "class_skill_expertise":
+        all_expertise = []
+        for k, v in choices.items():
+            if "expertise" in k and isinstance(v, list):
+                all_expertise.extend(v)
+        choices["class_skill_expertise"] = list(set(all_expertise))
     
     rebuild(char)

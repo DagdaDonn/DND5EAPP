@@ -2,7 +2,8 @@
 # PyInstaller spec for D&D 5e Character Creator
 # Windows-compatible: strip disabled (Unix only), no UPX, safe excludes only
 
-import os, sys
+import os, re, sys
+from datetime import date
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 # PyInstaller os.chdir()s to the spec file's own directory (SPECPATH,
@@ -309,6 +310,61 @@ if os.path.isfile(_SPLASH_PNG):
 else:
     print(f"[spec] {_SPLASH_PNG} not found — building without the bootloader splash screen")
 
+# ── Version details (right-click MIMIC.exe -> Properties -> Details) ────────
+# Name, version, publisher and copyright, instead of a blank, unknown file --
+# Windows shows them, and antivirus heuristics read them too.
+#   1. the version is the app's one version number, kept in the Android
+#      build's dnd_app/ui_android/buildozer.spec ("version = 0.3.0"), so both
+#      apps always carry the same one -- bump it there
+#   2. Windows wants four numbers: 0.3.0 -> 0.3.0.0
+_PUBLISHER = "Ethan O'Brien"    # shown as the company and in the copyright line
+
+def _app_version():
+    spec = os.path.join(_ROOT, 'dnd_app', 'ui_android', 'buildozer.spec')
+    try:
+        with open(spec, encoding='utf-8') as f:
+            for line in f:
+                m = re.match(r'\s*version\s*=\s*(\d+(?:\.\d+){0,3})\s*$', line)
+                if m:
+                    return m.group(1)
+    except OSError:
+        pass
+    print(f"[spec] no 'version = ...' line in {spec} -- using 0.0.0")
+    return '0.0.0'
+
+# (Windows only: PyInstaller's version module needs Windows to load, and
+# other platforms' executables have no such resource -- build_exe.sh runs
+# this same spec on Linux/macOS.)
+_VERSION_INFO = None
+if sys.platform == 'win32':
+    from PyInstaller.utils.win32.versioninfo import (
+        VSVersionInfo, FixedFileInfo, StringFileInfo, StringTable, StringStruct,
+        VarFileInfo, VarStruct,
+    )
+    _APP_VERSION = _app_version()
+    _VERSION_NUMS = tuple((list(map(int, _APP_VERSION.split('.'))) + [0, 0, 0])[:4])
+    _VERSION_INFO = VSVersionInfo(
+        ffi=FixedFileInfo(filevers=_VERSION_NUMS, prodvers=_VERSION_NUMS,
+                          mask=0x3f, flags=0x0, OS=0x40004,   # Windows NT, 32/64-bit
+                          fileType=0x1, subtype=0x0, date=(0, 0)),   # an application
+        kids=[
+            StringFileInfo([StringTable('040904B0', [   # US English, Unicode
+                StringStruct('CompanyName', _PUBLISHER),
+                # what Task Manager and a pinned taskbar icon call the app
+                StringStruct('FileDescription', 'MIMIC'),
+                StringStruct('FileVersion', _APP_VERSION),
+                StringStruct('InternalName', 'MIMIC'),
+                StringStruct('LegalCopyright', f'\u00a9 {date.today().year} {_PUBLISHER}'),
+                StringStruct('OriginalFilename', 'MIMIC.exe'),
+                StringStruct('ProductName', 'MIMIC'),
+                StringStruct('ProductVersion', _APP_VERSION),
+                StringStruct('Comments', 'D&D 5e character creator and character sheet'),
+            ])]),
+            VarFileInfo([VarStruct('Translation', [0x0409, 1200])]),
+        ],
+    )
+    print(f"[spec] MIMIC.exe version details: {_APP_VERSION}, {_PUBLISHER}")
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -330,4 +386,5 @@ exe = EXE(
     upx=False,
     console=False,
     icon=os.path.join(_ROOT, 'dnd_app', 'ui_desktop', 'icon.ico'),
+    version=_VERSION_INFO,
 )

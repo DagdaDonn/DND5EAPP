@@ -402,7 +402,7 @@ ALL_CLASSES_2024 = [
         tools="Herbalism kit",
         skill_choices=["Arcana","Animal Handling","Insight","Medicine","Nature","Perception","Religion","Survival"],
         skill_count=2, spell_ability="WIS", has_spells=True,
-        spell_slots=FULL_CASTER_SLOTS_2024, subclass_level=2,
+        spell_slots=FULL_CASTER_SLOTS_2024, subclass_level=3,
         features={
             1: ["Druidic (secret language + script)","Primal Order – choose Warden (martial weapons + heavy armor) or Magician (1 Druid cantrip + Arcana/Nature expertise)","Spellcasting (WIS)"],
             2: ["Wild Shape (2/SR: become Beast of CR ≤ 1; retain INT/WIS/CHA; gain temp HP = Druid level)","Wild Companion (can expend slot for Find Familiar 1/day)"],
@@ -855,7 +855,7 @@ ALL_CLASSES_2024 = [
         tools="None",
         skill_choices=["Arcana","History","Insight","Investigation","Medicine","Religion"],
         skill_count=2, spell_ability="INT", has_spells=True,
-        spell_slots=FULL_CASTER_SLOTS_2024, subclass_level=2,
+        spell_slots=FULL_CASTER_SLOTS_2024, subclass_level=3,
         features={
             1: ["Spellcasting (INT; spellbook with 6 spells; ritual casting from book)","Arcane Recovery (ceil(level/2) slots on SR; 1/LR)"],
             2: ["Scholar (History/Nature/Arcana/Religion bonus: add Prof even if not proficient on Int checks)"],

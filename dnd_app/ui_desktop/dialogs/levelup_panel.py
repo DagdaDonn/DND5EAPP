@@ -1580,6 +1580,21 @@ def _get_subclass_choices(char):
                     "already_chosen": already,
                 })
 
+        # Otherworldly Glamour (Ranger, Fey Wanderer, 3rd level): proficiency
+        # in one of Deception, Performance or Persuasion (its WIS bonus to
+        # Charisma checks is calculator.py's fey_wanderer_check_bonus).
+        if cname == "Ranger" and clvl >= 3 and "fey wanderer" in sub:
+            key = "fey_wanderer_skill_profs"
+            already = made.get(key, [])
+            if not already:
+                choices.append({
+                    "id": key, "source": "subclass", "source_name": "Otherworldly Glamour",
+                    "type": "skill_prof", "count": 1,
+                    "pool": ["Deception", "Performance", "Persuasion"],
+                    "label": "Otherworldly Glamour: choose Deception, Performance or Persuasion",
+                    "already_chosen": already,
+                })
+
         # Guidance of the Spirits (Bard, College of Spirits, 3rd level):
         # skill choice, swappable on long rest via RestOptionsDialog.
         if cname == "Bard" and clvl >= 3 and "spirits" in sub:
@@ -2540,7 +2555,7 @@ def _get_feat_choices(char):
         # the class comes from the feat's name when a background gave it
         # ("Magic Initiate (Cleric)"); otherwise any of the six lists
         mi_cls = ""
-        for full in [char.get("origin_feat", "")] + list(all_feats):
+        for full in [char.get("origin_feat") or ""] + list(all_feats):
             if full.startswith("Magic Initiate (") and full.endswith(")"):
                 mi_cls = full[len("Magic Initiate ("):-1]
         mi_classes = [mi_cls] if mi_cls else ["Bard", "Cleric", "Druid", "Sorcerer", "Warlock", "Wizard"]

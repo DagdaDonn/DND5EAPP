@@ -369,26 +369,50 @@ def level_up_block_reason(char: dict, class_name: str = "") -> str:
     return ""
 
 
-def drop_subclasses_below_level(char: dict) -> list:
-    """After a level down: a class that's now below the level it gets its
-    subclass at (Fighter 3, Wizard 2, ...) can't keep one -- a "Fighter 2,
-    Champion" contradicts itself. Clears those subclasses and returns
-    [(class, the subclass it had, the level it comes back at)], so the
-    caller can say so. Levelling back up asks for the subclass again."""
+def _subclass_levels(char: dict) -> dict:
+    """{class: the level its subclass comes at}, for the character's edition."""
     from dnd_app.data.phb2014.classes import CLASS_DICT as _D14
     try:
         from dnd_app.data.phb2024.classes_2024 import CLASS_DICT_2024 as _D24
     except Exception:
         _D24 = {}
     table = _D24 if char.get("edition") == "2024" else _D14
+    return {name: data.get("subclass_level", 3) for name, data in table.items()}
+
+
+def drop_subclasses_below_level(char: dict) -> list:
+    """After a level down: a class that's now below the level it gets its
+    subclass at (Fighter 3, Wizard 2, ...) can't keep one -- a "Fighter 2,
+    Champion" contradicts itself. Sets those subclasses aside and returns
+    [(class, the subclass it had, the level it comes back at)], so the
+    caller can say so. The pick stays in _choices ("Fighter_subclass"),
+    so levelling back up brings the same subclass back
+    (restore_set_aside_subclasses, run by every rebuild)."""
+    levels = _subclass_levels(char)
     dropped = []
     for entry in char.get("classes", []):
         sub = entry.get("subclass", "")
-        need = table.get(entry.get("class", ""), {}).get("subclass_level", 3)
+        need = levels.get(entry.get("class", ""), 3)
         if sub and entry.get("level", 1) < need:
             dropped.append((entry["class"], sub, need))
+            char.setdefault("_choices", {})[f"{entry['class']}_subclass"] = [sub]
             entry["subclass"] = ""
     return dropped
+
+
+def restore_set_aside_subclasses(char: dict) -> list:
+    """A class back at its subclass level with no subclass, whose pick is
+    still in _choices (set aside by a level down): give it back. Returns
+    [(class, subclass)] restored."""
+    levels = _subclass_levels(char)
+    restored = []
+    for entry in char.get("classes", []):
+        cn = entry.get("class", "")
+        pick = (char.get("_choices", {}).get(f"{cn}_subclass") or [""])[0]
+        if pick and not entry.get("subclass") and entry.get("level", 1) >= levels.get(cn, 3):
+            entry["subclass"] = clean_subclass_name(pick)
+            restored.append((cn, entry["subclass"]))
+    return restored
 
 
 # Classes that prepare from their whole list (rebuild() adds the list to
@@ -498,6 +522,13 @@ def set_subclass(char: dict, class_name: str, subclass: str) -> None:
     entry = get_class_entry(char, class_name)
     if entry:
         entry["subclass"] = clean_subclass_name(subclass)
+        # the pick a level down sets aside and a level up brings back --
+        # cleared with the subclass, so a cleared one stays cleared
+        choices = char.setdefault("_choices", {})
+        if entry["subclass"]:
+            choices[f"{class_name}_subclass"] = [entry["subclass"]]
+        else:
+            choices.pop(f"{class_name}_subclass", None)
 
 
 def add_feat(char: dict, feat_name: str) -> None:
@@ -510,8 +541,13 @@ def remove_feat(char: dict, feat_name: str) -> None:
 
 
 def set_skill_prof(char: dict, skill: str, level: int) -> None:
-    """0=none, 1=half, 2=proficient, 3=expertise"""
-    char["skills"][skill] = max(0, min(3, level))
+    """0=none, 1=half, 2=proficient, 3=expertise -- the player's own
+    setting, kept as an override on top of what's granted (rebuild()
+    rebuilds the rest; core/builder.set_skill_level drops an override
+    that matches the granted level)."""
+    level = max(0, min(3, level))
+    char.setdefault("skill_overrides", {})[skill] = level
+    char["skills"][skill] = level
 
 
 def add_equipment(char: dict, name: str, qty: int = 1,

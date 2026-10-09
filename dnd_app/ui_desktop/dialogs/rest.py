@@ -362,18 +362,98 @@ def _all_relevant_choice_ids(char_snapshot: dict) -> set:
     leave an old choice's pool/value silently misapplied to whatever
     replaced it."""
     import copy
+    store = char_snapshot.get("_choices", {}) or {}
+    plain = copy.deepcopy(char_snapshot)
+    plain["_choices"] = {}
+    ids = {c["id"] for c in _generate_choices(plain) if "id" in c}
+    # a growing choice that's already full (8 invocations at 8) generates
+    # nothing above -- so ask again with those lists empty, or it's never
+    # "relevant" and never goes when its class or level does
+    ids |= {c["id"] for c in _all_relevant_choices(char_snapshot) if "id" in c}
+    # a choice offered only once another is answered (Blessed Warrior's
+    # cantrips, Pact of the Tome's): keep the relevant answers, and each
+    # round adds the choices they open up
+    for _ in range(4):
+        plain = copy.deepcopy(char_snapshot)
+        plain["_choices"] = {k: v for k, v in store.items() if k in ids}
+        more = {c["id"] for c in _generate_choices(plain) if "id" in c} - ids
+        if not more:
+            break
+        ids |= more
+    return ids
+
+
+# Choices that hold every pick so far, growing with level, and the
+# character lists they also fill
+_CUMULATIVE_IDS = ("eldritch_invocations", "artificer_infusions", "fighter_maneuvers",
+                   "sorcerer_metamagic", "four_elements_disciplines", "rune_knight_runes",
+                   "blood_hunter_mutagens", "blood_hunter_curses", "arcane_shot_options",
+                   "kensei_weapons", "magical_secrets_spells")
+_CUMULATIVE_LISTS = ("eldritch_invocations", "artificer_infusions",
+                     "battle_master_maneuvers", "magical_secrets_spells")
+
+
+def _generate_choices(scratch: dict) -> list:
     from dnd_app.core.builder import get_choices_needed
     from dnd_app.ui_desktop.dialogs.levelup_panel import (
         _get_subclass_choices, _get_race_choices, _get_class_tool_choices,
         _get_feat_choices, _get_dm_reward_choices, _get_optional_feature_choices,
     )
+    return (get_choices_needed(scratch) + _get_subclass_choices(scratch)
+            + _get_race_choices(scratch) + _get_class_tool_choices(scratch)
+            + _get_feat_choices(scratch) + _get_dm_reward_choices(scratch)
+            + _get_optional_feature_choices(scratch))
+
+
+def _all_relevant_choices(char_snapshot: dict, keep_choices: bool = False) -> list:
+    """Every choice this exact character state has, with its full count and
+    pool: generated with the growing choices' picks and lists emptied.
+    keep_choices keeps the other picks (a pact boon), so an invocation's
+    pool still knows what it may need."""
+    import copy
     scratch = copy.deepcopy(char_snapshot)
-    scratch["_choices"] = {}
-    all_choices = (get_choices_needed(scratch) + _get_subclass_choices(scratch)
-                   + _get_race_choices(scratch) + _get_class_tool_choices(scratch)
-                   + _get_feat_choices(scratch) + _get_dm_reward_choices(scratch)
-                   + _get_optional_feature_choices(scratch))
-    return {c["id"] for c in all_choices if "id" in c}
+    if keep_choices:
+        for cid in _CUMULATIVE_IDS:
+            scratch.setdefault("_choices", {}).pop(cid, None)
+    else:
+        scratch["_choices"] = {}
+    for field in _CUMULATIVE_LISTS:
+        scratch[field] = []
+    return _generate_choices(scratch)
+
+
+def _trim_over_count(char: dict) -> dict:
+    """After a level down, a growing choice can hold more picks than the
+    level allows: keep the oldest that are still allowed (an invocation
+    whose level or pact it no longer meets goes first). Returns
+    {choice id: the picks dropped}."""
+    store = char.get("_choices", {})
+    dropped = {}
+    # 1. one count (and an invocation's allowed pool) per choice -- the
+    #    same choice can come from two generators, one with the real pool
+    limits = {}
+    for c in _all_relevant_choices(char, keep_choices=True):
+        cid = c.get("id")
+        if cid not in _CUMULATIVE_IDS:
+            continue
+        count = c.get("count") or 0
+        pool = c.get("pool") if c.get("type") == "invocation" else None
+        have = limits.get(cid)
+        if have is None:
+            limits[cid] = [count, pool]
+        else:
+            have[0] = min(have[0], count)
+            have[1] = have[1] or pool
+    # 2. keep the oldest picks still allowed, up to the count
+    for cid, (count, pool) in limits.items():
+        held = store.get(cid)
+        if not isinstance(held, list):
+            continue
+        keep = [p for p in held if not pool or p in pool][:count]
+        if len(keep) < len(held):
+            dropped[cid] = [p for p in held if p not in keep]
+            store[cid] = keep
+    return dropped
 
 
 # Choice ids from _get_race_choices()/get_choices_needed() that are keyed
@@ -391,15 +471,39 @@ RACE_SCOPED_CHOICE_IDS = {
 BACKGROUND_SCOPED_CHOICE_IDS = {"bg_languages", "bg_skill_profs", "bg_tool_profs"}
 
 
+def change_and_prune(char: dict, change, scoped=()) -> set:
+    """A race, subrace or background change: make it, then drop every
+    choice the old one asked for and the new one doesn't (a High Elf's
+    Wizard cantrip, once Human), picks and all -- plus `scoped`, the
+    generic ids whose old picks can't carry over to the new pool."""
+    old_ids = _all_relevant_choice_ids(char)
+    change()
+    new_ids = _all_relevant_choice_ids(char)
+    return _prune_stale_choices(char, (old_ids - new_ids) | set(scoped))
 
 
 def _prune_stale_choices(char: dict, stale_ids: set) -> set:
-    """Remove the given choice ids from char["_choices"] if present.
-    Returns the ids actually removed."""
+    """Remove the given choice ids from char["_choices"] if present, and
+    everything that hangs off them. Returns the ids actually removed."""
+    from dnd_app.core.builder import forget_choice_picks
     store = char.get("_choices", {})
-    removed = {cid for cid in stale_ids if cid in store}
-    for cid in removed:
-        store.pop(cid, None)
+    removed, stale = set(), set(stale_ids)
+    # 1. take out the stale choices, and the picks a growing choice no
+    #    longer has room for (after a level down)
+    # 2. their picks leave every list they landed in -- skills, styles,
+    #    invocations, spells, feats...
+    # 3. dropping a feat or a style can make more choices stale (its own
+    #    picks): go round again until nothing changes
+    for _ in range(6):
+        before = _all_relevant_choice_ids(char)
+        gone = {cid for cid in stale if cid in store}
+        picks = {cid: store.pop(cid, None) for cid in gone}
+        removed |= gone
+        picks.update(_trim_over_count(char))
+        if not picks:
+            break
+        forget_choice_picks(char, picks)
+        stale = before - _all_relevant_choice_ids(char)
     return removed
 
 

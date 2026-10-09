@@ -374,6 +374,7 @@ def get_skill_bonus(char: dict, skill: str) -> int:
     # College of Lore: Cutting Words doesn't add to skills, but Eloquence does to Persuasion
     # We handle Glamour/Eloquence via feature_bonuses below
 
+    mod += fey_wanderer_check_bonus(char, ability)
     if prof_level == 0:
         # Check Jack of All Trades
         if jack:
@@ -386,6 +387,26 @@ def get_skill_bonus(char: dict, skill: str) -> int:
     elif prof_level == 3:
         return mod + pb * 2
     return mod
+
+
+def fey_wanderer_check_bonus(char: dict, ability: str) -> int:
+    """Otherworldly Glamour (Ranger 3, Fey Wanderer): Charisma checks add
+    your Wisdom modifier (at least +1)."""
+    if ability != "CHA" or class_levels(char).get("Ranger", 0) < 3:
+        return 0
+    if "fey wanderer" not in subclasses(char).get("Ranger", "").lower():
+        return 0
+    return max(1, ability_mod(char, "WIS"))
+
+
+def ability_check_bonus(char: dict, ability: str) -> int:
+    """A plain ability check (no skill): the ability modifier, plus Jack
+    of All Trades (Bard 2+: half proficiency, as on an untrained skill)
+    and the Fey Wanderer's Wisdom on Charisma checks."""
+    bonus = ability_mod(char, ability) + fey_wanderer_check_bonus(char, ability)
+    if class_levels(char).get("Bard", 0) >= 2:
+        bonus += get_prof_bonus(char) // 2
+    return bonus
 
 
 def get_saving_throw_bonus(char: dict, ability: str) -> int:

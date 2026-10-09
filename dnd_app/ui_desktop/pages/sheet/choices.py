@@ -14,7 +14,7 @@ from ...shared import *
 from ...shared import _btn, _pill
 from ...widgets import FlowLayout, FlowContainer
 from dnd_app.ui_desktop.dialogs.rest import (_all_relevant_choice_ids, _prune_stale_choices,
-    RACE_SCOPED_CHOICE_IDS, BACKGROUND_SCOPED_CHOICE_IDS)
+    change_and_prune, RACE_SCOPED_CHOICE_IDS, BACKGROUND_SCOPED_CHOICE_IDS)
 from dnd_app.core.character import (
     ability_score, ability_mod, total_level, class_levels, subclasses,
     long_rest, short_rest, add_class
@@ -97,17 +97,13 @@ class ChoicesMixin:
             name, ok = QInputDialog.getItem(self, "Edit Race", "Species / Race:", RACE_NAMES, 0, False)
             if ok and name:
                 old_race = self.char.get("race", "")
-                if name != old_race:
-                    # Race-scoped choice ids are keyed generically by
-                    # choice TYPE ("race_skill_profs" etc.), not by which
-                    # race — cleared before the rebuild below so a picked
-                    # skill/tool/language from the OLD race doesn't get
-                    # silently misapplied to whatever the NEW race's own
-                    # (possibly completely different) choice pool is, and
-                    # the new race's own pending choice actually re-prompts
-                    # instead of looking "already answered".
-                    _prune_stale_choices(self.char, RACE_SCOPED_CHOICE_IDS)
-                self.ctrl.update_many({"race": name, "species": name, "subrace": ""})
+                # Whatever the old race asked for and the new one doesn't goes
+                # (a High Elf's cantrip), and the generic race-scoped ids
+                # ("race_skill_profs"...) too, so an old pick isn't misapplied
+                # to the new race's pool and its own choice re-prompts.
+                change_and_prune(self.char, lambda: self.char.update(race=name, species=name, subrace=""),
+                                 RACE_SCOPED_CHOICE_IDS if name != old_race else ())
+                self.ctrl.refresh()
                 self._refresh_stat_bar()
                 self._edit_identity("subrace")
 
@@ -134,7 +130,7 @@ class ChoicesMixin:
             choice, ok = QInputDialog.getItem(self, f"Choose Subrace — {race}", "Subrace:", options, cur_idx, False)
             if ok and choice:
                 subrace_name = choice.split("(")[0].strip()
-                self.char["subrace"] = subrace_name
+                change_and_prune(self.char, lambda: self.char.update(subrace=subrace_name))
                 rebuild(self.char); update_all(self.char)
                 self.ctrl.refresh()
                 self._refresh_stat_bar()
@@ -161,13 +157,11 @@ class ChoicesMixin:
             name, ok = QInputDialog.getItem(self, "Edit Background", "Background:", BACKGROUND_NAMES, 0, False)
             if ok and name:
                 old_bg = self.char.get("background", "")
-                if name != old_bg:
-                    # Same reasoning as the race-scoped clear above: bg_skill_profs/
-                    # bg_tool_profs/bg_languages are shared, generic ids used by
-                    # whichever background currently needs a choice, not
-                    # namespaced per background name.
-                    _prune_stale_choices(self.char, BACKGROUND_SCOPED_CHOICE_IDS)
-                self.ctrl.update("background", name)
+                # Same as the race change above: bg_skill_profs/bg_tool_profs/
+                # bg_languages are shared, generic ids, not per background.
+                change_and_prune(self.char, lambda: self.char.update(background=name),
+                                 BACKGROUND_SCOPED_CHOICE_IDS if name != old_bg else ())
+                self.ctrl.refresh()
                 # Changing background here needs the same follow-up
                 # prompts the creation wizard already runs for backgrounds
                 # that grant a choice of feat (Rewarded/Ruined and others).

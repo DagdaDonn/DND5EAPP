@@ -36,6 +36,10 @@ Page {
         }
         return out
     }
+    // the ammunition the count dialog is editing
+    property string ammoEditKind: ""
+    property string ammoEditLabel: ""
+
     readonly property real hpFraction: sheetBridge && sheetBridge.maxHp > 0
                                        ? Math.max(0, Math.min(1, sheetBridge.currentHp / sheetBridge.maxHp)) : 0
 
@@ -553,13 +557,33 @@ Page {
                                 onToggled: sheetBridge.toggleWeaponPowerAttack(modelData.name)
                             }
 
-                            MButton {
-                                objectName: "attackButton_" + modelData.name
+                            RowLayout {
                                 Layout.fillWidth: true
-                                iconName: "dice"
-                                iconSize: 16
-                                text: "Roll to Hit"
-                                onClicked: sheetBridge.rollWeaponAttack(modelData.name)
+                                spacing: 8
+                                // shots left in the inventory (bundles count every
+                                // piece) -- tap to change how many; a shot uses one
+                                MButton {
+                                    objectName: "ammoButton_" + modelData.name
+                                    visible: modelData.ammoKind !== ""
+                                    primary: false
+                                    iconName: "ammo"
+                                    iconSize: 14
+                                    text: modelData.ammoLabel + ": " + modelData.ammoCount
+                                    onClicked: {
+                                        root.ammoEditKind = modelData.ammoKind
+                                        root.ammoEditLabel = modelData.ammoLabel
+                                        ammoQty.value = modelData.ammoCount
+                                        ammoDialog.open()
+                                    }
+                                }
+                                MButton {
+                                    objectName: "attackButton_" + modelData.name
+                                    Layout.fillWidth: true
+                                    iconName: "dice"
+                                    iconSize: 16
+                                    text: "Roll to Hit"
+                                    onClicked: sheetBridge.rollWeaponAttack(modelData.name)
+                                }
                             }
                         }
                     }
@@ -1022,6 +1046,67 @@ Page {
                                 width: parent.width
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // How much ammunition you have: type a number or use - / + (hold to
+    // step by 5); the inventory follows
+    Dialog {
+        id: ammoDialog
+        objectName: "ammoDialog"
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        modal: true
+        width: Math.min(parent ? parent.width - 32 : 340, 340)
+        padding: 16
+        background: Rectangle { color: Theme.surf; radius: 12; border.color: Theme.border }
+        Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.8) }
+
+        contentItem: ColumnLayout {
+            spacing: 12
+            Label {
+                text: root.ammoEditLabel
+                color: Theme.gold2
+                font.pixelSize: Theme.fsHead
+                font.bold: true
+                Layout.fillWidth: true
+            }
+            Label {
+                text: "How many " + root.ammoEditLabel.toLowerCase() + " do you have?"
+                color: Theme.text2
+                font.pixelSize: Theme.fsSmall
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            MSpinBox {
+                id: ammoQty
+                objectName: "ammoCountSpin"
+                Layout.fillWidth: true
+                implicitHeight: 48
+                from: 0
+                to: 9999
+                holdStep: 5
+                live: true
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                MButton {
+                    Layout.fillWidth: true
+                    primary: false
+                    text: "Cancel"
+                    onClicked: ammoDialog.close()
+                }
+                MButton {
+                    objectName: "ammoSave"
+                    Layout.fillWidth: true
+                    text: "Save"
+                    onClicked: {
+                        ammoDialog.close()
+                        sheetBridge.setAmmoCount(root.ammoEditKind, ammoQty.value)
                     }
                 }
             }

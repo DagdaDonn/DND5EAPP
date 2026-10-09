@@ -67,6 +67,21 @@ make that wait less painful rather than eliminating it:
 
 ---
 
+## Version details
+
+Right-click `MIMIC.exe` → Properties → Details shows the product name,
+version, publisher and copyright, set in the `.spec` file's version block:
+
+- **The version** is the app's one version number, the `version = ...`
+  line in `dnd_app/ui_android/buildozer.spec`, so the EXE and the APK
+  always match. Bump it there before a release.
+- **The publisher** (company and copyright name) is `_PUBLISHER` in the
+  `.spec` file.
+
+Only Windows builds get these; the same spec on Linux/macOS skips them.
+
+---
+
 ## Why `strip=False`
 
 `strip` removes Unix debug symbols. On Windows it does nothing useful and  
@@ -89,6 +104,6 @@ in at runtime on some Python versions. Excluding them causes
 | Symptom | Fix |
 |---|---|
 | `ModuleNotFoundError: No module named 'ast'` | Spec was wrong — current spec keeps `ast` |
-| Antivirus flags the EXE | False positive from PyInstaller's bootloader — add an exclusion in AV |
+| Antivirus flags the EXE | False positive from PyInstaller's bootloader — report it to Microsoft at https://www.microsoft.com/en-us/wdsi/filesubmission (choose "Software developer"); add an exclusion in AV meanwhile |
 | EXE crashes with no message | Re-run with `console=True` in the spec to see the traceback |
 | `icon.ico not found` | Ensure `dnd_app/ui_desktop/icon.ico` exists before building |

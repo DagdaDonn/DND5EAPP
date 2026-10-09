@@ -210,7 +210,12 @@ class SkillsMixin:
         menu.exec(global_pos)
 
     def _set_skill_prof(self, skill_name, level):
-        self.ctrl.update(f"skills.{skill_name}", level)
+        # the player's own setting, kept as an override on top of what's
+        # granted (core/builder.py), so a rebuild doesn't undo it
+        from dnd_app.core.builder import set_skill_level
+        set_skill_level(self.char, skill_name, level)
+        self.ctrl.refresh()
+        self._mark_dirty()
 
     def _reset_manual_skill_changes(self):
         """Clear every skill proficiency and rebuild from scratch, keeping
@@ -227,9 +232,9 @@ class SkillsMixin:
             _QMB.Yes | _QMB.No, _QMB.No)
         if confirm != _QMB.Yes:
             return
-        from dnd_app.core.builder import rebuild
-        self.char["skills"] = {}
-        rebuild(self.char)
+        from dnd_app.core.builder import reset_skill_levels
+        reset_skill_levels(self.char)
+        self.ctrl.refresh()
         self._mark_dirty()
         self._refresh_skills()
         self._toast("↺ Skill proficiencies reset to granted baseline")

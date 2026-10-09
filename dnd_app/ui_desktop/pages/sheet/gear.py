@@ -1079,6 +1079,7 @@ class GearMixin:
 
     def _refresh_gear_equipment(self):
         from PySide6.QtGui import QColor
+        self._refresh_ammo_counters()   # the combat tab's counters read this inventory
         self._gear_equip_tree.clear()
 
         # Carried equipment: everything in char["equipment"] (mundane gear,
@@ -1256,7 +1257,7 @@ class GearMixin:
                 if v == 0:
                     self._remove_equipment(n)
                     return
-                self._update_weight(); self._mark_dirty()
+                self._update_weight(); self._refresh_ammo_counters(); self._mark_dirty()
             qty_spin.valueChanged.connect(_qty_changed)
             self._gear_equip_tree.setItemWidget(item, 2, qty_spin)
 

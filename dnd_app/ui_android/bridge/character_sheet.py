@@ -39,6 +39,7 @@ from dnd_app.core.calculator import (
     get_rage_damage, get_onhit_damage_bonuses, get_condition_attack_status,
     spell_preparing_classes, can_ritual_cast, spell_needs_preparing,
     spellcasting_block_reason, effect_start_problem, on_effect_started,
+    ability_check_bonus,
 )
 from dnd_app.data.phbCommon.feature_ui_interactions import TOOLS as SWAP_TOOLS_POOL
 from dnd_app.core.magic_items import (
@@ -47,6 +48,7 @@ from dnd_app.core.magic_items import (
 )
 from dnd_app.core.effects import EFFECT_TABLE, INSTANT_POTION_EFFECTS
 from dnd_app.core.spell_components import spell_component_block_reason
+from dnd_app.core.ammo import ammo_kind, ammo_label, ammo_count, spend_ammo, set_ammo
 from dnd_app.core.dying import (
     take_damage, heal, heal_block_reason, set_death_saves,
     revive as _revive_char, death_cause, death_status_text, STABLE_MESSAGE,
@@ -232,6 +234,7 @@ class _DesktopHelpers:
             "_MV_FIGHTING_STYLES": levelup_panel.FIGHTING_STYLES,
             "_all_relevant_choice_ids": rest._all_relevant_choice_ids,
             "_prune_stale_choices": rest._prune_stale_choices,
+            "change_and_prune": rest.change_and_prune,
             "RACE_SCOPED_CHOICE_IDS": rest.RACE_SCOPED_CHOICE_IDS,
             "BACKGROUND_SCOPED_CHOICE_IDS": rest.BACKGROUND_SCOPED_CHOICE_IDS,
             "RestOptionsDialog": rest.RestOptionsDialog,
@@ -405,6 +408,10 @@ class CharacterSheetBridge(QObject):
                 "score": score,
                 "mod": mod,
                 "modText": _mod_text(mod),
+                # What a plain check of this ability rolls: the modifier,
+                # plus anything that adds to every check of it (the Fey
+                # Wanderer's Wisdom on Charisma checks).
+                "check": ability_check_bonus(self.char, ab),
                 "save": get_saving_throw_bonus(self.char, ab),
                 "saveText": _mod_text(get_saving_throw_bonus(self.char, ab)),
                 "saveProficient": is_save_prof,
@@ -564,13 +571,17 @@ class CharacterSheetBridge(QObject):
     # (or undoing one) needs this direct path rather than a real grant. ─
     @Slot(str, int)
     def setSkillProficiency(self, skill_name: str, level: int):
-        self.ctrl.update(f"skills.{skill_name}", level, rebuild_char=False)
+        # the player's own setting, kept as an override on top of what's
+        # granted (core/builder.py), so a rebuild doesn't undo it
+        from dnd_app.core.builder import set_skill_level
+        set_skill_level(self.char, skill_name, level)
+        self.ctrl.refresh()
         self.statsChanged.emit()
 
     @Slot()
     def resetSkillProficiencies(self):
-        self.char["skills"] = {}
-        rebuild(self.char)
+        from dnd_app.core.builder import reset_skill_levels
+        reset_skill_levels(self.char)
         self.ctrl.refresh()
         self.toastRequested.emit("↺ Skill proficiencies reset to granted baseline")
 
@@ -691,10 +702,11 @@ class CharacterSheetBridge(QObject):
         # damage, GWM/Sharpshooter Power Attack (toggle via
         # toggleWeaponPowerAttack), weapon-type item damage bonuses, and
         # on-hit damage badges (Divine Strike etc.) are all included.
-        # Deliberately NOT ported: ammo tracking, Thrown Arms Master's
-        # property-text rewrite, and the Revenant Blade/Double-Bladed
-        # Scimitar finesse override -- narrow, non-numeric edge cases
-        # that can follow later if needed.
+        # Ammunition comes from core/ammo.py, counted from the inventory
+        # like desktop's counter. Deliberately NOT ported: Thrown Arms
+        # Master's property-text rewrite, and the Revenant Blade/Double-
+        # Bladed Scimitar finesse override -- narrow, non-numeric edge
+        # cases that can follow later if needed.
         char = self.char
         out = []
         pb_full = get_prof_bonus(char)
@@ -783,6 +795,8 @@ class CharacterSheetBridge(QObject):
 
             on_hit = get_onhit_damage_bonuses(char)
             on_hit_text = ", ".join(f"+{b['die']} {b['damage_type']}" for b in on_hit) if on_hit else ""
+            # the ammunition it fires, and how much the inventory holds
+            ammo = ammo_kind(base_name, is_ranged, any("thrown" in str(p).lower() for p in props))
 
             out.append({
                 "name": wpn_name,
@@ -798,6 +812,9 @@ class CharacterSheetBridge(QObject):
                 "canPowerAttack": can_power_attack,
                 "powerAttackActive": power_attack_active,
                 "onHitBonusText": on_hit_text,
+                "ammoKind": ammo,
+                "ammoLabel": ammo_label(ammo) if ammo else "",
+                "ammoCount": ammo_count(char, ammo) if ammo else 0,
                 # for rollWeaponAttack()
                 "attackBonus": attack_bonus,
             })
@@ -816,6 +833,15 @@ class CharacterSheetBridge(QObject):
         w = self._weapon(name)
         if w is None:
             return
+        # A shot takes one piece of ammunition from the inventory
+        left = ""
+        if w["ammoKind"]:
+            label = w["ammoLabel"].lower()
+            if not spend_ammo(self.char, w["ammoKind"]):
+                self.toastRequested.emit(f"Out of {label} -- tap the {w['ammoLabel']} counter to add more")
+                return
+            left = f" ({ammo_count(self.char, w['ammoKind'])} {label} left)"
+            self.statsChanged.emit()
         rolls = [random.randint(1, 20)]
         mode = ""
         if w["advantage"] != w["disadvantage"]:
@@ -825,7 +851,17 @@ class CharacterSheetBridge(QObject):
         total = d20 + w["attackBonus"]
         shown = "/".join(str(r) for r in rolls)
         tail = " -- CRIT!" if d20 == 20 else (" -- Miss" if d20 == 1 else "")
-        self.toastRequested.emit(f"{name} attack{mode}: [{shown}] {_mod_text(w['attackBonus'])} = {total}{tail}")
+        self.toastRequested.emit(f"{name} attack{mode}: [{shown}] {_mod_text(w['attackBonus'])} = {total}{tail}{left}")
+
+    @Slot(str, int)
+    def setAmmoCount(self, kind: str, n: int):
+        """How many pieces of this ammunition you have -- the inventory
+        follows (core/ammo.py set_ammo), same as desktop's counter."""
+        if not kind or n < 0 or n == ammo_count(self.char, kind):
+            return
+        total = set_ammo(self.char, kind, n)
+        self.toastRequested.emit(f"{ammo_label(kind)}: {total}")
+        self.statsChanged.emit()
 
     @Slot(str)
     def toggleWeaponPowerAttack(self, wpn_name: str):
@@ -3077,18 +3113,17 @@ class CharacterSheetBridge(QObject):
     @Slot(str)
     def changeRace(self, name: str):
         old_race = self.char.get("race", "")
-        if name != old_race:
-            _desk._prune_stale_choices(self.char, _desk.RACE_SCOPED_CHOICE_IDS)
-        self.char["race"] = name
-        self.char["species"] = name
-        self.char["subrace"] = ""
-        self.char["draconic_ancestry"] = ""
+        # whatever the old race asked for and the new one doesn't goes
+        # (a High Elf's cantrip) -- shared with desktop's identity edit
+        _desk.change_and_prune(
+            self.char, lambda: self.char.update(race=name, species=name, subrace="", draconic_ancestry=""),
+            _desk.RACE_SCOPED_CHOICE_IDS if name != old_race else ())
         self.ctrl.refresh()
         self.statsChanged.emit()
 
     @Slot(str)
     def changeSubrace(self, subrace_name: str):
-        self.char["subrace"] = subrace_name
+        _desk.change_and_prune(self.char, lambda: self.char.update(subrace=subrace_name))
         self.ctrl.refresh()
         self.statsChanged.emit()
 
@@ -3103,9 +3138,8 @@ class CharacterSheetBridge(QObject):
     @Slot(str)
     def changeBackground(self, name: str):
         old_bg = self.char.get("background", "")
-        if name != old_bg:
-            _desk._prune_stale_choices(self.char, _desk.BACKGROUND_SCOPED_CHOICE_IDS)
-        self.char["background"] = name
+        _desk.change_and_prune(self.char, lambda: self.char.update(background=name),
+                               _desk.BACKGROUND_SCOPED_CHOICE_IDS if name != old_bg else ())
         self.ctrl.refresh()
         self.statsChanged.emit()
 
@@ -3140,7 +3174,7 @@ class CharacterSheetBridge(QObject):
         self.ctrl.refresh()
         msg = f"{class_name} is now level {entry['level']}"
         for _cn, sub, need in dropped:
-            msg += f" -- {sub} removed until level {need}"
+            msg += f" -- {sub} set aside until level {need}"
         self.toastRequested.emit(msg)
         self.statsChanged.emit()
         self.autosaveRequested.emit()
@@ -3168,6 +3202,7 @@ class CharacterSheetBridge(QObject):
         # Magical Secrets picks.
         from dnd_app.core.character import drop_spells_of_removed_class, name_list
         lost = drop_spells_of_removed_class(self.char, removed) if removed else []
+        self.char.get("_choices", {}).pop(f"{class_name}_subclass", None)   # re-adding asks again
         new_ids = _desk._all_relevant_choice_ids(self.char)
         _desk._prune_stale_choices(self.char, old_ids - new_ids)
         self.ctrl.refresh()
@@ -3989,13 +4024,16 @@ class CharacterSheetBridge(QObject):
             self.toastRequested.emit(f"Can't gain a level -- {why}")
             return
         entry = get_class_entry(self.char, class_name)
+        had_sub = entry.get("subclass", "") if entry else ""
         if entry:
             set_class_level(self.char, class_name, entry["level"] + 1)
         else:
             add_class(self.char, class_name, level=1)
         self.ctrl.refresh()
-        msg = (f"{class_name} is now level "
-               f"{get_class_entry(self.char, class_name)['level']}")
+        entry = get_class_entry(self.char, class_name)
+        msg = f"{class_name} is now level {entry['level']}"
+        if entry.get("subclass") and not had_sub and entry["level"] > 1:   # set aside by a level down
+            msg += f" -- {entry['subclass']} is back"
         if self.hasPendingChoices:
             msg += " -- go to Choices to pick your new options"
         self.toastRequested.emit(msg)
@@ -4331,6 +4369,10 @@ class CharacterSheetBridge(QObject):
             else:
                 kept.append(inv)
         char["eldritch_invocations"] = kept
+        # ...and out of the pick itself, so the chooser asks again
+        held = char["_choices"].get("eldritch_invocations")
+        if isinstance(held, list):
+            char["_choices"]["eldritch_invocations"] = [i for i in held if i not in removed]
         boon_label = new_boon.split("(")[0].strip()
         if removed:
             self.toastRequested.emit(f"Pact Boon changed to {boon_label} — {len(removed)} "
@@ -4363,10 +4405,12 @@ class CharacterSheetBridge(QObject):
 
     @Slot(str, str)
     def applyFightingStyleVersatility(self, old_style: str, new_style: str):
+        from dnd_app.core.builder import swap_choice_pick
         styles = self.char.setdefault("fighting_styles", [])
         if old_style in styles:
             styles.remove(old_style)
         styles.append(new_style)
+        swap_choice_pick(self.char, lambda k: "fighting_style" in k, old_style, new_style)
         self.toastRequested.emit(f"Martial Versatility: swapped {old_style.split(' (')[0].strip()} "
                                   f"for {new_style.split(' (')[0].strip()}")
         self.ctrl.refresh()
@@ -4374,10 +4418,12 @@ class CharacterSheetBridge(QObject):
 
     @Slot(str, str)
     def applyManeuverVersatility(self, old_maneuver: str, new_maneuver: str):
+        from dnd_app.core.builder import swap_choice_pick
         maneuvers = self.char.setdefault("battle_master_maneuvers", [])
         if old_maneuver in maneuvers:
             maneuvers.remove(old_maneuver)
         maneuvers.append(new_maneuver)
+        swap_choice_pick(self.char, lambda k: "maneuvers" in k, old_maneuver, new_maneuver)
         self.toastRequested.emit(f"Martial Versatility: swapped maneuver {old_maneuver.split(' – ')[0].strip()} "
                                   f"for {new_maneuver.split(' – ')[0].strip()}")
         self.ctrl.refresh()
@@ -4385,9 +4431,8 @@ class CharacterSheetBridge(QObject):
 
     @Slot(str, str)
     def applyExpertiseVersatility(self, old_skill: str, new_skill: str):
-        skills = self.char.setdefault("skills", {})
-        skills[old_skill] = 2
-        skills[new_skill] = 3
+        from dnd_app.core.builder import move_expertise
+        move_expertise(self.char, old_skill, new_skill)       # in the pick, so it stays
         self.toastRequested.emit(f"Bardic Versatility: moved Expertise from {old_skill} to {new_skill}")
         self.ctrl.refresh()
         self.statsChanged.emit()

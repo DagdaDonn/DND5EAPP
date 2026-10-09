@@ -190,6 +190,7 @@ class BaseSheetMixin:
         self._slot_bars = {}
         self._resource_widgets = []
         self._weapon_row_widgets = []
+        self._ammo_counters = []     # (ammo kind, counter button) per weapon row
         self._magic_item_rows = []
         self._resource_widgets: list = []   # populated by _build_resource_rows
         self._blocking_refresh = False
@@ -1431,6 +1432,10 @@ class BaseSheetMixin:
                     else:
                         kept.append(inv)
                 self.char["eldritch_invocations"] = kept
+                # ...and out of the pick itself, so the chooser asks again
+                held = self.char.setdefault("_choices", {}).get("eldritch_invocations")
+                if isinstance(held, list):
+                    self.char["_choices"]["eldritch_invocations"] = [i for i in held if i not in removed]
                 if removed:
                     self._toast(f"Pact Boon changed to {new.split(' – ')[0] if ' – ' in new else new.split('(')[0].strip()} "
                                 f"— {len(removed)} invocation(s) no longer eligible, re-choose them in the Choices tab")
@@ -1443,11 +1448,13 @@ class BaseSheetMixin:
 
         mv_kind, mv_old, mv_new = dlg.get_martial_versatility()
         if mv_kind and mv_old and mv_new:
+            from dnd_app.core.builder import swap_choice_pick
             if mv_kind == "style":
                 styles = self.char.setdefault("fighting_styles", [])
                 if mv_old in styles:
                     styles.remove(mv_old)
                 styles.append(mv_new)
+                swap_choice_pick(self.char, lambda k: "fighting_style" in k, mv_old, mv_new)
                 self._toast(f"Martial Versatility: swapped {mv_old.split(' (')[0].strip()} "
                             f"for {mv_new.split(' (')[0].strip()}")
             elif mv_kind == "maneuver":
@@ -1455,6 +1462,7 @@ class BaseSheetMixin:
                 if mv_old in maneuvers:
                     maneuvers.remove(mv_old)
                 maneuvers.append(mv_new)
+                swap_choice_pick(self.char, lambda k: "maneuvers" in k, mv_old, mv_new)
                 self._toast(f"Martial Versatility: swapped maneuver {mv_old.split(' – ')[0].strip()} "
                             f"for {mv_new.split(' – ')[0].strip()}")
 
@@ -1468,9 +1476,8 @@ class BaseSheetMixin:
         bv_kind, bv_old, bv_new = dlg.get_bardic_versatility()
         if bv_kind and bv_old and bv_new:
             if bv_kind == "expertise":
-                skills = self.char.setdefault("skills", {})
-                skills[bv_old] = 2
-                skills[bv_new] = 3
+                from dnd_app.core.builder import move_expertise
+                move_expertise(self.char, bv_old, bv_new)     # in the pick, so it stays
                 self._toast(f"Bardic Versatility: moved Expertise from {bv_old} to {bv_new}")
             elif bv_kind == "cantrip":
                 known = self.char.setdefault("spells_known", [])
@@ -1515,7 +1522,10 @@ class BaseSheetMixin:
             cls_name = choice.split(" (")[0]
         entry = next(c for c in classes if c["class"] == cls_name)
         entry["level"] = min(20, entry["level"] + 1)
+        had_sub = entry.get("subclass", "")
         self.ctrl.refresh()                         # rebuild + update_all + notify
+        if entry.get("subclass") and not had_sub:   # set aside by a level down
+            self._toast(f"{cls_name} {entry['level']}: {entry['subclass']} is back")
         # _on_char_updated() (subscribed above) already calls both
         # _populate_subclass_combo() and self._levelup_panel.refresh() —
         # calling them again here would run the entire pending-choices
@@ -1557,7 +1567,7 @@ class BaseSheetMixin:
 
         self.ctrl.refresh()
         for cn, sub, need in dropped:
-            self._toast(f"{sub} removed until {cn} level {need}")
+            self._toast(f"{sub} set aside until {cn} level {need}")
         # self.ctrl.refresh() already triggers _populate_subclass_combo()
         # and _levelup_panel.refresh() via the observer chain (see
         # _open_level_up for the full explanation) — no need to call
@@ -1655,6 +1665,7 @@ class BaseSheetMixin:
         # Magical Secrets picks.
         from dnd_app.core.character import drop_spells_of_removed_class, name_list
         lost = drop_spells_of_removed_class(self.char, removed)
+        self.char.get("_choices", {}).pop(f"{cls_name}_subclass", None)   # re-adding asks again
         new_ids = _all_relevant_choice_ids(self.char)
         _prune_stale_choices(self.char, old_ids - new_ids)
         self.ctrl.refresh()
