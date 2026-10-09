@@ -21,7 +21,7 @@ doesn't mean you did something wrong.
 | `make-android-apk.sh` | Turns the build's `.aab` into an installable APK (the clean build runs it) |
 | `p4a_hook.py` | Build hook p4a runs to fix the Qt bootstrap — see [Why `p4a_hook.py` exists](#why-p4a_hookpy-exists) |
 | `icon.png`, `icon_background.png`, `icon_foreground.png` | Launcher icons — see [Icon](#icon) |
-| `wheels/` | The Android PySide6/Shiboken6 wheels (downloaded by the setup, not in git) |
+| `wheels/` | Any Android PySide6/Shiboken6 wheels the setup had to download (not in git -- the repo's own copies are at the repo root) |
 
 The build config itself is `dnd_app/ui_android/buildozer.spec`. It stays
 next to the Android app because buildozer keeps its multi-GB build cache,
@@ -58,8 +58,8 @@ the end. You can also run the `.sh` directly from a WSL terminal.
    ```
    packaging\android\setup_buildozer_spec.bat
    ```
-   It finds the SDK/NDK, downloads the Android PySide6/Shiboken6 wheels
-   into `wheels/` if they aren't there (they're cross-compiled for
+   It finds the SDK/NDK, uses the Android PySide6/Shiboken6 wheels at the
+   repo root (or downloads them into `wheels/` if they're missing; they're cross-compiled for
    `android_aarch64` — not the desktop `pip install PySide6`), extracts the
    Qt Android jars from them, and writes `buildozer.spec`'s
    machine-specific lines: `source.dir`, `android.sdk_path`,
@@ -149,8 +149,9 @@ the spec by hand:
   git): the PySide6/Shiboken6 recipes that unpack the wheels instead of
   compiling them, and a hand-patched `python3` recipe. That one isn't
   regenerable, so commit it (see the note in `.gitignore`). Each wheel
-  recipe names its wheel by full path (`wheel_path`); if that wheel has
-  moved into `wheels/`, the clean build points the recipe there.
+  recipe names its wheel by full path (`wheel_path`); if that file has
+  gone, the clean build points the recipe at the same wheel in the repo
+  root or `wheels/`.
 - **`version`** — the app's one version number. The Windows EXE reads it
   from here too, so both always match.
 - **Package name (`package.domain` + `package.name`)** — changing it

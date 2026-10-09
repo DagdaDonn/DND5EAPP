@@ -59,6 +59,24 @@ def set_custom_save_dir(path: str) -> None:
     _save(data)
 
 
+IMMERSIVE_MODES = ("Full", "Reduced", "Off")
+
+
+def get_immersive(kind: str) -> str:
+    """Immersive Health ("health") or Immersive Exhaustion ("exhaustion"):
+    "Full" (the default), "Reduced" or "Off". See core/immersive.py."""
+    value = _load().get(f"immersive_{kind}", "Full")
+    return value if value in IMMERSIVE_MODES else "Full"
+
+
+def set_immersive(kind: str, value: str) -> None:
+    if value not in IMMERSIVE_MODES:
+        return
+    data = _load()
+    data[f"immersive_{kind}"] = value
+    _save(data)
+
+
 def get_flag(key: str) -> bool:
     return bool(_load().get(key, False))
 

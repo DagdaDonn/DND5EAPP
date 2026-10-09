@@ -346,6 +346,30 @@ class SettingsDialog(QDialog):
         acl.addLayout(font_row)
         body.addWidget(app_card)
 
+        # ── Immersion: Immersive Health / Immersive Exhaustion ────────────
+        # (app-wide, like the theme; saved as soon as they change)
+        from dnd_app.core import immersive as _imm
+        from dnd_app.ui_desktop.immersive import mode_combo as _mode_combo
+        imm_card = QFrame(); imm_card.setStyleSheet(
+            f"QFrame{{background:{SURF};border:1px solid {BORDER};border-radius:10px;}}")
+        icl = QVBoxLayout(imm_card); icl.setContentsMargins(14,12,14,14); icl.setSpacing(8)
+        icl.addWidget(_lbl("IMMERSION", TEAL2, FS_SMALL, bold=True))
+
+        def _refresh_sheet():
+            sheet = getattr(app_window, "_sheet", None)
+            if sheet is not None and getattr(sheet, "_immersion", None) is not None:
+                sheet._immersion.update()
+        for kind in ("health", "exhaustion"):
+            name, what = _imm.SETTINGS[kind]
+            row = QHBoxLayout()
+            row.addWidget(_lbl(f"{name}:", TEXT2, FS_BODY))
+            row.addWidget(_mode_combo(kind, _refresh_sheet), 1)
+            icl.addLayout(row)
+            icl.addWidget(_lbl(what, TEXT3, FS_TINY))
+        icl.addWidget(_lbl("Reduced is a gentler version: half the colour fade, and the "
+                           "exhaustion frame never covers any text.", TEXT3, FS_TINY))
+        body.addWidget(imm_card)
+
         # ── Character folder: where characters are saved ──────────────────
         folder_card = QFrame(); folder_card.setStyleSheet(
             f"QFrame{{background:{SURF};border:1px solid {BORDER};border-radius:10px;}}")

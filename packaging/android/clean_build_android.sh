@@ -63,18 +63,18 @@ SPEC_SRC="$(sed -nE 's/^source\.dir[[:space:]]*=[[:space:]]*//p' "$SPEC" | head 
 SPEC_HOOK="$(sed -nE 's/^p4a\.hook[[:space:]]*=[[:space:]]*//p' "$SPEC" | head -1 | tr -d '\r' | sed 's/[[:space:]]*$//')"
 [ "$SPEC_HOOK" = "$HOOK" ] || die "buildozer.spec p4a.hook is '$SPEC_HOOK' but the hook is '$HOOK' -- run packaging\\android\\setup_buildozer_spec.bat once"
 # The PySide6/Shiboken6 recipes in deployment/recipes/ (this machine's,
-# not in git) unpack the wheel their wheel_path line names. The wheels
-# live in packaging/android/wheels/ now; a recipe written while they sat
-# somewhere else (the repo root, before the tidy-up) is pointed at the
-# same wheel there.
+# not in git) unpack the wheel their wheel_path line names. The wheels are
+# committed at the repo root (packaging/android/wheels/ holds any the setup
+# downloaded); a recipe naming a wheel that isn't there any more is
+# pointed at the same wheel in either place.
 WHEELS="$ROOT/packaging/android/wheels"
 for RECIPE in "$ROOT"/deployment/recipes/*/__init__.py; do
     [ -f "$RECIPE" ] || continue
     NAME="$(basename "$(dirname "$RECIPE")")"
     WP="$(sed -nE "s/^[[:space:]]*wheel_path[[:space:]]*=[[:space:]]*['\"]([^'\"]*)['\"].*/\1/p" "$RECIPE" | head -1)"
     [ -n "$WP" ] && [ ! -f "$WP" ] || continue
-    NEW="$(find "$WHEELS" -maxdepth 1 -iname "$(basename "$WP")" -print -quit 2>/dev/null || true)"
-    [ -n "$NEW" ] || die "the $NAME recipe's wheel is missing: $WP -- run packaging\\android\\setup_buildozer_spec.bat to download it into packaging/android/wheels/"
+    NEW="$(find "$ROOT" "$WHEELS" -maxdepth 1 -iname "$(basename "$WP")" -print -quit 2>/dev/null || true)"
+    [ -n "$NEW" ] || die "the $NAME recipe's wheel is missing: $WP -- run packaging\\android\\setup_buildozer_spec.bat to download it"
     NEW_SED="$(printf '%s' "$NEW" | sed 's/[#&\\]/\\&/g')"
     sed -i -E "s#^([[:space:]]*wheel_path[[:space:]]*=[[:space:]]*['\"])[^'\"]*#\1$NEW_SED#" "$RECIPE"
     echo "$NAME recipe now unpacks $NEW"

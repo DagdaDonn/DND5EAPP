@@ -53,6 +53,7 @@ your computer, or on your phone with the same character file.
 - **Changes clean up after themselves** — level down, swap race or drop a feat, and everything that came with it goes too
 - **Dying, resting and casting by the book** — massive damage, death saves, stabilising, rests, spell slots, concentration
 - **Bring your old sheets** — a filled-in official 5e PDF character sheet becomes a full character
+- **The sheet feels it too** — colour drains from the page as HP drops, and the screen's edges close in with exhaustion (both optional)
 - **Yours, offline** — no account, no internet needed, free
 
 ---
@@ -196,7 +197,8 @@ your computer, or on your phone with the same character file.
 <details>
 <summary><b>Look & feel</b> — 26 themes, a custom icon set, tidy layouts</summary>
 
-- **26 themes** (16 dark, 10 light) — Obsidian, Dragon's Hoard, Shadowfell, Feywild, Blood Moon, Frostspire, Cinderveil, Tavern Hearth, Mossgrove, Gearworks, Hallowed Stone, Underdark, Astral Sea, Nine Hells, Kraken's Depth, Storm Giant's Eye, Arcane Scroll, Moonlit Vellum, Sunlit Meadow, Elven Grove, Coastal Tide, Rose Chantry, Desert Oasis, Frostlight, Harvest Gold and Sky Citadel
+- **Immersive Health and Immersive Exhaustion** — colour drains from the sheet as hit points drop and comes back as you heal, and a dark frame closes in from the edges of the screen with each level of exhaustion. Each is a setting (Full, Reduced or Off; Reduced keeps the frame clear of all text), and the numbers never change
+- **26 themes** (16 dark, 10 light), every text colour readable on every background — Obsidian, Dragon's Hoard, Shadowfell, Feywild, Blood Moon, Frostspire, Cinderveil, Tavern Hearth, Mossgrove, Gearworks, Hallowed Stone, Underdark, Astral Sea, Nine Hells, Kraken's Depth, Storm Giant's Eye, Arcane Scroll, Moonlit Vellum, Sunlit Meadow, Elven Grove, Coastal Tide, Rose Chantry, Desert Oasis, Frostlight, Harvest Gold and Sky Citadel
 - **75 hand-built line icons** in place of emoji — tabs, actions, items, rests, conditions — drawn in your theme's accent and shared by both apps (a few condition icons are nods to famous memes, for anyone who spots them)
 - **The MIMIC icon** — the d20 in golden amber, with a proper adaptive icon on Android
 - **Tabs that fit** — the tab row never spills off the edge: in a narrower window the names shorten, with the full name on hover

@@ -17,7 +17,7 @@ THEMES = {
     "(Dark) Obsidian": {
         "BG":"#0d0f18","SURF":"#161922","SURF2":"#1c2030","SURF3":"#242840",
         "BORDER":"#50556d","BORDER2":"#4a5890",
-        "TEXT":"#eae8f5","TEXT2":"#a8a4c8","TEXT3":"#8f8da8",
+        "TEXT":"#eae8f5","TEXT2":"#a8a4c8","TEXT3":"#918faa",
         "GOLD":"#e0b030","GOLD2":"#f8d060",
         "INDIGO":"#5878f8","IND2":"#90a8ff",
         "TEAL":"#18c090","TEAL2":"#28e8b0",
@@ -31,7 +31,7 @@ THEMES = {
     "(Dark) Dragon's Hoard": {
         "BG":"#060d0a","SURF":"#0c1a12","SURF2":"#12241a","SURF3":"#182e22",
         "BORDER":"#3b5c47","BORDER2":"#286040",
-        "TEXT":"#e8f5e0","TEXT2":"#90c898","TEXT3":"#739979",
+        "TEXT":"#e8f5e0","TEXT2":"#90c898","TEXT3":"#779d7d",
         "GOLD":"#e8a820","GOLD2":"#ffd050",
         "INDIGO":"#20b860","IND2":"#40e880",
         "TEAL":"#18b8a0","TEAL2":"#30e0c0",
@@ -45,7 +45,7 @@ THEMES = {
     "(Dark) Shadowfell": {
         "BG":"#080610","SURF":"#100e1c","SURF2":"#181528","SURF3":"#201c34",
         "BORDER":"#53506a","BORDER2":"#4a4470",
-        "TEXT":"#d8d0f0","TEXT2":"#9888c8","TEXT3":"#8882a0",
+        "TEXT":"#d8d0f0","TEXT2":"#9888c8","TEXT3":"#8b85a3",
         "GOLD":"#c8a838","GOLD2":"#e8c858",
         "INDIGO":"#7a6cdb","IND2":"#a090f8",
         "TEAL":"#4898c8","TEAL2":"#70c0f0",
@@ -59,7 +59,7 @@ THEMES = {
     "(Dark) Feywild": {
         "BG":"#080820","SURF":"#0e1030","SURF2":"#141640","SURF3":"#1a1c52",
         "BORDER":"#4c5086","BORDER2":"#303898",
-        "TEXT":"#f0ecff","TEXT2":"#b0a8e8","TEXT3":"#8b84ac",
+        "TEXT":"#f0ecff","TEXT2":"#b0a8e8","TEXT3":"#8d86ae",
         "GOLD":"#e8c840","GOLD2":"#ffe870",
         "INDIGO":"#28c8d8","IND2":"#60e8f8",
         "TEAL":"#18c898","TEAL2":"#28f0c0",
@@ -73,7 +73,7 @@ THEMES = {
     "(Dark) Blood Moon": {
         "BG":"#100609","SURF":"#1c0c10","SURF2":"#241016","SURF3":"#30161e",
         "BORDER":"#6e4952","BORDER2":"#8a3048",
-        "TEXT":"#f5e0e4","TEXT2":"#c890a0","TEXT3":"#9b7d89",
+        "TEXT":"#f5e0e4","TEXT2":"#c890a0","TEXT3":"#9d7f8b",
         "GOLD":"#c89040","GOLD2":"#e8b060",
         "INDIGO":"#d24d68","IND2":"#f85878",
         "TEAL":"#209888","TEAL2":"#40c8b0",
@@ -87,7 +87,7 @@ THEMES = {
     "(Dark) Frostspire": {
         "BG":"#060a12","SURF":"#0c1420","SURF2":"#121c2c","SURF3":"#182438",
         "BORDER":"#40566b","BORDER2":"#406890",
-        "TEXT":"#e8f0f8","TEXT2":"#98b8d0","TEXT3":"#798d9f",
+        "TEXT":"#e8f0f8","TEXT2":"#98b8d0","TEXT3":"#7a8ea0",
         "GOLD":"#c8b060","GOLD2":"#e8d080",
         "INDIGO":"#3888e0","IND2":"#68b0f8",
         "TEAL":"#20b8c8","TEAL2":"#48e0f0",
@@ -101,7 +101,7 @@ THEMES = {
     "(Dark) Cinderveil": {
         "BG":"#100804","SURF":"#1c1008","SURF2":"#241608","SURF3":"#301c0a",
         "BORDER":"#724b33","BORDER2":"#985018",
-        "TEXT":"#f8ecd8","TEXT2":"#d0a878","TEXT3":"#a0825d",
+        "TEXT":"#f8ecd8","TEXT2":"#d0a878","TEXT3":"#a1835e",
         "GOLD":"#e89818","GOLD2":"#ffc040",
         "INDIGO":"#e85818","IND2":"#ff8848",
         "TEAL":"#189888","TEAL2":"#38c8a8",
@@ -115,7 +115,7 @@ THEMES = {
     "(Dark) Tavern Hearth": {
         "BG":"#140d08","SURF":"#1e140c","SURF2":"#281c12","SURF3":"#322418",
         "BORDER":"#655241","BORDER2":"#785030",
-        "TEXT":"#f5e8d0","TEXT2":"#c8a878","TEXT3":"#a3886f",
+        "TEXT":"#f5e8d0","TEXT2":"#c8a878","TEXT3":"#a48970",
         "GOLD":"#e8a838","GOLD2":"#ffc858",
         "INDIGO":"#c87830","IND2":"#e89850",
         "TEAL":"#5f895f","TEAL2":"#68a068",
@@ -129,7 +129,7 @@ THEMES = {
     "(Dark) Mossgrove": {
         "BG":"#0e120a","SURF":"#161c10","SURF2":"#1e2616","SURF3":"#26301c",
         "BORDER":"#4e5b3e","BORDER2":"#5c7038",
-        "TEXT":"#e8f0d8","TEXT2":"#a8c088","TEXT3":"#8b996f",
+        "TEXT":"#e8f0d8","TEXT2":"#a8c088","TEXT3":"#8e9c72",
         "GOLD":"#b8a038","GOLD2":"#d8c058",
         "INDIGO":"#798939","IND2":"#a0b858",
         "TEAL":"#489878","TEAL2":"#68c098",
@@ -143,7 +143,7 @@ THEMES = {
     "(Dark) Gearworks": {
         "BG":"#0e1012","SURF":"#161a1e","SURF2":"#1e242a","SURF3":"#262e36",
         "BORDER":"#51575e","BORDER2":"#605038",
-        "TEXT":"#f0ece0","TEXT2":"#b8a888","TEXT3":"#9d9286",
+        "TEXT":"#f0ece0","TEXT2":"#b8a888","TEXT3":"#9e9387",
         "GOLD":"#c88838","GOLD2":"#e8a858",
         "INDIGO":"#5a86aa","IND2":"#70a0c8",
         "TEAL":"#389888","TEAL2":"#58c0a8",
@@ -157,7 +157,7 @@ THEMES = {
     "(Dark) Hallowed Stone": {
         "BG":"#0e1014","SURF":"#161a20","SURF2":"#1e242c","SURF3":"#262e38",
         "BORDER":"#4f5763","BORDER2":"#586478",
-        "TEXT":"#e8e8f0","TEXT2":"#a8b0c0","TEXT3":"#8e94a0",
+        "TEXT":"#e8e8f0","TEXT2":"#a8b0c0","TEXT3":"#8f95a1",
         "GOLD":"#d8b840","GOLD2":"#f8d868",
         "INDIGO":"#7281a7","IND2":"#8898c0",
         "TEAL":"#389880","TEAL2":"#58c0a0",
@@ -265,7 +265,7 @@ THEMES = {
     "(Light) Moonlit Vellum": {
         "BG":"#eef1f6","SURF":"#e2e7f0","SURF2":"#d5dcea","SURF3":"#c7d0e2",
         "BORDER":"#8f96a7","BORDER2":"#77829b",
-        "TEXT":"#282e3b","TEXT2":"#495162","TEXT3":"#535967",
+        "TEXT":"#282e3b","TEXT2":"#495162","TEXT3":"#525866",
         "GOLD":"#6c520c","GOLD2":"#604a12",
         "INDIGO":"#2c4ba8","IND2":"#2e4999",
         "TEAL":"#0b644d","TEAL2":"#0f5946",
@@ -280,7 +280,7 @@ THEMES = {
     "(Light) Sunlit Meadow": {
         "BG":"#f3f0e2","SURF":"#e9e4cd","SURF2":"#ded6b3","SURF3":"#cfc596",
         "BORDER":"#9f966e","BORDER2":"#8e814b",
-        "TEXT":"#312d1b","TEXT2":"#565135","TEXT3":"#585239",
+        "TEXT":"#312d1b","TEXT2":"#544f33","TEXT3":"#554f36",
         "GOLD":"#654a08","GOLD2":"#584211",
         "INDIGO":"#354f81","IND2":"#324771",
         "TEAL":"#135a36","TEAL2":"#174f32",
@@ -294,7 +294,7 @@ THEMES = {
     "(Light) Elven Grove": {
         "BG":"#edf1ec","SURF":"#dee7dd","SURF2":"#cedccc","SURF3":"#b9ceb6",
         "BORDER":"#87b181","BORDER2":"#60ab54",
-        "TEXT":"#182815","TEXT2":"#324c2f","TEXT3":"#466241",
+        "TEXT":"#182815","TEXT2":"#324c2f","TEXT3":"#3b5736",
         "GOLD":"#7c5616","GOLD2":"#614311",
         "INDIGO":"#7643b0","IND2":"#5d348a",
         "TEAL":"#1f6944","TEAL2":"#185235",
@@ -308,7 +308,7 @@ THEMES = {
     "(Light) Coastal Tide": {
         "BG":"#ecf0f1","SURF":"#dde6e7","SURF2":"#ccdadc","SURF3":"#b6cbce",
         "BORDER":"#81adb1","BORDER2":"#54a2ab",
-        "TEXT":"#152628","TEXT2":"#2f494c","TEXT3":"#415f62",
+        "TEXT":"#152628","TEXT2":"#2f494c","TEXT3":"#385659",
         "GOLD":"#775719","GOLD2":"#5c4414",
         "INDIGO":"#2a627f","IND2":"#214c62",
         "TEAL":"#1e6764","TEAL2":"#17504f",
@@ -336,7 +336,7 @@ THEMES = {
     "(Light) Desert Oasis": {
         "BG":"#f1eeec","SURF":"#e7e1dd","SURF2":"#dcd3cc","SURF3":"#cec1b6",
         "BORDER":"#b19781","BORDER2":"#ab7d54",
-        "TEXT":"#281e15","TEXT2":"#4c3c2f","TEXT3":"#625141",
+        "TEXT":"#281e15","TEXT2":"#4c3c2f","TEXT3":"#5e4d3d",
         "GOLD":"#745613","GOLD2":"#58420e",
         "INDIGO":"#27626e","IND2":"#1e4b55",
         "TEAL":"#1d655e","TEAL2":"#164d48",
@@ -350,7 +350,7 @@ THEMES = {
     "(Light) Frostlight": {
         "BG":"#eceff1","SURF":"#dde3e7","SURF2":"#ccd6dc","SURF3":"#b6c5ce",
         "BORDER":"#81a0b1","BORDER2":"#548bab",
-        "TEXT":"#152128","TEXT2":"#2f414c","TEXT3":"#415662",
+        "TEXT":"#152128","TEXT2":"#2f414c","TEXT3":"#3d525e",
         "GOLD":"#6f581c","GOLD2":"#544315",
         "INDIGO":"#3757a4","IND2":"#2a437d",
         "TEAL":"#24636d","TEAL2":"#1c4b53",
@@ -364,7 +364,7 @@ THEMES = {
     "(Light) Harvest Gold": {
         "BG":"#f1efec","SURF":"#e7e2dd","SURF2":"#dcd5cc","SURF3":"#cec4b6",
         "BORDER":"#b19d81","BORDER2":"#ab8754",
-        "TEXT":"#282015","TEXT2":"#4c402f","TEXT3":"#625441",
+        "TEXT":"#282015","TEXT2":"#4c402f","TEXT3":"#5d4f3c",
         "GOLD":"#775613","GOLD2":"#5c420f",
         "INDIGO":"#3a5d8e","IND2":"#2d476d",
         "TEAL":"#226659","TEAL2":"#1a4f45",
@@ -378,7 +378,7 @@ THEMES = {
     "(Light) Sky Citadel": {
         "BG":"#eceff1","SURF":"#dde2e7","SURF2":"#ccd5dc","SURF3":"#b6c3ce",
         "BORDER":"#819cb1","BORDER2":"#5485ab",
-        "TEXT":"#152028","TEXT2":"#2f3f4c","TEXT3":"#415462",
+        "TEXT":"#152028","TEXT2":"#2f3f4c","TEXT3":"#3d505e",
         "GOLD":"#6c5819","GOLD2":"#514313",
         "INDIGO":"#2b5c95","IND2":"#204570",
         "TEAL":"#256368","TEAL2":"#1b4b4e",

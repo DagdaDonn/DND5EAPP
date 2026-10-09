@@ -82,7 +82,8 @@ echo "[3/6] PySide6/Shiboken6 wheels ($WHEELS)"
 mkdir -p "$WHEELS"
 fetch() {  # fetch <glob> <url>
     local hit
-    hit="$(ls "$WHEELS"/$1 2>/dev/null | head -1 || true)"
+    # the repo root first (where the wheels are committed), then wheels/
+    hit="$(ls "$ROOT"/$1 "$WHEELS"/$1 2>/dev/null | head -1 || true)"
     if [ -n "$hit" ]; then echo "  found $(basename "$hit")"; return; fi
     echo "  downloading $(basename "$2")"
     curl -fL --retry 3 -o "$WHEELS/$(basename "$2").part" "$2" \
@@ -102,7 +103,7 @@ if [ -z "$JAR_DIR" ]; then
     JAR_DIR="$ROOT/packaging/android/jars"
     echo "  extracting from the PySide6 wheel into $JAR_DIR"
     mkdir -p "$JAR_DIR"
-    WHL="$(ls "$WHEELS"/[Pp]y[Ss]ide6-*-android_aarch64.whl | head -1)"
+    WHL="$(ls "$ROOT"/[Pp]y[Ss]ide6-*-android_aarch64.whl "$WHEELS"/[Pp]y[Ss]ide6-*-android_aarch64.whl 2>/dev/null | head -1)"
     "$PY" - "$WHL" "$JAR_DIR" "${JARS[@]}" <<'EOF'
 import sys, zipfile
 from pathlib import Path

@@ -41,10 +41,10 @@ deployment/recipes/*
 dnd_app/ui_android/buildozer.spec.bak.*
 /buildozer.spec
 
-# Downloaded PySide6/Shiboken Android wheels -- large binaries, fetched by
-# setup_buildozer_spec into packaging/android/wheels/ (never the repo root).
+# The Android PySide6/Shiboken6 wheels are committed at the repo root;
+# setup_buildozer_spec downloads any that are missing into
+# packaging/android/wheels/, which isn't committed.
 packaging/android/wheels/
-/*.whl
 
 # Stray backup files build scripts drop next to what they patch (e.g. an
 # icon-stripping step's *.pre-strip.bak).

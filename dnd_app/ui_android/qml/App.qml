@@ -409,6 +409,55 @@ ApplicationWindow {
         contentSource: Qt.resolvedUrl("CreditsScreen.qml")
     }
 
+    // The one-time note the first time either immersive effect shows
+    MFullPageDialog {
+        id: immersivePrompt
+        objectName: "immersivePrompt"
+        dialogTitle: "Immersive Effects"
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 16
+            spacing: 14
+            Label {
+                Layout.fillWidth: true
+                text: appSettingsBridge ? appSettingsBridge.immersiveInfo("prompt").what : ""
+                color: Theme.text; font.pixelSize: Theme.fsBody; wrapMode: Text.WordWrap
+            }
+            Repeater {
+                model: ["health", "exhaustion"]
+                delegate: ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+                    readonly property var info: appSettingsBridge ? appSettingsBridge.immersiveInfo(modelData) : ({})
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label { Layout.fillWidth: true; text: info.name || ""; color: Theme.text; font.pixelSize: Theme.fsBody; font.bold: true; wrapMode: Text.WordWrap }
+                        Label {
+                            text: appSettingsBridge ? (modelData === "health" ? appSettingsBridge.immersiveHealth : appSettingsBridge.immersiveExhaustion) : ""
+                            color: Theme.text; font.pixelSize: Theme.fsBody; font.bold: true
+                        }
+                        MButton { primary: false; height: 32; text: "Change"; onClicked: { immersivePicker.kind = modelData; immersivePicker.open() } }
+                    }
+                    Label { Layout.fillWidth: true; text: info.what || ""; color: Theme.text2; font.pixelSize: Theme.fsSmall; wrapMode: Text.WordWrap }
+                }
+            }
+            Label {
+                Layout.fillWidth: true
+                text: appSettingsBridge ? appSettingsBridge.immersiveInfo("health").reduced : ""
+                color: Theme.text3; font.pixelSize: Theme.fsSmall; wrapMode: Text.WordWrap
+            }
+            MButton { text: "Done"; Layout.alignment: Qt.AlignRight; onClicked: immersivePrompt.close() }
+            Item { Layout.fillHeight: true }
+        }
+    }
+    MPickerDialog {
+        id: immersivePicker
+        property string kind: "health"
+        dialogTitle: kind === "health" ? "Immersive Health" : "Immersive Exhaustion"
+        options: appSettingsBridge ? appSettingsBridge.immersiveModes : []
+        onPicked: (value) => appSettingsBridge.setImmersive(kind, value)
+    }
+
     RestFlowDialog { id: restFlowDialog; sheetBridge: window.sheetBridge }
     function startRest(restType) { restFlowDialog.start(restType) }
 
@@ -497,7 +546,60 @@ ApplicationWindow {
     StackView {
         id: stackView
         anchors.fill: parent
+        // Immersive Exhaustion: the page moves in to fit inside the frame
+        anchors.margins: window.frameInset
         initialItem: screenComp(startMenuComp)
+    }
+
+    // ── Immersive Health & Immersive Exhaustion (core/immersive.py) ─────
+    // Checked a few times a second while a character's sheet is open, so
+    // every way HP or exhaustion changes is picked up. Off the sheet
+    // (Start Menu, wizard) both effects are off.
+    property real frameInset: 0
+    property int frameLevel: 0
+    property string frameSetting: "Off"
+    property real healthFade: 0
+    property bool healthAnimate: true
+    Behavior on healthFade {
+        enabled: window.healthAnimate
+        NumberAnimation { duration: 500; easing.type: Easing.InOutQuad }
+    }
+    // the theme only repaints in 1/40 steps, so an easing colour change
+    // costs a dozen repaints rather than one every frame
+    onHealthFadeChanged: {
+        var q = Math.round(healthFade * 40) / 40
+        if (Math.abs(q - Theme.fade) > 0.001) Theme.fade = q
+    }
+    Timer {
+        interval: 200; running: true; repeat: true
+        onTriggered: {
+            var on = window.characterActive && window.sheetMode
+            var st = on ? sheetBridge.immersiveState() : null
+            window.healthAnimate = !st || st.health === "Full"
+            window.healthFade = st ? st.fade : 0
+            window.frameLevel = st ? st.level : 0
+            window.frameSetting = st ? st.exhaustion : "Off"
+            window.frameInset = st ? st.inset : 0
+            if (st && !st.promptSeen && (st.fade > 0 || st.level > 0)) {
+                sheetBridge.markImmersivePromptSeen()
+                immersivePrompt.open()
+            }
+        }
+    }
+    // The frame itself: drawn by the same painter as the desktop's
+    // (bridge/immersive.py), over the page area, letting every touch through.
+    Image {
+        id: immersiveFrame
+        anchors.fill: parent
+        visible: window.frameLevel > 0
+        source: visible ? "image://immersive/" + window.frameLevel + "/" + window.frameSetting + "/"
+                          + Math.round(width) + "x" + Math.round(height) + "/" + Screen.devicePixelRatio : ""
+        fillMode: Image.Stretch
+        smooth: true
+        cache: false
+        // a new frame fades in (not on Reduced)
+        onSourceChanged: if (visible && window.frameSetting === "Full") frameFadeIn.restart()
+        NumberAnimation { id: frameFadeIn; target: immersiveFrame; property: "opacity"; from: 0; to: 1; duration: 350 }
     }
 
     // Consumes pendingScrollSection once the page StackView just

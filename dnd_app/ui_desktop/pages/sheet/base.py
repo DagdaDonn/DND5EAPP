@@ -181,6 +181,12 @@ class BaseSheetMixin:
         if self.char.get("is_dead", False):
             QTimer.singleShot(0, self._show_death_screen)
 
+        # Immersive Health / Immersive Exhaustion: colour drains as HP
+        # drops, and a dark frame closes in with exhaustion (see
+        # ui_desktop/immersive.py)
+        from dnd_app.ui_desktop.immersive import SheetImmersion
+        self._immersion = SheetImmersion(self)
+
     def _autosave(self):
         """Silently write a .autosave backup when there are unsaved changes."""
         if not getattr(self, "_dirty", False):
@@ -1222,6 +1228,9 @@ class BaseSheetMixin:
         for child in self.children():
             if isinstance(child, QFrame) and child.objectName() == "death_overlay":
                 child.setGeometry(self.rect())
+        # ...and the exhaustion frame (redrawn once the resize settles)
+        if getattr(self, "_immersion", None) is not None:
+            self._immersion.resized()
 
     def _on_name_changed(self, text: str):
         self.char["name"] = text.strip() or "Unnamed"

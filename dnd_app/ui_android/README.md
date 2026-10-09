@@ -21,7 +21,8 @@ python-for-android (see `packaging/android/`).
   needs visible at once on a phone.
 - **Shared with desktop:** `dnd_app/core/` and `dnd_app/data/` — the
   character model, calculator, builder, save/load, and all game-rules
-  data. Zero Qt dependency in either, so nothing there needs to change
+  data. Zero Qt dependency in either (core/immersive.py's frame painter
+  imports QtGui only when it's called), so nothing there needs to change
   for this to work; both UIs read and write the same character dict
   shape and the same save-file format.
 - **Not shared:** everything in `dnd_app/ui_desktop/`. No QtWidgets

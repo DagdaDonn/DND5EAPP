@@ -68,6 +68,31 @@ Flickable {
                     Label { Layout.fillWidth: true; text: sheetBridge.fontScale; color: Theme.text; font.pixelSize: Theme.fsBody; font.bold: true }
                     MButton { primary: false; height: 32; text: "Change"; onClicked: fontScaleDialog.open() }
                 }
+                // Immersive Health / Immersive Exhaustion (core/immersive.py)
+                Repeater {
+                    model: ["health", "exhaustion"]
+                    delegate: ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        readonly property var info: appSettingsBridge.immersiveInfo(modelData)
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label { text: info.name; color: Theme.text2; font.pixelSize: Theme.fsSmall; Layout.preferredWidth: 90; wrapMode: Text.WordWrap }
+                            Label {
+                                Layout.fillWidth: true
+                                text: modelData === "health" ? appSettingsBridge.immersiveHealth : appSettingsBridge.immersiveExhaustion
+                                color: Theme.text; font.pixelSize: Theme.fsBody; font.bold: true
+                            }
+                            MButton { primary: false; height: 32; text: "Change"; onClicked: { immersiveDialog.kind = modelData; immersiveDialog.open() } }
+                        }
+                        Label { Layout.fillWidth: true; text: info.what; color: Theme.text3; font.pixelSize: Theme.fsSmall; wrapMode: Text.WordWrap }
+                    }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: appSettingsBridge.immersiveInfo("health").reduced
+                    color: Theme.text3; font.pixelSize: Theme.fsSmall; wrapMode: Text.WordWrap
+                }
             }
         }
 
@@ -522,6 +547,13 @@ Flickable {
             }
             Theme.applyTheme(value)
         }
+    }
+    MPickerDialog {
+        id: immersiveDialog
+        property string kind: "health"
+        dialogTitle: kind === "health" ? "Immersive Health" : "Immersive Exhaustion"
+        options: appSettingsBridge.immersiveModes
+        onPicked: (value) => appSettingsBridge.setImmersive(kind, value)
     }
     MPickerDialog {
         id: fontScaleDialog

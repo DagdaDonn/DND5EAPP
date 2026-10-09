@@ -2364,6 +2364,25 @@ class CharacterSheetBridge(QObject):
         out.sort(key=lambda s: (s["level"], s["name"].casefold()))   # level, then name
         return out
 
+    # ── Immersive Health / Immersive Exhaustion (core/immersive.py) ──
+    @Slot(result="QVariant")
+    def immersiveState(self):
+        """What App.qml shows for the open character: how much colour to
+        take out (fade), the exhaustion frame's level, how far the page
+        moves in for it (inset), both settings, and whether the one-time
+        note has been shown."""
+        from dnd_app.core import immersive as imm
+        e_setting = imm.mode("exhaustion")
+        level = imm.frame_level(self.char, e_setting)
+        return {"fade": imm.health_fade(self.char), "level": level,
+                "inset": imm.frame_px(level, phone=True), "exhaustion": e_setting,
+                "health": imm.mode("health"), "promptSeen": imm.prompt_seen()}
+
+    @Slot()
+    def markImmersivePromptSeen(self):
+        from dnd_app.core.immersive import mark_prompt_seen
+        mark_prompt_seen()
+
     @Slot(str, result=dict)
     def getSpellDetail(self, name: str):
         sp = get_spell(name)

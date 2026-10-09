@@ -132,6 +132,9 @@ def main():
 
     engine = QQmlApplicationEngine()
     engine.addImportPath(_IMPORT_DIR)
+    # the Immersive Exhaustion frame (bridge/immersive.py)
+    from dnd_app.ui_android.bridge.immersive import ImmersiveFrameProvider
+    engine.addImageProvider("immersive", ImmersiveFrameProvider())
 
     char = new_character()
     race_bridge = RaceWizardBridge(char)
